@@ -1,93 +1,144 @@
-# TheCardCollector
+# 🎴 Pokémon TCG Collector & Scanner
 
-![Status](https://img.shields.io/badge/Status-In%20Development-orange?style=flat-square)
-![Tech](https://img.shields.io/badge/Made%20with-Flutter-02569B?style=flat-square&logo=flutter&logoColor=white)
-![DB](https://img.shields.io/badge/Database-Isar-purple?style=flat-square)
-![API](https://img.shields.io/badge/Data-TCGdex%20API-green?style=flat-square)
+![Status](https://img.shields.io/badge/Status-In%20Development-orange) ![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Windows-blue) ![Framework](https://img.shields.io/badge/Built%20with-Flutter-02569B)
 
-**TheCardCollector** ist eine intelligente Mobile App für Sammelkartenspiele (Fokus: Pokémon TCG), die physische Sammelordner digital spiegelt. Anders als herkömmliche Collection-Tracker berechnet diese App automatisch die exakte Position jeder Karte im Binder basierend auf benutzerdefinierten Layouts.
+Eine moderne **Cross-Platform App (Android & PC)** zur Verwaltung von Pokémon-Kartensammlungen.
+Der Fokus liegt auf **Master-Sets**, **deutscher Lokalisierung**, realistischer **Binder-Visualisierung** und einer intelligenten **Scanner-Technologie**.
 
----
+## 🚀 Vision & Alleinstellungsmerkmale
 
-## 🌟 Hauptfunktionen
+Die meisten TCG-Apps sind rein englischsprachig oder ignorieren die Struktur physischer Sammelordner. Diese App schließt die Lücke:
 
-### 🔍 Multi-Language Search & Mapping
-* **Sprachunabhängige Suche:** Suche nach "Glurak" (DE) oder "Charizard" (EN) – das System verknüpft lokale Namen automatisch mit der globalen Karten-ID.
-* **Metadaten:** Anzeige aller relevanten Artworks, Sets und Kartennummern.
-
-### 📓 Smart Binder System (Kern-Feature)
-* **Flexible Layouts:** Erstelle Binder mit benutzerdefinierten Rastern (z.B. 3x3 für Standardseiten, 4x3 für Playsets).
-* **Kategorien:** Unterstützt Sortierungen nach National Dex (1-1025), Mastersets (Set-Nummerierung), Mega-Dex oder individuellen Kriterien.
-* **Auto-Calculation:** Gib einfach das Pokémon an, und die App sagt dir: *"Seite 4, Zeile 2, Spalte 1"*.
-
-### 📦 Inventar & Besitz
-* **Detailliertes Tracking:** Erfasse Anzahl, Sprache, Zustand (Mint, NM, Played) und Besonderheiten (Reverse Holo, First Edition).
-* **Custom Visuals:** Wähle zwischen dem offiziellen API-Bild oder lade ein eigenes Foto deiner Karte hoch.
-* **Fortschritt:** Automatische Berechnung des Sammelfortschritts (in % und fehlenden Karten).
-
-### 📈 Marktwerte (Geplant)
-* Integration von Preis-APIs (z.B. Cardmarket), um den Gesamtwert des Binders basierend auf dem Kartenzustand zu ermitteln.
+* **Intelligentes Sprach-Mapping:** Verknüpft englische API-Daten automatisch mit deutschen Kartennamen (z.B. *Charizard* ↔ *Glurak*), um korrekte Links für **Cardmarket** zu generieren.
+* **Der "Einsortier-Assistent" (Locator):** Berechnet mathematisch exakt, auf welcher Seite, Zeile und Spalte eine Karte in deinem physischen Binder einsortiert werden muss.
+* **Visuelles Sammeln:** Digitale Binder, die sich wie echte Ordner anfühlen (Ghost-Cards für fehlende Karten).
 
 ---
 
-## 🛠️ Tech Stack
+## ✨ Features
 
-* **Frontend:** [Flutter](https://flutter.dev/) (Dart) – für native Performance auf Android & iOS.
-* **Datenbank:** [Isar Database](https://isar.dev/) – NoSQL, extrem schnell, perfekt für komplexe Filter und Offline-Suche.
-* **State Management:** Riverpod (geplant).
-* **API:** [TCGdex API](https://www.tcgdex.net/) (Open Source, Multi-Language Support).
+### 📂 Binder-Management
+* **Individuelle Layouts:** Konfigurierbare Raster (z.B. 3x3 für 9-Pocket-Pages, 2x2, etc.).
+* **Templates:** Automatische Befüllung für "Master Sets" (inkl. Reverse Holo Slots), Sets, Künstler oder Pokédex-Bereiche.
+* **Visualisierung:**
+    * **Ghost Cards:** Transparente Platzhalter für fehlende Karten.
+    * **Owned Cards:** Farbige Darstellung (Wahlweise API-Bild oder eigener Scan).
 
----
+### 📷 Smart Scanner
+* **Hybrid-Erkennung:**
+    * **OCR:** Scannt Name, Nummer (z.B. "37/151") und Set-Kürzel.
+    * **Computer Vision:** Automatische Kantenerkennung und Entzerrung (Perspective Warp) der Karte.
+* **Bulk-Mode (Geplant):** Schnelles Einscannen mehrerer Karten hintereinander für spätere Sortierung.
 
-## 📐 Die Binder-Logik (Algorithmus)
-
-Das Alleinstellungsmerkmal der App ist die mathematische Berechnung der Kartenposition. Anstatt Karten manuell zu schieben, berechnet die App den Slot basierend auf dem Index.
-
-**Parameter:**
-* $I$ = Index der Karte (z.B. Pokedex Nr. - 1)
-* $R$ = Zeilen pro Seite (Rows)
-* $C$ = Spalten pro Seite (Cols)
-* $K$ = Karten pro Seite ($R \times C$)
-
-**Berechnung:**
-1.  **Seite:** $S = \lfloor \frac{I}{K} \rfloor + 1$
-2.  **Position auf Seite (0-basiert):** $P = I \pmod K$
-3.  **Zeile:** $Z = \lfloor \frac{P}{C} \rfloor + 1$
-4.  **Spalte:** $Sp = (P \pmod C) + 1$
+### 📦 Inventar & Finanzen
+* **Zustands-Tracking:** Grading (PSA, BGS), Condition (Near Mint, Played) und Sprache.
+* **Preisentwicklung:**
+    * Abruf aktueller Marktpreise (via API/TCGPlayer).
+    * Manuelle Preiseingabe möglich.
+    * **Verlaufs-Diagramm:** Historische Wertentwicklung der Sammlung.
+* **Cardmarket-Integration:** Generiert Direktlinks zur spezifischen Karte in der korrekten Sprache.
 
 ---
 
-## 🗄️ Datenmodell (Architektur)
+## 🛠 Tech Stack
 
-Das System trennt strikt zwischen den **Stammdaten** der Karte, dem **physischen Besitz** (Inventory) und der **Anzeige** (Binder).
+Das Projekt setzt auf eine **Single-Codebase** für Mobile und Desktop.
 
-```mermaid
-erDiagram
-    CARD_MASTER ||--o{ INVENTORY : "besitzt"
-    BINDER ||--o{ BINDER_CONFIG : "hat Settings"
-    BINDER ||--o{ VIEW_SLOT : "zeigt an"
-    INVENTORY ||--o{ VIEW_SLOT : "befüllt"
+| Bereich | Technologie | Beschreibung |
+| :--- | :--- | :--- |
+| **Framework** | **Flutter** (Dart) | UI & Logik für Android & Windows. |
+| **Datenbank** | **Drift** (SQLite) | Relationale lokale Datenbank für komplexe Binder-Strukturen. |
+| **State Management** | **Riverpod** | Reaktives Zustandsmanagement. |
+| **Computer Vision** | **OpenCV** | Bildverarbeitung (Crop & Warp). |
+| **OCR** | **Google ML Kit** | Texterkennung (On-Device). |
+| **API** | **pokemontcg.io** | Datenquelle für Metadaten & Bilder. |
+| **Charts** | **fl_chart** | Visualisierung der Preisverläufe. |
 
-    CARD_MASTER {
-        string api_id "Unique ID"
-        string name_de
-        string name_en
-        int pokedex_num
-        string set_id
-    }
-    INVENTORY {
-        int id PK
-        string condition "NM, EX, etc"
-        int quantity
-        bool is_holo
-        string image_path "Local Path"
-    }
-    BINDER {
-        int id PK
-        string name
-        enum type "Pokedex, Set, Custom"
-    }
-    BINDER_CONFIG {
-        int rows "z.B. 3"
-        int cols "z.B. 3"
-    }
+---
+
+## 💾 Datenbank-Architektur
+
+Wir nutzen ein relationales Modell, um "Referenzdaten" (API) von "Nutzerdaten" (Besitz) zu trennen:
+
+* **Reference Layer:** Cache für Kartendaten (Sets, Bilder, Nummern) + `Localization Table` (Mapping EN/DE).
+* **User Layer:** Speichert die konkrete Instanz einer Karte (Zustand, Kaufpreis, Pfad zum Scan).
+* **Binder Logic:** Verknüpfungstabelle, die berechnet, welche Karte in welchem Slot liegt.
+
+---
+
+## ⚡ Getting Started
+
+### API
+* Pokemoncards & Price ?: https://pokemontcg.io/
+* Multilanguage: https://tcgdex.dev
+
+### Voraussetzungen
+* Flutter SDK (neueste Stable Version)
+* Dart SDK
+* Android Studio / VS Code
+
+### Installation
+
+1.  **Repository klonen:**
+    ```bash
+    git clone [https://github.com/DEIN-USERNAME/DEIN-REPO-NAME.git](https://github.com/DEIN-USERNAME/DEIN-REPO-NAME.git)
+    cd DEIN-REPO-NAME
+    ```
+
+2.  **Abhängigkeiten laden:**
+    ```bash
+    flutter pub get
+    ```
+
+3.  **Code Generierung (für Drift/Riverpod):**
+    ```bash
+    dart run build_runner build --delete-conflicting-outputs
+    ```
+
+4.  **App starten:**
+    ```bash
+    # Für Windows
+    flutter run -d windows
+
+    # Für Android (Emulator oder Gerät muss laufen)
+    flutter run -d android
+    ```
+
+---
+
+## 🗺 Roadmap
+
+- [ ] **Phase 1: MVP**
+    - [ ] Datenbank-Setup (Drift) & API Client.
+    - [ ] Grundlegendes Binder-UI (Grid).
+    - [ ] Manuelles Hinzufügen von Karten.
+- [ ] **Phase 2: Scanner & Logic**
+    - [ ] OpenCV Integration für Kamera.
+    - [ ] OCR Implementierung für "Nummer/Set" Erkennung.
+    - [ ] "Locator" Algorithmus (Einsortier-Hilfe).
+- [ ] **Phase 3: Finanzen & Polish**
+    - [ ] Preis-Charts.
+    - [ ] Cardmarket Link Generator.
+    - [ ] Backup/Export Funktion.
+
+---
+
+## 🤝 Contributing
+
+Beiträge sind willkommen! Besonders im Bereich **Sprach-Mapping** (Erweiterung der deutschen Kartennamen-Datenbank) suchen wir Unterstützung.
+
+1.  Fork das Projekt
+2.  Erstelle deinen Feature Branch (`git checkout -b feature/AmazingFeature`)
+3.  Commit deine Änderungen (`git commit -m 'Add some AmazingFeature'`)
+4.  Push zum Branch (`git push origin feature/AmazingFeature`)
+5.  Öffne einen Pull Request
+
+---
+
+## 📄 Lizenz
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+***
+
+**Disclaimer:** This project is not affiliated with, endorsed, sponsored, or specifically approved by Nintendo, The Pokémon Company, or Game Freak. Pokémon and Pokémon character names are trademarks of Nintendo.
