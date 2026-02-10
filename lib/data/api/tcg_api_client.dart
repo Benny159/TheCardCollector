@@ -133,4 +133,10 @@ class TcgApiClient {
       throw Exception('Sets konnten nicht geladen werden.');
     }
   }
+
+  Future<ApiCard> fetchCard(String cardId) async {
+    final response = await _dio.get('cards/$cardId');
+  
+    return ApiCard.fromJson(response.data['data']);
+  }
 }

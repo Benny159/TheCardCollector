@@ -89,5 +89,24 @@ class TcgPlayerPrices extends Table {
   TextColumn get url => text().nullable()();
 }
 
-// ... Hier drunter bleiben deine UserCards, Binders etc. Tabellen wie vorher ...
-// (Lass UserCards, Binders, BinderEntries einfach stehen)
+class UserCards extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  
+  // Welche Karte ist es?
+  TextColumn get cardId => text().references(Cards, #id)();
+  
+  // Wieviele hast du davon?
+  IntColumn get quantity => integer().withDefault(const Constant(1))();
+  
+  // Zustand (Near Mint, Excellent, Good, Played, Poor)
+  TextColumn get condition => text().withDefault(const Constant('NM'))();
+  
+  // Sprache (Deutsch, Englisch, Japanisch)
+  TextColumn get language => text().withDefault(const Constant('Deutsch'))();
+  
+  // WICHTIG: Die Variante (Normal, Reverse Holo, Holo, First Edition)
+  TextColumn get variant => text().withDefault(const Constant('Normal'))();
+  
+  // Wann hinzugefügt?
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}

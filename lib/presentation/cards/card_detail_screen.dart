@@ -1,13 +1,26 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart'; // WICHTIG: für die Links
+import 'package:url_launcher/url_launcher.dart';
+import 'package:drift/drift.dart' as drift; // Für DB Updates
 
 import '../../data/api/search_provider.dart';
+import '../../data/api/tcg_api_client.dart';
+import '../../data/database/app_database.dart'; // WICHTIG: Für die UserCard Klasse
+import '../../data/database/database_provider.dart';
+import '../../data/sync/set_importer.dart';
 import '../../domain/models/api_card.dart';
 import '../../domain/models/api_set.dart';
-import '../sets/set_detail_screen.dart'; // Damit wir zum Set springen können
-import '../search/card_search_screen.dart'; // Damit wir zur Suche springen können
+import '../inventory/inventory_bottom_sheet.dart'; // WICHTIG: Dein BottomSheet Import
+import '../search/card_search_screen.dart';
+import '../sets/set_detail_screen.dart';
+
+// --- NEU: Ein Live-Provider für das Inventar dieser EINEN Karte ---
+final cardInventoryProvider = StreamProvider.family<List<UserCard>, String>((ref, cardId) {
+  final db = ref.watch(databaseProvider);
+  // Wir beobachten die Tabelle 'userCards' für diese ID
+  return (db.select(db.userCards)..where((tbl) => tbl.cardId.equals(cardId))).watch();
+});
 
 class CardDetailScreen extends ConsumerWidget {
   final ApiCard card;
@@ -16,23 +29,49 @@ class CardDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Wir laden die Infos zum Set dieser Karte (für Logo & Navigation)
+    // 1. Set Infos laden
     final setAsync = ref.watch(setByIdProvider(card.setId));
+    
+    // 2. NEU: Inventar-Daten live laden
+    final inventoryAsync = ref.watch(cardInventoryProvider(card.id));
 
     return Scaffold(
       appBar: AppBar(
         title: Text(card.name, style: const TextStyle(fontSize: 16)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.favorite_border),
-            onPressed: () {}, // Später Favoriten
+            icon: const Icon(Icons.sync),
+            tooltip: "Daten & Preise aktualisieren",
+            onPressed: () async {
+              _updateCardData(context, ref);
+            },
           ),
         ],
+      ),
+      // NEU: Der Button unten rechts zum Hinzufügen
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            builder: (context) => InventoryBottomSheet(card: card),
+          ).then((_) {
+            // UI neu laden (damit Listen aktualisiert werden)
+            ref.invalidate(searchResultsProvider);
+            ref.invalidate(cardsForSetProvider(card.setId));
+            // Set-Statistik auch neu laden
+            ref.invalidate(setStatsProvider(card.setId));
+          });
+        },
+        icon: const Icon(Icons.add_card),
+        label: const Text("Hinzufügen"),
+        backgroundColor: Colors.blue[800],
+        foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 1. SET HEADER (Verlinkung zum Set)
+            // 1. SET HEADER
             setAsync.when(
               data: (set) => _buildSetHeader(context, set),
               loading: () => const LinearProgressIndicator(minHeight: 2),
@@ -41,13 +80,13 @@ class CardDetailScreen extends ConsumerWidget {
 
             const SizedBox(height: 10),
 
-            // 2. DAS BILD (Klickbar -> Fullscreen)
+            // 2. DAS BILD
             GestureDetector(
               onTap: () => _openFullscreenImage(context),
               child: Hero(
                 tag: card.id,
                 child: Container(
-                  height: 450,
+                  height: 400,
                   decoration: BoxDecoration(
                     boxShadow: [
                       BoxShadow(
@@ -68,14 +107,19 @@ class CardDetailScreen extends ConsumerWidget {
               ),
             ),
             
-            const SizedBox(height: 10),
-            const Text(
-              "(Tippen zum Vergrößern)",
-              style: TextStyle(color: Colors.grey, fontSize: 10),
-            ),
             const SizedBox(height: 20),
 
-            // 3. EXTERNE LINKS (Buttons)
+            // --- NEU: INVENTAR BOX ---
+            // Zeigt an, wie viele du hast (und welche Varianten)
+            inventoryAsync.when(
+              data: (items) => _buildInventorySection(context, ref, items),
+              loading: () => const SizedBox.shrink(),
+              error: (err, stack) => Text("Fehler beim Laden des Inventars: $err"),
+            ),
+
+            const SizedBox(height: 20),
+
+            // 3. EXTERNE LINKS
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Row(
@@ -105,7 +149,7 @@ class CardDetailScreen extends ConsumerWidget {
 
             const SizedBox(height: 20),
 
-            // 4. PREIS ANALYSE (Cardmarket)
+            // 4. PREIS ANALYSE
             if (card.cardmarket != null)
               _buildPriceSection(
                 context, 
@@ -120,7 +164,6 @@ class CardDetailScreen extends ConsumerWidget {
                 lastUpdate: card.cardmarket!.updatedAt,
               ),
 
-            // 5. PREIS ANALYSE (TCGPlayer)
             if (card.tcgplayer != null)
               _buildPriceSection(
                 context, 
@@ -136,54 +179,155 @@ class CardDetailScreen extends ConsumerWidget {
 
             const SizedBox(height: 20),
 
-            // 6. KARTEN DETAILS (Artist, Typen etc.)
+            // 5. DETAILS
             _buildInfoSection(context, ref),
             
-            const SizedBox(height: 50),
+            const SizedBox(height: 80), // Platz für FAB
           ],
         ),
       ),
     );
   }
 
-  // --- WIDGETS & LOGIK ---
+  // --- NEUE WIDGETS ---
 
-  // Header mit Logo und Klick-Event zum Set
+// Zeigt deine Sammlung dieser Karte an
+  Widget _buildInventorySection(BuildContext context, WidgetRef ref, List<UserCard> items) {
+    if (items.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.info_outline, color: Colors.grey),
+            SizedBox(width: 8),
+            Text("Nicht in deiner Sammlung", style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    final totalCount = items.fold(0, (sum, item) => sum + item.quantity);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.green[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green),
+              const SizedBox(width: 8),
+              Text(
+                "In deinem Besitz: $totalCount Stück",
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
+              ),
+            ],
+          ),
+          const Divider(),
+          
+          // --- HIER IST DIE ÄNDERUNG: LISTE MIT LÖSCH-BUTTON ---
+          ...items.map((item) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                // Infos (Anzahl, Variante, Zustand)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "${item.quantity}x ${item.variant}", 
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)
+                      ),
+                      const SizedBox(height: 2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        ),
+                        child: Text(
+                          "${item.condition} • ${item.language}", 
+                          style: TextStyle(fontSize: 11, color: Colors.grey[700])
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Der Löschen-Button (Mülleimer/Minus)
+                IconButton(
+                  icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                  tooltip: "Eins entfernen",
+                  onPressed: () => _decreaseOrDeleteItem(context, ref, item),
+                ),
+              ],
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+
+  // --- BESTEHENDE LOGIK (leicht ausgelagert) ---
+
+  Future<void> _updateCardData(BuildContext context, WidgetRef ref) async {
+    final api = ref.read(apiClientProvider);
+    final db = ref.read(databaseProvider);
+    final importer = SetImporter(api, db);
+
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aktualisiere Karte...')));
+
+    try {
+      await importer.updateSingleCard(card.id);
+      ref.invalidate(searchResultsProvider);
+      ref.invalidate(cardsForSetProvider(card.setId));
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Preise aktualisiert!'), backgroundColor: Colors.green));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  // ... (Der Rest deiner Methoden: _buildSetHeader, _buildPriceSection, _buildInfoSection, _openFullscreenImage, _launchURL bleiben hier unverändert) ...
+  
+  // (Ich kopiere sie hier rein, damit die Datei vollständig ist)
   Widget _buildSetHeader(BuildContext context, ApiSet? set) {
     if (set == null) return const SizedBox.shrink();
-
     return InkWell(
       onTap: () {
-        // Navigation zum Set
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => SetDetailScreen(set: set)),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (context) => SetDetailScreen(set: set)));
       },
       child: Container(
         padding: const EdgeInsets.all(12),
         color: Colors.grey[100],
         child: Row(
           children: [
-            // Set Logo
-            SizedBox(
-              height: 40,
-              width: 80,
-              child: CachedNetworkImage(
-                imageUrl: set.logoUrl,
-                fit: BoxFit.contain,
-              ),
-            ),
+            SizedBox(height: 40, width: 80, child: CachedNetworkImage(imageUrl: set.logoUrl, fit: BoxFit.contain)),
             const SizedBox(width: 12),
-            // Set Name & Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    set.name,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
+                  Text(set.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   Row(
                     children: [
                       Text("Zu Set ${set.id} wechseln", style: TextStyle(color: Colors.blue[700], fontSize: 12)),
@@ -199,9 +343,7 @@ class CardDetailScreen extends ConsumerWidget {
     );
   }
 
-  // Preis-Tabelle
   Widget _buildPriceSection(BuildContext context, {required String title, required Color color, required Map<String, double?> data, String? lastUpdate}) {
-    // Filtern: Nur Zeilen anzeigen, wo auch ein Preis da ist (nicht null)
     final validEntries = data.entries.where((e) => e.value != null).toList();
     if (validEntries.isEmpty) return const SizedBox.shrink();
 
@@ -216,42 +358,28 @@ class CardDetailScreen extends ConsumerWidget {
         ),
         child: Column(
           children: [
-            // Header
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              ),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: const BorderRadius.vertical(top: Radius.circular(12))),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-                  if (lastUpdate != null)
-                    Text(
-                      lastUpdate.split('T')[0], // Nur Datum anzeigen
-                      style: TextStyle(color: color.withOpacity(0.6), fontSize: 10),
-                    ),
+                  if (lastUpdate != null) Text(lastUpdate.split('T')[0], style: TextStyle(color: color.withOpacity(0.6), fontSize: 10)),
                 ],
               ),
             ),
-            // Preise Liste
-            ...validEntries.map((entry) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(entry.key, style: const TextStyle(color: Colors.black54)),
-                    Text(
-                      "${entry.value!.toStringAsFixed(2)} €",
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                  ],
-                ),
-              );
-            }),
+            ...validEntries.map((entry) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(entry.key, style: const TextStyle(color: Colors.black54)),
+                  Text("${entry.value!.toStringAsFixed(2)} €", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ],
+              ),
+            )),
           ],
         ),
       ),
@@ -263,9 +391,7 @@ class CardDetailScreen extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Column(
         children: [
-          // SPEZIAL-ZEILE FÜR KÜNSTLER (Klickbar!)
           _buildClickableArtistRow(context, ref),
-          
           _buildDetailRow("Seltenheit", card.rarity),
           _buildDetailRow("Nummer", "${card.number} / ${card.setPrintedTotal ?? '?'}"),
           _buildDetailRow("Typen", card.types.join(", ")),
@@ -274,7 +400,6 @@ class CardDetailScreen extends ConsumerWidget {
     );
   }
 
-  // Die neue klickbare Zeile
   Widget _buildClickableArtistRow(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -284,33 +409,16 @@ class CardDetailScreen extends ConsumerWidget {
           const SizedBox(width: 100, child: Text("Künstler", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
           Expanded(
             child: InkWell(
-              // Wenn man draufklickt:
               onTap: () {
-                // 1. Modus auf Künstler setzen
                 ref.read(searchModeProvider.notifier).state = SearchMode.artist;
-                
-                // 2. Suchtext setzen
                 ref.read(searchQueryProvider.notifier).state = card.artist;
-
-                // 3. Zur Suche springen
-                // Wir pushen einfach den SearchScreen oben drauf, dann kann man "Zurück" zur Karte
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const CardSearchScreen()),
-                );
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const CardSearchScreen()));
               },
               child: Row(
                 children: [
-                  Text(
-                    card.artist,
-                    style: const TextStyle(
-                      color: Colors.blue, // Blau damit es wie ein Link aussieht
-                      decoration: TextDecoration.underline, // Unterstrichen
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                  Text(card.artist, style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline, fontWeight: FontWeight.w500)),
                   const SizedBox(width: 4),
-                  const Icon(Icons.search, size: 14, color: Colors.blue), // Kleines Icon
+                  const Icon(Icons.search, size: 14, color: Colors.blue),
                 ],
               ),
             ),
@@ -334,39 +442,71 @@ class CardDetailScreen extends ConsumerWidget {
     );
   }
 
-  // --- FULLSCREEN LOGIK ---
   void _openFullscreenImage(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (ctx) => Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
-            backgroundColor: Colors.black,
-            iconTheme: const IconThemeData(color: Colors.white),
-          ),
-          body: Center(
-            child: InteractiveViewer( // Erlaubt Zoomen mit zwei Fingern
-              panEnabled: true,
-              boundaryMargin: const EdgeInsets.all(20),
-              minScale: 0.5,
-              maxScale: 4,
-              child: CachedNetworkImage(
-                imageUrl: card.largeImageUrl ?? card.smallImageUrl,
-                fit: BoxFit.contain,
-                placeholder: (context, url) => const CircularProgressIndicator(),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+    Navigator.of(context).push(MaterialPageRoute(builder: (ctx) => Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(backgroundColor: Colors.black, iconTheme: const IconThemeData(color: Colors.white)),
+      body: Center(child: InteractiveViewer(
+        panEnabled: true, boundaryMargin: const EdgeInsets.all(20), minScale: 0.5, maxScale: 4,
+        child: CachedNetworkImage(imageUrl: card.largeImageUrl ?? card.smallImageUrl, fit: BoxFit.contain),
+      )),
+    )));
   }
 
-  // --- URL LAUNCHER LOGIK ---
   Future<void> _launchURL(String urlString) async {
     final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      throw Exception('Could not launch $url');
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) throw Exception('Could not launch $url');
+  }
+
+  // --- LOGIK: VERRINGERN ODER LÖSCHEN ---
+  Future<void> _decreaseOrDeleteItem(BuildContext context, WidgetRef ref, UserCard item) async {
+    final db = ref.read(databaseProvider);
+
+    if (item.quantity > 1) {
+      // Wenn mehr als 1 da ist: Einfach Anzahl verringern
+      final newQuantity = item.quantity - 1;
+      
+      await (db.update(db.userCards)..where((t) => t.id.equals(item.id))).write(
+        UserCardsCompanion(quantity: drift.Value(newQuantity)),
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("-1"), duration: Duration(milliseconds: 500)));
+    } else {
+      // Wenn nur noch 1 da ist: Fragen und dann löschen
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text("Entfernen?"),
+          content: Text("Möchtest du das letzte Exemplar (${item.variant}) aus deiner Sammlung löschen?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text("Abbrechen"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text("Löschen"),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm == true) {
+        await (db.delete(db.userCards)..where((t) => t.id.equals(item.id))).go();
+        
+        // Listen aktualisieren (wichtig wenn es die letzte Karte war -> wird grau)
+        ref.invalidate(searchResultsProvider);
+        ref.invalidate(cardsForSetProvider(card.setId));
+        // Set-Statistik auch neu laden
+        ref.invalidate(setStatsProvider(card.setId));
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Entfernt.")),
+          );
+        }
+      }
     }
   }
 }

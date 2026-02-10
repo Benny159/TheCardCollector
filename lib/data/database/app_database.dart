@@ -19,7 +19,7 @@ part 'app_database.g.dart';
   CardSets,          // Neu: Für die Sets
   CardMarketPrices,  // Neu: Für Cardmarket Preise
   TcgPlayerPrices,   // Neu: Für TCGPlayer Preise
-  //UserCards,         // Deine Sammlung
+  UserCards,         // Deine Sammlung
   //Binders,           // Deine Ordner
   //BinderEntries,     // Karten in Ordnern
   //CardLocalizations  // Falls du das noch nutzt
@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Version 3, weil wir die Struktur massiv geändert haben
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -45,11 +45,7 @@ class AppDatabase extends _$AppDatabase {
        
        // Beispiel für die Zukunft (wenn wir Version 4 machen):
        if (from < 4) {
-         // Wenn wir später "Binders" hinzufügen, erstellen wir NUR diese Tabelle neu.
-         // Die alten Tabellen (Cards, Sets) lassen wir in Ruhe!
-         
-         // await m.createTable(binders);      // <-- Kommt später
-         // await m.createTable(binderEntries); // <-- Kommt später
+         await m.createTable(userCards);
        }
        
        // Falls du AKTUELL noch Probleme hast und wirklich alles platt machen willst,

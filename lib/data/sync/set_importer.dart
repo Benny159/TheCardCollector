@@ -48,6 +48,12 @@ class SetImporter {
   Future<void> _saveBatch(List<ApiCard> cards) async {
     await database.transaction(() async {
       for (final card in cards) {
+        if (card.artist.isEmpty) {
+           print('ACHTUNG: Kein Künstler für Karte ${card.name} (ID: ${card.id}) gefunden!');
+        } else {
+           // Optional: Zeige, was gefunden wurde
+           // print('Info: ${card.name} hat Künstler: ${card.artist}');
+        }
         // A) KARTE SPEICHERN (Nur Stammdaten)
         await database.into(database.cards).insert(
               CardsCompanion(
@@ -161,5 +167,16 @@ class SetImporter {
     }
     
     onProgress?.call('Fertig! Die komplette Datenbank ist jetzt lokal.');
+  }
+
+  Future<void> updateSingleCard(String cardId) async {
+    print('Update Karte $cardId...');
+    
+    // 1. Karte frisch von der API holen
+    final card = await apiClient.fetchCard(cardId);
+    
+    // 2. Speichern (Wir nutzen einfach unsere existierende _saveBatch Methode mit einer Liste von 1)
+    // Falls _saveBatch bei dir "private" ist (mit Unterstrich), musst du es innerhalb der Klasse nutzen.
+    await _saveBatch([card]); 
   }
 }

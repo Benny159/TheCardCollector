@@ -7,7 +7,8 @@ import '../../data/api/search_provider.dart';       // Für die Suche
 import '../../data/api/tcg_api_client.dart';        // Für den API Client Provider
 import '../../data/database/database_provider.dart'; // Für den Datenbank Provider
 import '../../data/sync/set_importer.dart';         // Für die Import-Logik
-import '../cards/card_detail_screen.dart'; // Pfad anpassen falls nötig
+import '../cards/card_detail_screen.dart';
+import '../inventory/inventory_bottom_sheet.dart';
 
 class CardSearchScreen extends ConsumerWidget {
   const CardSearchScreen({super.key});
@@ -187,6 +188,7 @@ class CardSearchScreen extends ConsumerWidget {
                   itemBuilder: (context, index) {
                     final card = cards[index];
                     
+                    final bool isOwned = card.isOwned;
                     // InkWell für Klick zur Detailseite
                     return InkWell(
                       onTap: () {
@@ -195,7 +197,20 @@ class CardSearchScreen extends ConsumerWidget {
                           MaterialPageRoute(
                             builder: (context) => CardDetailScreen(card: card),
                           ),
-                        );
+                        ).then((_) {
+                           // Wenn man zurückkommt: Suche aktualisieren (falls man im Detail-Screen was geändert hat)
+                           ref.invalidate(searchResultsProvider);
+                        });
+                      },
+                      onLongPress: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (context) => InventoryBottomSheet(card: card),
+                        ).then((_) {
+                          // Nach dem Schließen: Suche neu laden, damit der Status (isOwned) aktualisiert wird
+                          ref.invalidate(searchResultsProvider);
+                        });
                       },
                       child: Card(
                         elevation: 2,
@@ -203,7 +218,7 @@ class CardSearchScreen extends ConsumerWidget {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            // 1. Bild mit Hero
+                            // 1. Bild (JETZT IMMER BUNT - KEIN ColorFiltered mehr)
                             Hero(
                               tag: card.id,
                               child: CachedNetworkImage(
@@ -214,35 +229,26 @@ class CardSearchScreen extends ConsumerWidget {
                               ),
                             ),
                             
-                            // 2. Balken unten
+                            // Info-Balken unten
                             Positioned(
-                              bottom: 0,
-                              left: 0,
-                              right: 0,
+                              bottom: 0, left: 0, right: 0,
                               child: Container(
                                 color: Colors.black.withOpacity(0.7),
                                 padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    // Nummer
                                     Text(
                                       card.number,
-                                      style: const TextStyle(
-                                        color: Colors.white, 
-                                        fontSize: 10, 
-                                        fontWeight: FontWeight.bold
-                                      ),
+                                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                                     ),
-                                    // Preis (falls vorhanden)
-                                    if (card.priceEur != null)
+                                    // Kleines Icon für Besitz-Status
+                                    if (isOwned)
+                                      const Icon(Icons.check_circle, color: Colors.green, size: 12)
+                                    else if (card.priceEur != null)
                                       Text(
                                         '${card.priceEur!.toStringAsFixed(2)}€',
-                                        style: const TextStyle(
-                                          color: Colors.lightGreenAccent, 
-                                          fontSize: 10, 
-                                          fontWeight: FontWeight.bold
-                                        ),
+                                        style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold),
                                       ),
                                   ],
                                 ),

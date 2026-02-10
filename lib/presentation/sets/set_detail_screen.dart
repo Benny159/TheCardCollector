@@ -1,10 +1,15 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../data/api/search_provider.dart';
 import '../../domain/models/api_card.dart';
 import '../../domain/models/api_set.dart';
-import '../cards/card_detail_screen.dart'; // Pfad anpassen falls nötig
+import '../cards/card_detail_screen.dart';
+import '../inventory/inventory_bottom_sheet.dart';
+
+// 1. NEU: Enum für den Besitz-Filter
+enum OwnershipFilter { all, owned, missing }
 
 class SetDetailScreen extends ConsumerStatefulWidget {
   final ApiSet set;
@@ -18,9 +23,10 @@ class SetDetailScreen extends ConsumerStatefulWidget {
 class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
   final Set<String> _selectedRarities = {};
   bool _showStandardSetOnly = false;
-  
-  // NEU: Steuert, ob die Raritäten-Liste sichtbar ist
   bool _isRaritiesExpanded = false;
+  
+  // 2. NEU: State Variable für den Filter
+  OwnershipFilter _ownershipFilter = OwnershipFilter.all;
 
   @override
   Widget build(BuildContext context) {
@@ -35,9 +41,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Fehler: $err')),
         data: (rawCards) {
-          if (rawCards.isEmpty) {
-            return const Center(child: Text("Keine Karten gefunden."));
-          }
+          if (rawCards.isEmpty) return const Center(child: Text("Keine Karten gefunden."));
 
           // 1. SORTIEREN
           final List<ApiCard> allSortedCards = List.from(rawCards);
@@ -46,38 +50,43 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
           // 2. FILTERN
           List<ApiCard> visibleCards = allSortedCards;
 
+          // A) Standard vs Master Set
           if (_showStandardSetOnly) {
-            visibleCards = allSortedCards.where((c) {
+            visibleCards = visibleCards.where((c) {
               final num = int.tryParse(c.number);
               return num != null && num <= widget.set.printedTotal;
             }).toList();
-          } else if (_selectedRarities.isNotEmpty) {
-            visibleCards = allSortedCards.where((c) {
+          }
+
+          // B) Raritäten
+          if (_selectedRarities.isNotEmpty) {
+            visibleCards = visibleCards.where((c) {
               final r = c.rarity.isEmpty ? 'Others' : c.rarity;
               return _selectedRarities.contains(r);
             }).toList();
           }
 
-          // 3. WERTE
+          // C) NEU: Besitz-Filter (Owned / Missing)
+          if (_ownershipFilter == OwnershipFilter.owned) {
+            visibleCards = visibleCards.where((c) => c.isOwned).toList();
+          } else if (_ownershipFilter == OwnershipFilter.missing) {
+            visibleCards = visibleCards.where((c) => !c.isOwned).toList();
+          }
+
+          // 3. WERTE BERECHNEN (Auf Basis aller Karten, nicht nur der gefilterten)
           double totalSetVal = 0.0;
           double userOwnedVal = 0.0;
 
-          for (var card in visibleCards) {
+          for (var card in allSortedCards) {
             final price = card.priceEur ?? 0.0;
             totalSetVal += price;
-            // Platzhalter für Besitz
-            bool isOwned = false; 
-            if (isOwned) userOwnedVal += price;
+            if (card.isOwned) userOwnedVal += price;
           }
 
           return Column(
             children: [
-              // HEADER
               _buildHeader(context, allSortedCards, totalSetVal, userOwnedVal),
-              
               const Divider(height: 1),
-
-              // GRID
               Expanded(
                 child: visibleCards.isEmpty 
                   ? const Center(child: Text("Keine Karten für diesen Filter."))
@@ -85,21 +94,14 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     padding: const EdgeInsets.all(8),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 3,
-                      childAspectRatio: 0.7,
+                      childAspectRatio: 0.70,
                       crossAxisSpacing: 8,
                       mainAxisSpacing: 8,
                     ),
                     itemCount: visibleCards.length,
                     itemBuilder: (context, index) {
                       final card = visibleCards[index];
-                      
-                      // --- FAKE LOGIK (Später durch Datenbank-Check ersetzen) ---
-                      // Jede Karte mit gerader Nummer (0, 2, 4) gehört uns -> Bunt
-                      // Die ungeraden gehören uns nicht -> Grau
-                      final bool isOwnedFake = false; 
-                      
-                      // Wir geben "isOwnedFake" an die Funktion weiter
-                      return _buildCardItem(card, isOwnedFake);
+                      return _buildCardItem(card, card.isOwned);
                     },
                   ),
               ),
@@ -113,21 +115,32 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
   // --- UI KOMPONENTEN ---
 
   Widget _buildHeader(BuildContext context, List<ApiCard> allCards, double totalValue, double ownedValue) {
-    // Raritäten vorbereiten
+    // Statistiken berechnen
+    final int userOwnedMaster = allCards.where((c) => c.isOwned).length;
+    final int totalCards = allCards.length;
+    final double progress = totalCards > 0 ? (userOwnedMaster / totalCards) : 0.0;
+    
+    final int standardTotal = widget.set.printedTotal;
+    final int userOwnedStandard = allCards.where((c) {
+      final num = int.tryParse(c.number);
+      return c.isOwned && num != null && num <= standardTotal;
+    }).length;
+
+    // Raritäten zählen
     final Map<String, int> totalRarityCounts = {};
+    final Map<String, int> ownedRarityCounts = {};
+
     for (var card in allCards) {
       final r = card.rarity.isEmpty ? 'Others' : card.rarity;
       totalRarityCounts[r] = (totalRarityCounts[r] ?? 0) + 1;
+      if (card.isOwned) {
+        ownedRarityCounts[r] = (ownedRarityCounts[r] ?? 0) + 1;
+      }
     }
     final sortedRarities = totalRarityCounts.keys.toList()
       ..sort((a, b) => _getRarityWeight(a).compareTo(_getRarityWeight(b)));
 
-    const int userOwnedMaster = 0;
-    final int totalCards = allCards.length;
-    final double progress = totalCards > 0 ? (userOwnedMaster / totalCards) : 0.0;
-    final String percentage = (progress * 100).toStringAsFixed(1);
-
-    const int userOwnedStandard = 0;
+    // Button Status Logik
     final bool isMasterActive = !_showStandardSetOnly && _selectedRarities.isEmpty;
     final bool isStandardActive = _showStandardSetOnly;
 
@@ -136,161 +149,150 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
       color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
       child: Column(
         children: [
-          // 1. LOGO (Etwas kleiner)
-          SizedBox(
-            height: 45, // War vorher 50-60
-            child: CachedNetworkImage(
-              imageUrl: widget.set.logoUrl,
-              fit: BoxFit.contain,
-              placeholder: (context, url) => const SizedBox(),
-              errorWidget: (context, url, error) => const Icon(Icons.broken_image),
-            ),
+          // 1. Logo & Progress
+          Row(
+            children: [
+              SizedBox(
+                height: 45, width: 80,
+                child: CachedNetworkImage(imageUrl: widget.set.logoUrl, fit: BoxFit.contain),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("Gesammelt: $userOwnedMaster / $totalCards", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text("${(progress * 100).toStringAsFixed(1)}%", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent, fontSize: 12)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(value: progress, minHeight: 8, borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           
           const SizedBox(height: 8),
 
-          // 2. PROGRESS BAR
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text("Gesammelt: $userOwnedMaster / $totalCards", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    Text("$percentage%", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 6, // Etwas feiner
-                    backgroundColor: Colors.grey[300],
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.blueAccent),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // 3. WERTE (KOMPAKT & EINZEILIG)
-          // Hier ist die große Änderung: Alles in einer Zeile
+          // 2. Werte
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Mein Wert
               Icon(Icons.savings_outlined, size: 14, color: Colors.green[700]),
               const SizedBox(width: 4),
-              Text(
-                "Mein Wert: ", 
-                style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-              ),
-              Text(
-                "${ownedValue.toStringAsFixed(2)} €",
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green[800]),
-              ),
-
-              // Trennstrich
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                child: Text("|", style: TextStyle(color: Colors.grey[400], fontSize: 12)),
-              ),
-
-              // Gesamtwert
+              Text("Mein Wert: ", style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+              Text("${ownedValue.toStringAsFixed(2)} €", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green[800])),
+              Padding(padding: const EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey[400], fontSize: 12))),
               Icon(Icons.assessment_outlined, size: 14, color: Colors.grey[700]),
               const SizedBox(width: 4),
-              Text(
-                "Gesamt: ", 
-                style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-              ),
-              Text(
-                "${totalValue.toStringAsFixed(2)} €",
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87),
-              ),
+              Text("Gesamt: ", style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+              Text("${totalValue.toStringAsFixed(2)} €", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87)),
             ],
           ),
 
           const SizedBox(height: 12),
           
-          // 4. HAUPT-BUTTONS
+          // 3. SET FILTER (Master vs Standard)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildFilterButton(
                 label: "Master Set",
-                countText: "$userOwnedMaster / ${allCards.length}",
+                countText: "$userOwnedMaster / $totalCards",
                 isActive: isMasterActive,
-                onTap: () => setState(() {
-                    _selectedRarities.clear();
-                    _showStandardSetOnly = false;
-                }),
+                onTap: () => setState(() { _selectedRarities.clear(); _showStandardSetOnly = false; }),
               ),
               _buildFilterButton(
                 label: "Standard Set",
                 countText: "$userOwnedStandard / ${widget.set.printedTotal}",
                 isActive: isStandardActive,
-                onTap: () => setState(() {
-                    _selectedRarities.clear();
-                    _showStandardSetOnly = true;
-                }),
+                onTap: () => setState(() { _selectedRarities.clear(); _showStandardSetOnly = true; }),
               ),
             ],
           ),
+
+          const SizedBox(height: 8),
+
+          // 4. NEU: BESITZ FILTER (Alle / Besitz / Fehlend)
+          Container(
+            height: 32,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildToggleOption("Alle", OwnershipFilter.all),
+                _buildToggleOption("Im Besitz", OwnershipFilter.owned),
+                _buildToggleOption("Fehlend", OwnershipFilter.missing),
+              ],
+            ),
+          ),
           
-          // 5. KLAPP-BUTTON
+          // 5. RARITÄTEN FILTER (Ausklappbar)
           TextButton.icon(
             onPressed: () => setState(() => _isRaritiesExpanded = !_isRaritiesExpanded),
-            icon: Icon(
-              _isRaritiesExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-              size: 18,
-              color: Colors.grey[700],
-            ),
+            icon: Icon(_isRaritiesExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, size: 16, color: Colors.grey[700]),
             label: Text(
               _isRaritiesExpanded 
                   ? "Weniger Filter" 
                   : _selectedRarities.isEmpty 
-                      ? "Filter (${totalRarityCounts.length})"
-                      : "Filter (${_selectedRarities.length} aktiv)",
+                      ? "Raritäten (${totalRarityCounts.length})"
+                      : "Raritäten (${_selectedRarities.length} aktiv)",
               style: TextStyle(color: Colors.grey[800], fontSize: 11),
             ),
             style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 8), // Weniger Padding
-              minimumSize: Size.zero,
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 30),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
 
-          // 6. RARITÄTEN LISTE
           AnimatedSize(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
             child: _isRaritiesExpanded 
               ? Padding(
-                  padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
+                  padding: const EdgeInsets.only(bottom: 8.0),
                   child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                    spacing: 4, // Kleinerer Abstand
+                    runSpacing: 4, 
                     alignment: WrapAlignment.center,
                     children: sortedRarities.map((rarityName) {
-                      final count = totalRarityCounts[rarityName];
+                      final total = totalRarityCounts[rarityName] ?? 0;
+                      final owned = ownedRarityCounts[rarityName] ?? 0;
                       final isSelected = _selectedRarities.contains(rarityName);
+                      
+                      // VERKLEINERTER CHIP
                       return ActionChip(
-                        label: Text('$rarityName: 0 / $count'), 
-                        visualDensity: VisualDensity.compact,
+                        label: Text('$rarityName: $owned/$total'), 
+                        // Wichtig für Kompaktheit:
+                        visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        labelPadding: const EdgeInsets.symmetric(horizontal: 4), // Wenig Innenabstand
                         padding: EdgeInsets.zero,
+                        
                         backgroundColor: isSelected 
                             ? _getRarityColor(rarityName)?.withOpacity(0.8) 
                             : _getRarityColor(rarityName),
                         side: isSelected 
-                            ? const BorderSide(color: Colors.black54, width: 1.5) 
+                            ? const BorderSide(color: Colors.black54, width: 1.0) 
                             : BorderSide.none,
-                        labelStyle: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isSelected ? Colors.black : Colors.black87),
+                        labelStyle: TextStyle(
+                          fontSize: 9, // Kleinere Schrift
+                          fontWeight: FontWeight.bold, 
+                          color: isSelected ? Colors.black : Colors.black87
+                        ),
                         onPressed: () {
                           setState(() {
+                            // Wenn man Raritäten klickt, schalten wir meist Standard-Set aus, um Verwirrung zu vermeiden
                             _showStandardSetOnly = false;
                             if (_selectedRarities.contains(rarityName)) {
                               _selectedRarities.remove(rarityName);
@@ -310,7 +312,29 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     );
   }
 
-  // --- HILFSFUNKTIONEN ---
+  // Helper für die kleinen Toggle-Buttons (Alle/Besitz/Fehlend)
+  Widget _buildToggleOption(String text, OwnershipFilter value) {
+    final bool isSelected = _ownershipFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _ownershipFilter = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+          boxShadow: isSelected ? [const BoxShadow(color: Colors.black12, blurRadius: 2)] : null,
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? Colors.black : Colors.grey[700],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildFilterButton({required String label, required String countText, required bool isActive, required VoidCallback onTap}) {
     return InkWell(
@@ -333,16 +357,19 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     );
   }
 
- // Update: Nimmt jetzt 'isOwned' entgegen
   Widget _buildCardItem(ApiCard card, bool isOwned) {
-    return InkWell( // <--- HIER UMWICKELN
+    return InkWell(
       onTap: () {
-         Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => CardDetailScreen(card: card),
-          ),
+        Navigator.push(context, MaterialPageRoute(builder: (_) => CardDetailScreen(card: card)))
+          .then((_) => ref.refresh(cardsForSetProvider(widget.set.id))); 
+      },
+      onLongPress: () async {
+        await showModalBottomSheet(
+          context: context, 
+          isScrollControlled: true,
+          builder: (_) => InventoryBottomSheet(card: card)
         );
+        ref.invalidate(cardsForSetProvider(widget.set.id));
       },
       child: Card(
         elevation: 2,
@@ -350,12 +377,10 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 1. DAS BILD (Mit "Ausgegraut"-Effekt, wenn nicht im Besitz)
             TweenAnimationBuilder<double>(
               duration: const Duration(milliseconds: 300),
               tween: Tween<double>(begin: 0, end: isOwned ? 1.0 : 0.0),
               builder: (context, saturation, child) {
-                // Dieser Filter macht das Bild schwarz-weiß, wenn saturation 0 ist
                 return ColorFiltered(
                   colorFilter: ColorFilter.matrix(<double>[
                     0.2126 + 0.7874 * saturation, 0.7152 - 0.7152 * saturation, 0.0722 - 0.0722 * saturation, 0, 0,
@@ -363,29 +388,15 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     0.2126 - 0.2126 * saturation, 0.7152 - 0.7152 * saturation, 0.0722 + 0.9278 * saturation, 0, 0,
                     0, 0, 0, 1, 0,
                   ]),
-                  // Zusätzlich machen wir es etwas durchsichtiger, wenn nicht im Besitz
-                  child: Opacity(
-                    opacity: isOwned ? 1.0 : 0.5, 
-                    child: child,
-                  ),
+                  child: Opacity(opacity: isOwned ? 1.0 : 0.5, child: child),
                 );
               },
-              child: CachedNetworkImage(
-                imageUrl: card.smallImageUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(color: Colors.grey[200]),
-                errorWidget: (context, url, error) => const Icon(Icons.broken_image),
-              ),
+              child: CachedNetworkImage(imageUrl: card.smallImageUrl, fit: BoxFit.cover, placeholder: (context, url) => Container(color: Colors.grey[200]), errorWidget: (context, url, error) => const Icon(Icons.broken_image)),
             ),
-            
-            // 2. SCHWARZER BALKEN (Nummer & Preis)
-            // Den zeigen wir vielleicht auch nur an, wenn man die Karte besitzt?
-            // Oder wir lassen ihn, damit man sieht, was sie wert WÄRE.
-            // Ich lasse ihn erstmal da, aber mache ihn auch etwas blasser.
             Positioned(
               bottom: 0, left: 0, right: 0,
               child: Opacity(
-                opacity: isOwned ? 1.0 : 0.7, // Balken auch leicht ausgrauen
+                opacity: isOwned ? 1.0 : 0.7,
                 child: Container(
                   color: Colors.black.withOpacity(0.7),
                   padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
@@ -400,14 +411,8 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                 ),
               ),
             ),
-
-            // 3. OPTIONAL: Ein Schloss-Icon für nicht-besessene Karten
             if (!isOwned)
-              Positioned.fill(
-                child: Center(
-                  child: Icon(Icons.lock_outline, color: Colors.white.withOpacity(0.5), size: 32),
-                ),
-              ),
+              Positioned.fill(child: Center(child: Icon(Icons.lock_outline, color: Colors.white.withOpacity(0.5), size: 32))),
           ],
         ),
       ),

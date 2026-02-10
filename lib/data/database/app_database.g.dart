@@ -2046,6 +2046,377 @@ class TcgPlayerPricesCompanion extends UpdateCompanion<TcgPlayerPrice> {
   }
 }
 
+class $UserCardsTable extends UserCards
+    with TableInfo<$UserCardsTable, UserCard> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UserCardsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _cardIdMeta = const VerificationMeta('cardId');
+  @override
+  late final GeneratedColumn<String> cardId = GeneratedColumn<String>(
+      'card_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES cards (id)'));
+  static const VerificationMeta _quantityMeta =
+      const VerificationMeta('quantity');
+  @override
+  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+      'quantity', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1));
+  static const VerificationMeta _conditionMeta =
+      const VerificationMeta('condition');
+  @override
+  late final GeneratedColumn<String> condition = GeneratedColumn<String>(
+      'condition', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('NM'));
+  static const VerificationMeta _languageMeta =
+      const VerificationMeta('language');
+  @override
+  late final GeneratedColumn<String> language = GeneratedColumn<String>(
+      'language', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('Deutsch'));
+  static const VerificationMeta _variantMeta =
+      const VerificationMeta('variant');
+  @override
+  late final GeneratedColumn<String> variant = GeneratedColumn<String>(
+      'variant', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('Normal'));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, cardId, quantity, condition, language, variant, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'user_cards';
+  @override
+  VerificationContext validateIntegrity(Insertable<UserCard> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('card_id')) {
+      context.handle(_cardIdMeta,
+          cardId.isAcceptableOrUnknown(data['card_id']!, _cardIdMeta));
+    } else if (isInserting) {
+      context.missing(_cardIdMeta);
+    }
+    if (data.containsKey('quantity')) {
+      context.handle(_quantityMeta,
+          quantity.isAcceptableOrUnknown(data['quantity']!, _quantityMeta));
+    }
+    if (data.containsKey('condition')) {
+      context.handle(_conditionMeta,
+          condition.isAcceptableOrUnknown(data['condition']!, _conditionMeta));
+    }
+    if (data.containsKey('language')) {
+      context.handle(_languageMeta,
+          language.isAcceptableOrUnknown(data['language']!, _languageMeta));
+    }
+    if (data.containsKey('variant')) {
+      context.handle(_variantMeta,
+          variant.isAcceptableOrUnknown(data['variant']!, _variantMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  UserCard map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UserCard(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      cardId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}card_id'])!,
+      quantity: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}quantity'])!,
+      condition: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}condition'])!,
+      language: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}language'])!,
+      variant: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}variant'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $UserCardsTable createAlias(String alias) {
+    return $UserCardsTable(attachedDatabase, alias);
+  }
+}
+
+class UserCard extends DataClass implements Insertable<UserCard> {
+  final int id;
+  final String cardId;
+  final int quantity;
+  final String condition;
+  final String language;
+  final String variant;
+  final DateTime createdAt;
+  const UserCard(
+      {required this.id,
+      required this.cardId,
+      required this.quantity,
+      required this.condition,
+      required this.language,
+      required this.variant,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['card_id'] = Variable<String>(cardId);
+    map['quantity'] = Variable<int>(quantity);
+    map['condition'] = Variable<String>(condition);
+    map['language'] = Variable<String>(language);
+    map['variant'] = Variable<String>(variant);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  UserCardsCompanion toCompanion(bool nullToAbsent) {
+    return UserCardsCompanion(
+      id: Value(id),
+      cardId: Value(cardId),
+      quantity: Value(quantity),
+      condition: Value(condition),
+      language: Value(language),
+      variant: Value(variant),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory UserCard.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UserCard(
+      id: serializer.fromJson<int>(json['id']),
+      cardId: serializer.fromJson<String>(json['cardId']),
+      quantity: serializer.fromJson<int>(json['quantity']),
+      condition: serializer.fromJson<String>(json['condition']),
+      language: serializer.fromJson<String>(json['language']),
+      variant: serializer.fromJson<String>(json['variant']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'cardId': serializer.toJson<String>(cardId),
+      'quantity': serializer.toJson<int>(quantity),
+      'condition': serializer.toJson<String>(condition),
+      'language': serializer.toJson<String>(language),
+      'variant': serializer.toJson<String>(variant),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  UserCard copyWith(
+          {int? id,
+          String? cardId,
+          int? quantity,
+          String? condition,
+          String? language,
+          String? variant,
+          DateTime? createdAt}) =>
+      UserCard(
+        id: id ?? this.id,
+        cardId: cardId ?? this.cardId,
+        quantity: quantity ?? this.quantity,
+        condition: condition ?? this.condition,
+        language: language ?? this.language,
+        variant: variant ?? this.variant,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  UserCard copyWithCompanion(UserCardsCompanion data) {
+    return UserCard(
+      id: data.id.present ? data.id.value : this.id,
+      cardId: data.cardId.present ? data.cardId.value : this.cardId,
+      quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      condition: data.condition.present ? data.condition.value : this.condition,
+      language: data.language.present ? data.language.value : this.language,
+      variant: data.variant.present ? data.variant.value : this.variant,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserCard(')
+          ..write('id: $id, ')
+          ..write('cardId: $cardId, ')
+          ..write('quantity: $quantity, ')
+          ..write('condition: $condition, ')
+          ..write('language: $language, ')
+          ..write('variant: $variant, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id, cardId, quantity, condition, language, variant, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UserCard &&
+          other.id == this.id &&
+          other.cardId == this.cardId &&
+          other.quantity == this.quantity &&
+          other.condition == this.condition &&
+          other.language == this.language &&
+          other.variant == this.variant &&
+          other.createdAt == this.createdAt);
+}
+
+class UserCardsCompanion extends UpdateCompanion<UserCard> {
+  final Value<int> id;
+  final Value<String> cardId;
+  final Value<int> quantity;
+  final Value<String> condition;
+  final Value<String> language;
+  final Value<String> variant;
+  final Value<DateTime> createdAt;
+  const UserCardsCompanion({
+    this.id = const Value.absent(),
+    this.cardId = const Value.absent(),
+    this.quantity = const Value.absent(),
+    this.condition = const Value.absent(),
+    this.language = const Value.absent(),
+    this.variant = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  UserCardsCompanion.insert({
+    this.id = const Value.absent(),
+    required String cardId,
+    this.quantity = const Value.absent(),
+    this.condition = const Value.absent(),
+    this.language = const Value.absent(),
+    this.variant = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : cardId = Value(cardId);
+  static Insertable<UserCard> custom({
+    Expression<int>? id,
+    Expression<String>? cardId,
+    Expression<int>? quantity,
+    Expression<String>? condition,
+    Expression<String>? language,
+    Expression<String>? variant,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (cardId != null) 'card_id': cardId,
+      if (quantity != null) 'quantity': quantity,
+      if (condition != null) 'condition': condition,
+      if (language != null) 'language': language,
+      if (variant != null) 'variant': variant,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  UserCardsCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? cardId,
+      Value<int>? quantity,
+      Value<String>? condition,
+      Value<String>? language,
+      Value<String>? variant,
+      Value<DateTime>? createdAt}) {
+    return UserCardsCompanion(
+      id: id ?? this.id,
+      cardId: cardId ?? this.cardId,
+      quantity: quantity ?? this.quantity,
+      condition: condition ?? this.condition,
+      language: language ?? this.language,
+      variant: variant ?? this.variant,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (cardId.present) {
+      map['card_id'] = Variable<String>(cardId.value);
+    }
+    if (quantity.present) {
+      map['quantity'] = Variable<int>(quantity.value);
+    }
+    if (condition.present) {
+      map['condition'] = Variable<String>(condition.value);
+    }
+    if (language.present) {
+      map['language'] = Variable<String>(language.value);
+    }
+    if (variant.present) {
+      map['variant'] = Variable<String>(variant.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserCardsCompanion(')
+          ..write('id: $id, ')
+          ..write('cardId: $cardId, ')
+          ..write('quantity: $quantity, ')
+          ..write('condition: $condition, ')
+          ..write('language: $language, ')
+          ..write('variant: $variant, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2055,12 +2426,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $CardMarketPricesTable(this);
   late final $TcgPlayerPricesTable tcgPlayerPrices =
       $TcgPlayerPricesTable(this);
+  late final $UserCardsTable userCards = $UserCardsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [cardSets, cards, cardMarketPrices, tcgPlayerPrices];
+      [cardSets, cards, cardMarketPrices, tcgPlayerPrices, userCards];
 }
 
 typedef $$CardSetsTableCreateCompanionBuilder = CardSetsCompanion Function({
@@ -2471,6 +2843,19 @@ class $$CardsTableFilterComposer
             builder: (joinBuilder, parentComposers) =>
                 $$TcgPlayerPricesTableFilterComposer(ComposerState($state.db,
                     $state.db.tcgPlayerPrices, joinBuilder, parentComposers)));
+    return f(composer);
+  }
+
+  ComposableFilter userCardsRefs(
+      ComposableFilter Function($$UserCardsTableFilterComposer f) f) {
+    final $$UserCardsTableFilterComposer composer = $state.composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $state.db.userCards,
+        getReferencedColumn: (t) => t.cardId,
+        builder: (joinBuilder, parentComposers) =>
+            $$UserCardsTableFilterComposer(ComposerState(
+                $state.db, $state.db.userCards, joinBuilder, parentComposers)));
     return f(composer);
   }
 }
@@ -2964,6 +3349,172 @@ class $$TcgPlayerPricesTableOrderingComposer
   }
 }
 
+typedef $$UserCardsTableCreateCompanionBuilder = UserCardsCompanion Function({
+  Value<int> id,
+  required String cardId,
+  Value<int> quantity,
+  Value<String> condition,
+  Value<String> language,
+  Value<String> variant,
+  Value<DateTime> createdAt,
+});
+typedef $$UserCardsTableUpdateCompanionBuilder = UserCardsCompanion Function({
+  Value<int> id,
+  Value<String> cardId,
+  Value<int> quantity,
+  Value<String> condition,
+  Value<String> language,
+  Value<String> variant,
+  Value<DateTime> createdAt,
+});
+
+class $$UserCardsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $UserCardsTable,
+    UserCard,
+    $$UserCardsTableFilterComposer,
+    $$UserCardsTableOrderingComposer,
+    $$UserCardsTableCreateCompanionBuilder,
+    $$UserCardsTableUpdateCompanionBuilder> {
+  $$UserCardsTableTableManager(_$AppDatabase db, $UserCardsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          filteringComposer:
+              $$UserCardsTableFilterComposer(ComposerState(db, table)),
+          orderingComposer:
+              $$UserCardsTableOrderingComposer(ComposerState(db, table)),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> cardId = const Value.absent(),
+            Value<int> quantity = const Value.absent(),
+            Value<String> condition = const Value.absent(),
+            Value<String> language = const Value.absent(),
+            Value<String> variant = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+          }) =>
+              UserCardsCompanion(
+            id: id,
+            cardId: cardId,
+            quantity: quantity,
+            condition: condition,
+            language: language,
+            variant: variant,
+            createdAt: createdAt,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String cardId,
+            Value<int> quantity = const Value.absent(),
+            Value<String> condition = const Value.absent(),
+            Value<String> language = const Value.absent(),
+            Value<String> variant = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+          }) =>
+              UserCardsCompanion.insert(
+            id: id,
+            cardId: cardId,
+            quantity: quantity,
+            condition: condition,
+            language: language,
+            variant: variant,
+            createdAt: createdAt,
+          ),
+        ));
+}
+
+class $$UserCardsTableFilterComposer
+    extends FilterComposer<_$AppDatabase, $UserCardsTable> {
+  $$UserCardsTableFilterComposer(super.$state);
+  ColumnFilters<int> get id => $state.composableBuilder(
+      column: $state.table.id,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<int> get quantity => $state.composableBuilder(
+      column: $state.table.quantity,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get condition => $state.composableBuilder(
+      column: $state.table.condition,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get language => $state.composableBuilder(
+      column: $state.table.language,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get variant => $state.composableBuilder(
+      column: $state.table.variant,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<DateTime> get createdAt => $state.composableBuilder(
+      column: $state.table.createdAt,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  $$CardsTableFilterComposer get cardId {
+    final $$CardsTableFilterComposer composer = $state.composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.cardId,
+        referencedTable: $state.db.cards,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder, parentComposers) => $$CardsTableFilterComposer(
+            ComposerState(
+                $state.db, $state.db.cards, joinBuilder, parentComposers)));
+    return composer;
+  }
+}
+
+class $$UserCardsTableOrderingComposer
+    extends OrderingComposer<_$AppDatabase, $UserCardsTable> {
+  $$UserCardsTableOrderingComposer(super.$state);
+  ColumnOrderings<int> get id => $state.composableBuilder(
+      column: $state.table.id,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<int> get quantity => $state.composableBuilder(
+      column: $state.table.quantity,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get condition => $state.composableBuilder(
+      column: $state.table.condition,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get language => $state.composableBuilder(
+      column: $state.table.language,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get variant => $state.composableBuilder(
+      column: $state.table.variant,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<DateTime> get createdAt => $state.composableBuilder(
+      column: $state.table.createdAt,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  $$CardsTableOrderingComposer get cardId {
+    final $$CardsTableOrderingComposer composer = $state.composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.cardId,
+        referencedTable: $state.db.cards,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder, parentComposers) => $$CardsTableOrderingComposer(
+            ComposerState(
+                $state.db, $state.db.cards, joinBuilder, parentComposers)));
+    return composer;
+  }
+}
+
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
@@ -2975,4 +3526,6 @@ class $AppDatabaseManager {
       $$CardMarketPricesTableTableManager(_db, _db.cardMarketPrices);
   $$TcgPlayerPricesTableTableManager get tcgPlayerPrices =>
       $$TcgPlayerPricesTableTableManager(_db, _db.tcgPlayerPrices);
+  $$UserCardsTableTableManager get userCards =>
+      $$UserCardsTableTableManager(_db, _db.userCards);
 }

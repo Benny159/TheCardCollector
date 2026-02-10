@@ -20,6 +20,8 @@ class ApiCard {
   final ApiTcgPlayer? tcgplayer;
   final String? setPrintedTotal; // <--- Das brauchst du für die Anzeige "25/185"
 
+  final bool isOwned; // NEU: Zeigt an, ob die Karte in deiner Sammlung ist
+
   ApiCard({
     required this.id,
     required this.name,
@@ -36,6 +38,7 @@ class ApiCard {
     this.cardmarket,
     this.tcgplayer,
     this.setPrintedTotal,
+    this.isOwned = false,
   });
 
   factory ApiCard.fromJson(Map<String, dynamic> json) {
