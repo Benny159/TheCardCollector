@@ -8,7 +8,7 @@ import '../../domain/models/api_set.dart';
 import '../cards/card_detail_screen.dart';
 import '../inventory/inventory_bottom_sheet.dart';
 
-// 1. NEU: Enum für den Besitz-Filter
+// Enum für den Besitz-Filter
 enum OwnershipFilter { all, owned, missing }
 
 class SetDetailScreen extends ConsumerStatefulWidget {
@@ -25,7 +25,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
   bool _showStandardSetOnly = false;
   bool _isRaritiesExpanded = false;
   
-  // 2. NEU: State Variable für den Filter
   OwnershipFilter _ownershipFilter = OwnershipFilter.all;
 
   @override
@@ -66,19 +65,27 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
             }).toList();
           }
 
-          // C) NEU: Besitz-Filter (Owned / Missing)
+          // C) Besitz-Filter
           if (_ownershipFilter == OwnershipFilter.owned) {
             visibleCards = visibleCards.where((c) => c.isOwned).toList();
           } else if (_ownershipFilter == OwnershipFilter.missing) {
             visibleCards = visibleCards.where((c) => !c.isOwned).toList();
           }
 
-          // 3. WERTE BERECHNEN (Auf Basis aller Karten, nicht nur der gefilterten)
+          // 3. WERTE BERECHNEN (Auf Basis aller Karten)
           double totalSetVal = 0.0;
           double userOwnedVal = 0.0;
 
           for (var card in allSortedCards) {
-            final price = card.priceEur ?? 0.0;
+            // HIER IST DIE LOGIK AUCH WICHTIG FÜR DIE GESAMT-BERECHNUNG:
+            double price = card.cardmarket?.trendPrice ?? 0.0;
+            if (price == 0) {
+               // Fallback auf TCGPlayer
+               price = card.tcgplayer?.prices?.normal?.market ??
+                       card.tcgplayer?.prices?.holofoil?.market ??
+                       card.tcgplayer?.prices?.reverseHolofoil?.market ?? 0.0;
+            }
+
             totalSetVal += price;
             if (card.isOwned) userOwnedVal += price;
           }
@@ -115,7 +122,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
   // --- UI KOMPONENTEN ---
 
   Widget _buildHeader(BuildContext context, List<ApiCard> allCards, double totalValue, double ownedValue) {
-    // Statistiken berechnen
     final int userOwnedMaster = allCards.where((c) => c.isOwned).length;
     final int totalCards = allCards.length;
     final double progress = totalCards > 0 ? (userOwnedMaster / totalCards) : 0.0;
@@ -126,7 +132,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
       return c.isOwned && num != null && num <= standardTotal;
     }).length;
 
-    // Raritäten zählen
     final Map<String, int> totalRarityCounts = {};
     final Map<String, int> ownedRarityCounts = {};
 
@@ -140,7 +145,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     final sortedRarities = totalRarityCounts.keys.toList()
       ..sort((a, b) => _getRarityWeight(a).compareTo(_getRarityWeight(b)));
 
-    // Button Status Logik
     final bool isMasterActive = !_showStandardSetOnly && _selectedRarities.isEmpty;
     final bool isStandardActive = _showStandardSetOnly;
 
@@ -219,7 +223,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
           const SizedBox(height: 8),
 
-          // 4. NEU: BESITZ FILTER (Alle / Besitz / Fehlend)
+          // 4. BESITZ FILTER
           Container(
             height: 32,
             decoration: BoxDecoration(
@@ -236,7 +240,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
             ),
           ),
           
-          // 5. RARITÄTEN FILTER (Ausklappbar)
+          // 5. RARITÄTEN FILTER
           TextButton.icon(
             onPressed: () => setState(() => _isRaritiesExpanded = !_isRaritiesExpanded),
             icon: Icon(_isRaritiesExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, size: 16, color: Colors.grey[700]),
@@ -262,7 +266,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
               ? Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
                   child: Wrap(
-                    spacing: 4, // Kleinerer Abstand
+                    spacing: 4, 
                     runSpacing: 4, 
                     alignment: WrapAlignment.center,
                     children: sortedRarities.map((rarityName) {
@@ -270,15 +274,12 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                       final owned = ownedRarityCounts[rarityName] ?? 0;
                       final isSelected = _selectedRarities.contains(rarityName);
                       
-                      // VERKLEINERTER CHIP
                       return ActionChip(
                         label: Text('$rarityName: $owned/$total'), 
-                        // Wichtig für Kompaktheit:
                         visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        labelPadding: const EdgeInsets.symmetric(horizontal: 4), // Wenig Innenabstand
+                        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
                         padding: EdgeInsets.zero,
-                        
                         backgroundColor: isSelected 
                             ? _getRarityColor(rarityName)?.withOpacity(0.8) 
                             : _getRarityColor(rarityName),
@@ -286,13 +287,12 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                             ? const BorderSide(color: Colors.black54, width: 1.0) 
                             : BorderSide.none,
                         labelStyle: TextStyle(
-                          fontSize: 9, // Kleinere Schrift
+                          fontSize: 9, 
                           fontWeight: FontWeight.bold, 
                           color: isSelected ? Colors.black : Colors.black87
                         ),
                         onPressed: () {
                           setState(() {
-                            // Wenn man Raritäten klickt, schalten wir meist Standard-Set aus, um Verwirrung zu vermeiden
                             _showStandardSetOnly = false;
                             if (_selectedRarities.contains(rarityName)) {
                               _selectedRarities.remove(rarityName);
@@ -312,7 +312,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     );
   }
 
-  // Helper für die kleinen Toggle-Buttons (Alle/Besitz/Fehlend)
   Widget _buildToggleOption(String text, OwnershipFilter value) {
     final bool isSelected = _ownershipFilter == value;
     return GestureDetector(
@@ -357,7 +356,21 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     );
   }
 
+  // --- PREIS-PRIORITÄT HIER ---
   Widget _buildCardItem(ApiCard card, bool isOwned) {
+    // 1. Cardmarket Trend
+    double? displayPrice = card.cardmarket?.trendPrice;
+    
+    // 2. Fallback: TCGPlayer (Normal -> Holo -> Reverse)
+    if (displayPrice == null || displayPrice == 0) {
+      final tcg = card.tcgplayer?.prices;
+      if (tcg != null) {
+        displayPrice = tcg.normal?.market ?? 
+                       tcg.holofoil?.market ?? 
+                       tcg.reverseHolofoil?.market;
+      }
+    }
+
     return InkWell(
       onTap: () {
         Navigator.push(context, MaterialPageRoute(builder: (_) => CardDetailScreen(card: card)))
@@ -370,6 +383,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
           builder: (_) => InventoryBottomSheet(card: card)
         );
         ref.invalidate(cardsForSetProvider(widget.set.id));
+        ref.invalidate(setStatsProvider(widget.set.id)); // Auch Set-Liste updaten
       },
       child: Card(
         elevation: 2,
@@ -404,8 +418,9 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(card.number, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                      if (card.priceEur != null)
-                        Text('${card.priceEur!.toStringAsFixed(2)}€', style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                      // ANZEIGE DES BERECHNETEN PREISES
+                      if (displayPrice != null && displayPrice > 0)
+                        Text('${displayPrice.toStringAsFixed(2)}€', style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),

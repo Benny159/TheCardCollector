@@ -9,6 +9,7 @@ import '../../domain/models/api_set.dart';
 import '../sync/set_importer.dart';
 import '../database/database_provider.dart';
 import 'tcg_api_client.dart';
+import 'package:intl/intl.dart';
 
 // --- 1. CONFIG ---
 enum SearchMode { name, artist }
@@ -262,10 +263,10 @@ class InventoryItem {
 }
 
 // 2. Sortier-Optionen
-enum InventorySort { name, rarity, type, number }
+enum InventorySort { value, name, rarity, type, number }
 
 // 3. Filter-Status Provider
-final inventorySortProvider = StateProvider<InventorySort>((ref) => InventorySort.name);
+final inventorySortProvider = StateProvider<InventorySort>((ref) => InventorySort.value);
 final inventoryGroupBySetProvider = StateProvider<bool>((ref) => false);
 
 // 4. DER HAUPT-PROVIDER (JETZT ALS STREAM!)
@@ -345,3 +346,64 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
     return items;
   });
 });
+
+// 2. NEU: Provider für die Top 10 teuersten Karten
+final top10CardsProvider = Provider<List<InventoryItem>>((ref) {
+  // Wir nutzen den existierenden Stream!
+  final allItemsAsync = ref.watch(inventoryProvider);
+  
+  return allItemsAsync.when(
+    data: (items) {
+      // Kopie erstellen und sortieren
+      final sorted = List<InventoryItem>.from(items);
+      // Teuerste zuerst (nach Gesamtpreis des Items, oder Einzelpreis? Meist Einzelpreis für Top 10)
+      // Wir nehmen hier den *Gesamtwert* des Stacks (z.B. 2x Glurak = 200€ > 1x Lugia = 150€)
+      sorted.sort((a, b) => b.totalValue.compareTo(a.totalValue));
+      return sorted.take(10).toList();
+    },
+    loading: () => [],
+    error: (_,__) => [],
+  );
+});
+
+// 3. NEU: Provider für die Historie (Diagramm-Daten)
+final portfolioHistoryProvider = StreamProvider<List<PortfolioHistoryData>>((ref) {
+  final db = ref.read(databaseProvider);
+  // Sortiert nach Datum aufsteigend
+  return (db.select(db.portfolioHistory)..orderBy([(t) => OrderingTerm(expression: t.date)])).watch();
+});
+
+// 4. NEU: Funktion zum Erstellen eines Snapshots (ruft man beim App-Start auf)
+Future<void> createPortfolioSnapshot(WidgetRef ref) async {
+  final db = ref.read(databaseProvider);
+  
+  // 1. Berechne aktuellen Gesamtwert
+  // (Wir holen die Daten einmalig "on demand")
+  final items = await ref.read(inventoryProvider.future);
+  final double currentTotal = items.fold(0.0, (sum, item) => sum + item.totalValue);
+
+  if (currentTotal == 0) return; // Leeres Inventar nicht speichern (optional)
+
+  final today = DateTime.now();
+  // Nur Datum ohne Uhrzeit für den Vergleich
+  final todayDate = DateTime(today.year, today.month, today.day);
+
+  // 2. Prüfen, ob für HEUTE schon ein Eintrag existiert
+  final existingEntry = await (db.select(db.portfolioHistory)
+    ..where((t) => t.date.equals(todayDate))
+  ).getSingleOrNull();
+
+  if (existingEntry != null) {
+    // Update (falls sich heute der Wert geändert hat durch Hinzufügen)
+    await (db.update(db.portfolioHistory)..where((t) => t.id.equals(existingEntry.id)))
+        .write(PortfolioHistoryCompanion(totalValue: Value(currentTotal)));
+  } else {
+    // Insert (Neuer Tag)
+    await db.into(db.portfolioHistory).insert(
+      PortfolioHistoryCompanion.insert(
+        date: todayDate,
+        totalValue: currentTotal,
+      ),
+    );
+  }
+}

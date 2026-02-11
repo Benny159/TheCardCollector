@@ -110,3 +110,9 @@ class UserCards extends Table {
   // Wann hinzugefügt?
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
+
+class PortfolioHistory extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  DateTimeColumn get date => dateTime()();
+  RealColumn get totalValue => real()();
+}

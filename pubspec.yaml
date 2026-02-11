@@ -27,6 +27,10 @@ dependencies:
   cached_network_image: ^3.3.1
   google_fonts: ^4.0.3
 
+  # --- Diagramme & Datumsformate ---
+  fl_chart: ^0.66.0
+  intl: ^0.20.2
+
   # --- Sonstiges ---
   pokemon_tcg: ^1.0.1
   device_preview: ^1.2.0

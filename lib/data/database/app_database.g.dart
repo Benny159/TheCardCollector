@@ -2417,6 +2417,228 @@ class UserCardsCompanion extends UpdateCompanion<UserCard> {
   }
 }
 
+class $PortfolioHistoryTable extends PortfolioHistory
+    with TableInfo<$PortfolioHistoryTable, PortfolioHistoryData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PortfolioHistoryTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
+      'date', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _totalValueMeta =
+      const VerificationMeta('totalValue');
+  @override
+  late final GeneratedColumn<double> totalValue = GeneratedColumn<double>(
+      'total_value', aliasedName, false,
+      type: DriftSqlType.double, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [id, date, totalValue];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'portfolio_history';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<PortfolioHistoryData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+          _dateMeta, date.isAcceptableOrUnknown(data['date']!, _dateMeta));
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('total_value')) {
+      context.handle(
+          _totalValueMeta,
+          totalValue.isAcceptableOrUnknown(
+              data['total_value']!, _totalValueMeta));
+    } else if (isInserting) {
+      context.missing(_totalValueMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PortfolioHistoryData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PortfolioHistoryData(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      date: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}date'])!,
+      totalValue: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}total_value'])!,
+    );
+  }
+
+  @override
+  $PortfolioHistoryTable createAlias(String alias) {
+    return $PortfolioHistoryTable(attachedDatabase, alias);
+  }
+}
+
+class PortfolioHistoryData extends DataClass
+    implements Insertable<PortfolioHistoryData> {
+  final int id;
+  final DateTime date;
+  final double totalValue;
+  const PortfolioHistoryData(
+      {required this.id, required this.date, required this.totalValue});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['date'] = Variable<DateTime>(date);
+    map['total_value'] = Variable<double>(totalValue);
+    return map;
+  }
+
+  PortfolioHistoryCompanion toCompanion(bool nullToAbsent) {
+    return PortfolioHistoryCompanion(
+      id: Value(id),
+      date: Value(date),
+      totalValue: Value(totalValue),
+    );
+  }
+
+  factory PortfolioHistoryData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PortfolioHistoryData(
+      id: serializer.fromJson<int>(json['id']),
+      date: serializer.fromJson<DateTime>(json['date']),
+      totalValue: serializer.fromJson<double>(json['totalValue']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'date': serializer.toJson<DateTime>(date),
+      'totalValue': serializer.toJson<double>(totalValue),
+    };
+  }
+
+  PortfolioHistoryData copyWith(
+          {int? id, DateTime? date, double? totalValue}) =>
+      PortfolioHistoryData(
+        id: id ?? this.id,
+        date: date ?? this.date,
+        totalValue: totalValue ?? this.totalValue,
+      );
+  PortfolioHistoryData copyWithCompanion(PortfolioHistoryCompanion data) {
+    return PortfolioHistoryData(
+      id: data.id.present ? data.id.value : this.id,
+      date: data.date.present ? data.date.value : this.date,
+      totalValue:
+          data.totalValue.present ? data.totalValue.value : this.totalValue,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PortfolioHistoryData(')
+          ..write('id: $id, ')
+          ..write('date: $date, ')
+          ..write('totalValue: $totalValue')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, date, totalValue);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PortfolioHistoryData &&
+          other.id == this.id &&
+          other.date == this.date &&
+          other.totalValue == this.totalValue);
+}
+
+class PortfolioHistoryCompanion extends UpdateCompanion<PortfolioHistoryData> {
+  final Value<int> id;
+  final Value<DateTime> date;
+  final Value<double> totalValue;
+  const PortfolioHistoryCompanion({
+    this.id = const Value.absent(),
+    this.date = const Value.absent(),
+    this.totalValue = const Value.absent(),
+  });
+  PortfolioHistoryCompanion.insert({
+    this.id = const Value.absent(),
+    required DateTime date,
+    required double totalValue,
+  })  : date = Value(date),
+        totalValue = Value(totalValue);
+  static Insertable<PortfolioHistoryData> custom({
+    Expression<int>? id,
+    Expression<DateTime>? date,
+    Expression<double>? totalValue,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (date != null) 'date': date,
+      if (totalValue != null) 'total_value': totalValue,
+    });
+  }
+
+  PortfolioHistoryCompanion copyWith(
+      {Value<int>? id, Value<DateTime>? date, Value<double>? totalValue}) {
+    return PortfolioHistoryCompanion(
+      id: id ?? this.id,
+      date: date ?? this.date,
+      totalValue: totalValue ?? this.totalValue,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<DateTime>(date.value);
+    }
+    if (totalValue.present) {
+      map['total_value'] = Variable<double>(totalValue.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PortfolioHistoryCompanion(')
+          ..write('id: $id, ')
+          ..write('date: $date, ')
+          ..write('totalValue: $totalValue')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2427,12 +2649,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TcgPlayerPricesTable tcgPlayerPrices =
       $TcgPlayerPricesTable(this);
   late final $UserCardsTable userCards = $UserCardsTable(this);
+  late final $PortfolioHistoryTable portfolioHistory =
+      $PortfolioHistoryTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [cardSets, cards, cardMarketPrices, tcgPlayerPrices, userCards];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+        cardSets,
+        cards,
+        cardMarketPrices,
+        tcgPlayerPrices,
+        userCards,
+        portfolioHistory
+      ];
 }
 
 typedef $$CardSetsTableCreateCompanionBuilder = CardSetsCompanion Function({
@@ -3515,6 +3745,97 @@ class $$UserCardsTableOrderingComposer
   }
 }
 
+typedef $$PortfolioHistoryTableCreateCompanionBuilder
+    = PortfolioHistoryCompanion Function({
+  Value<int> id,
+  required DateTime date,
+  required double totalValue,
+});
+typedef $$PortfolioHistoryTableUpdateCompanionBuilder
+    = PortfolioHistoryCompanion Function({
+  Value<int> id,
+  Value<DateTime> date,
+  Value<double> totalValue,
+});
+
+class $$PortfolioHistoryTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $PortfolioHistoryTable,
+    PortfolioHistoryData,
+    $$PortfolioHistoryTableFilterComposer,
+    $$PortfolioHistoryTableOrderingComposer,
+    $$PortfolioHistoryTableCreateCompanionBuilder,
+    $$PortfolioHistoryTableUpdateCompanionBuilder> {
+  $$PortfolioHistoryTableTableManager(
+      _$AppDatabase db, $PortfolioHistoryTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          filteringComposer:
+              $$PortfolioHistoryTableFilterComposer(ComposerState(db, table)),
+          orderingComposer:
+              $$PortfolioHistoryTableOrderingComposer(ComposerState(db, table)),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<DateTime> date = const Value.absent(),
+            Value<double> totalValue = const Value.absent(),
+          }) =>
+              PortfolioHistoryCompanion(
+            id: id,
+            date: date,
+            totalValue: totalValue,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required DateTime date,
+            required double totalValue,
+          }) =>
+              PortfolioHistoryCompanion.insert(
+            id: id,
+            date: date,
+            totalValue: totalValue,
+          ),
+        ));
+}
+
+class $$PortfolioHistoryTableFilterComposer
+    extends FilterComposer<_$AppDatabase, $PortfolioHistoryTable> {
+  $$PortfolioHistoryTableFilterComposer(super.$state);
+  ColumnFilters<int> get id => $state.composableBuilder(
+      column: $state.table.id,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<DateTime> get date => $state.composableBuilder(
+      column: $state.table.date,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get totalValue => $state.composableBuilder(
+      column: $state.table.totalValue,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+}
+
+class $$PortfolioHistoryTableOrderingComposer
+    extends OrderingComposer<_$AppDatabase, $PortfolioHistoryTable> {
+  $$PortfolioHistoryTableOrderingComposer(super.$state);
+  ColumnOrderings<int> get id => $state.composableBuilder(
+      column: $state.table.id,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<DateTime> get date => $state.composableBuilder(
+      column: $state.table.date,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get totalValue => $state.composableBuilder(
+      column: $state.table.totalValue,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+}
+
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
@@ -3528,4 +3849,6 @@ class $AppDatabaseManager {
       $$TcgPlayerPricesTableTableManager(_db, _db.tcgPlayerPrices);
   $$UserCardsTableTableManager get userCards =>
       $$UserCardsTableTableManager(_db, _db.userCards);
+  $$PortfolioHistoryTableTableManager get portfolioHistory =>
+      $$PortfolioHistoryTableTableManager(_db, _db.portfolioHistory);
 }

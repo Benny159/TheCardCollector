@@ -20,6 +20,7 @@ part 'app_database.g.dart';
   CardMarketPrices,  // Neu: Für Cardmarket Preise
   TcgPlayerPrices,   // Neu: Für TCGPlayer Preise
   UserCards,         // Deine Sammlung
+  PortfolioHistory   // Historie des Portfolios (für den Graphen)
   //Binders,           // Deine Ordner
   //BinderEntries,     // Karten in Ordnern
   //CardLocalizations  // Falls du das noch nutzt
@@ -30,7 +31,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Version 3, weil wir die Struktur massiv geändert haben
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -41,22 +42,20 @@ class AppDatabase extends _$AppDatabase {
 
     // 2. Das hier passiert bei UPDATES (Version erhöht)
     onUpgrade: (Migrator m, int from, int to) async {
-       print('Mache Update von v$from auf v$to');
+       print('--- MIGRATION START: v$from -> v$to ---');
        
-       // Beispiel für die Zukunft (wenn wir Version 4 machen):
-       if (from < 4) {
-         await m.createTable(userCards);
+       // Wenn die App Version kleiner als 7 ist (was sie ist, da sie 6 ist),
+       // wird dieser Block ausgeführt.
+       if (from < 7) {
+         try {
+           // 1. Versuchen, die neue Tabelle zu erstellen
+           await m.createTable(portfolioHistory);
+           print("Tabelle 'portfolioHistory' erfolgreich erstellt.");
+         } catch (e) {
+           print("Warnung: Tabelle 'portfolioHistory' existierte vielleicht schon? Fehler: $e");
+         }
+         print('--- MIGRATION ENDE ---');
        }
-       
-       // Falls du AKTUELL noch Probleme hast und wirklich alles platt machen willst,
-       // kannst du diesen Block hier temporär einkommentieren. 
-       // Aber standardmäßig lassen wir ihn jetzt weg!
-       /*
-       for (final table in allTables) {
-         await m.deleteTable(table.actualTableName);
-         await m.createTable(table);
-       }
-       */
     },
     
     // 3. Wichtig: Fremdschlüssel aktivieren (für Verknüpfungen)

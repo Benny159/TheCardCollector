@@ -240,6 +240,8 @@ Future<void> _saveToInventory() async {
         );
       }
 
+      await createPortfolioSnapshot(ref);
+
       // 2. UI Aktualisieren
       _refreshProviders();
       

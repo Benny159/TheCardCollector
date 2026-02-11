@@ -8,26 +8,38 @@ import '../../domain/models/api_card.dart';
 import '../cards/card_detail_screen.dart';
 import 'inventory_bottom_sheet.dart';
 
+// NEU: Provider für den Suchtext im Inventar
+final inventorySearchProvider = StateProvider<String>((ref) => '');
+
 class InventoryScreen extends ConsumerWidget {
   const InventoryScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Da es jetzt ein Stream ist, ist inventoryAsync immer aktuell!
     final inventoryAsync = ref.watch(inventoryProvider);
     final sortMode = ref.watch(inventorySortProvider);
     final groupBySet = ref.watch(inventoryGroupBySetProvider);
+    final searchText = ref.watch(inventorySearchProvider); // Suchtext lesen
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Mein Inventar"),
-        // Kein Refresh-Button mehr nötig, da automatisch!
       ),
       body: inventoryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Fehler: $err')),
-        data: (items) {
-          if (items.isEmpty) {
+        data: (allItems) {
+          
+          // 1. FILTERN (Suche)
+          var filteredItems = allItems;
+          if (searchText.isNotEmpty) {
+            filteredItems = allItems.where((item) {
+              return item.card.name.toLowerCase().contains(searchText.toLowerCase()) ||
+                     item.set.name.toLowerCase().contains(searchText.toLowerCase());
+            }).toList();
+          }
+
+          if (allItems.isEmpty) {
             return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -40,14 +52,17 @@ class InventoryScreen extends ConsumerWidget {
             );
           }
 
-          // 1. STATISTIK
-          final int totalCards = items.fold(0, (sum, item) => sum + item.quantity);
-          final double totalValue = items.fold(0.0, (sum, item) => sum + item.totalValue);
+          // 2. STATISTIK (Basierend auf ALLEM, oder gefiltert? Meistens will man Summe von allem sehen)
+          // Ich lasse hier die Gesamtsumme (ungefiltert), damit man immer seinen "Account Wert" sieht.
+          final int totalCards = allItems.fold(0, (sum, item) => sum + item.quantity);
+          final double totalValue = allItems.fold(0.0, (sum, item) => sum + item.totalValue);
 
-          // 2. SORTIEREN
-          final sortedItems = List<InventoryItem>.from(items);
+          // 3. SORTIEREN (der gefilterten Liste)
+          final sortedItems = List<InventoryItem>.from(filteredItems);
           sortedItems.sort((a, b) {
             switch (sortMode) {
+              case InventorySort.value:
+                return b.totalValue.compareTo(a.totalValue);
               case InventorySort.name:
                 return a.card.name.compareTo(b.card.name);
               case InventorySort.rarity:
@@ -57,7 +72,6 @@ class InventoryScreen extends ConsumerWidget {
                 final typeB = b.card.types.firstOrNull ?? 'ZZ';
                 return typeA.compareTo(typeB);
               case InventorySort.number:
-                 // Versuchen, die Nummern numerisch zu sortieren (1, 2, 10 statt 1, 10, 2)
                  final intA = int.tryParse(a.card.number) ?? 9999;
                  final intB = int.tryParse(b.card.number) ?? 9999;
                  return intA.compareTo(intB);
@@ -66,13 +80,24 @@ class InventoryScreen extends ConsumerWidget {
 
           return Column(
             children: [
+              // Header Stats
               _buildHeaderStats(context, totalCards, totalValue),
+              
+              // Suchleiste
+              _buildSearchBar(context, ref, searchText),
+
+              // Filter Leiste
               _buildFilterBar(context, ref, sortMode, groupBySet),
+              
               const Divider(height: 1),
+
+              // Inhalt
               Expanded(
-                child: groupBySet 
-                  ? _buildGroupedList(sortedItems)
-                  : _buildGrid(sortedItems),
+                child: sortedItems.isEmpty 
+                  ? const Center(child: Text("Keine Ergebnisse für deine Suche."))
+                  : groupBySet 
+                      ? _buildGroupedList(sortedItems)
+                      : _buildGrid(sortedItems),
               ),
             ],
           );
@@ -81,9 +106,11 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
+  // --- WIDGETS ---
+
   Widget _buildHeaderStats(BuildContext context, int count, double value) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -91,14 +118,14 @@ class InventoryScreen extends ConsumerWidget {
           Column(
             children: [
               const Text("Karten", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              Text("$count", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              Text("$count", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             ],
           ),
-          Container(width: 1, height: 40, color: Colors.grey[400]),
+          Container(width: 1, height: 30, color: Colors.grey[400]),
           Column(
             children: [
               const Text("Gesamtwert", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              Text("${value.toStringAsFixed(2)} €", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green[700])),
+              Text("${value.toStringAsFixed(2)} €", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green[700])),
             ],
           ),
         ],
@@ -106,9 +133,31 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
+  // NEU: Suchleiste
+  Widget _buildSearchBar(BuildContext context, WidgetRef ref, String currentText) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      child: TextField(
+        controller: TextEditingController(text: currentText)..selection = TextSelection.fromPosition(TextPosition(offset: currentText.length)),
+        decoration: InputDecoration(
+          hintText: 'Inventar durchsuchen...',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: currentText.isNotEmpty 
+            ? IconButton(icon: const Icon(Icons.clear), onPressed: () => ref.read(inventorySearchProvider.notifier).state = '')
+            : null,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          filled: true,
+          fillColor: Colors.grey[100],
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        ),
+        onChanged: (val) => ref.read(inventorySearchProvider.notifier).state = val,
+      ),
+    );
+  }
+
   Widget _buildFilterBar(BuildContext context, WidgetRef ref, InventorySort currentSort, bool groupBySet) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
       child: Row(
         children: [
           const Icon(Icons.sort, size: 20, color: Colors.grey),
@@ -118,6 +167,7 @@ class InventoryScreen extends ConsumerWidget {
             underline: const SizedBox(),
             style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500),
             items: const [
+              DropdownMenuItem(value: InventorySort.value, child: Text("Wert")),
               DropdownMenuItem(value: InventorySort.name, child: Text("Name")),
               DropdownMenuItem(value: InventorySort.rarity, child: Text("Seltenheit")),
               DropdownMenuItem(value: InventorySort.type, child: Text("Element")),
@@ -144,7 +194,7 @@ class InventoryScreen extends ConsumerWidget {
       padding: const EdgeInsets.all(10),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        childAspectRatio: 0.65,
+        childAspectRatio: 0.70, // Standard TCG Format
         crossAxisSpacing: 8,
         mainAxisSpacing: 8,
       ),
@@ -153,17 +203,13 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  // --- HIER IST DIE NEUE SET-ANSICHT ---
   Widget _buildGroupedList(List<InventoryItem> items) {
-    // Wir gruppieren nach der Set-ID
     final grouped = groupBy(items, (item) => item.set.id);
     
-    // Sortieren der Sets (neueste oben)
     final sortedKeys = grouped.keys.toList()..sort((a, b) {
-      // Wir holen das Datum aus dem ersten Item der Gruppe
       final dateA = grouped[a]!.first.set.releaseDate;
       final dateB = grouped[b]!.first.set.releaseDate;
-      return dateB.compareTo(dateA); // Neueste zuerst
+      return dateB.compareTo(dateA); 
     });
 
     return ListView.builder(
@@ -172,11 +218,8 @@ class InventoryScreen extends ConsumerWidget {
       itemBuilder: (context, index) {
         final setId = sortedKeys[index];
         final setCards = grouped[setId]!;
-        
-        // Da 'InventoryItem' jetzt das Set-Objekt enthält, können wir direkt zugreifen!
         final apiSet = setCards.first.set;
 
-        // Summen pro Set
         final setTotalCount = setCards.fold(0, (sum, i) => sum + i.quantity);
         final setTotalValue = setCards.fold(0.0, (sum, i) => sum + i.totalValue);
 
@@ -185,7 +228,6 @@ class InventoryScreen extends ConsumerWidget {
           elevation: 1,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: ExpansionTile(
-            // --- HEADER MIT LOGO UND ECHTEM NAMEN ---
             leading: SizedBox(
               width: 50, 
               height: 30,
@@ -199,7 +241,6 @@ class InventoryScreen extends ConsumerWidget {
             title: Text(apiSet.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             subtitle: Text("$setTotalCount Karten • ${setTotalValue.toStringAsFixed(2)} €", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
             childrenPadding: const EdgeInsets.only(bottom: 12),
-            // --- GRID INHALT ---
             children: [
               GridView.builder(
                 shrinkWrap: true,
@@ -207,7 +248,7 @@ class InventoryScreen extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
-                  childAspectRatio: 0.65,
+                  childAspectRatio: 0.70,
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
                 ),
@@ -224,6 +265,7 @@ class InventoryScreen extends ConsumerWidget {
   }
 }
 
+// DAS KARTEN-TILE (Design angepasst wie gewünscht)
 class _InventoryCardTile extends ConsumerWidget {
   final InventoryItem item;
 
@@ -231,6 +273,11 @@ class _InventoryCardTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Prüfen, ob wir den Effekt brauchen
+    final bool isReverseHolo = item.variant == 'Reverse Holo';
+    final bool isHolo = item.variant == 'Holo';
+    final bool showEffect = isReverseHolo || isHolo;
+
     return InkWell(
       onTap: () {
         Navigator.push(context, MaterialPageRoute(builder: (_) => CardDetailScreen(card: item.card)));
@@ -241,23 +288,38 @@ class _InventoryCardTile extends ConsumerWidget {
           isScrollControlled: true,
           builder: (_) => InventoryBottomSheet(card: item.card)
         );
-        // Kein manuelles Refresh mehr nötig! Der Stream macht das.
       },
       child: Card(
         clipBehavior: Clip.antiAlias,
         elevation: 2,
-        child: Column(
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedNetworkImage(
-                    imageUrl: item.card.smallImageUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(color: Colors.grey[200]),
-                  ),
-                  Positioned(
+            // 1. DAS BILD (Mit Logik für den Effekt)
+            Builder(
+              builder: (context) {
+                // Das Basis-Bild
+                Widget imageWidget = CachedNetworkImage(
+                  imageUrl: item.card.smallImageUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => Container(color: Colors.grey[200]),
+                  errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
+                );
+
+                // Wenn Effekt gewünscht, wickeln wir es ein
+                if (showEffect) {
+                  return HoloEffect(
+                    isReverse: isReverseHolo,
+                    child: imageWidget,
+                  );
+                }
+                
+                return imageWidget;
+              },
+            ),
+            
+            // 2. MENGE BADGE (Oben rechts)
+             Positioned(
                     top: 4, right: 4,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -268,37 +330,40 @@ class _InventoryCardTile extends ConsumerWidget {
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(6),
-              color: Colors.grey[50],
-              width: double.infinity,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.card.name, 
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Variante kurz
-                      Text(
-                        _getVariantAbbreviation(item.variant),
-                        style: TextStyle(fontSize: 9, color: Colors.grey[700]),
-                      ),
-                      Text(
-                        "${item.totalValue.toStringAsFixed(2)}€",
-                        style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ],
+
+            // 3. DUNKLER BALKEN (Unten)
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: Container(
+                color: Colors.black.withOpacity(0.7),
+                padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Links: Variante (kurz) mit Icon falls Holo
+                    Row(
+                      children: [
+                        if (showEffect) 
+                          const Padding(
+                            padding: EdgeInsets.only(right: 2.0),
+                          ),
+                        Text(
+                          _getVariantAbbreviation(item.variant),
+                          style: TextStyle(
+                            color: showEffect ? Colors.white70 : Colors.white70, // Text wird Gold bei Holo
+                            fontSize: 9,
+                            fontWeight: showEffect ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Rechts: Preis (Summe)
+                    Text(
+                      "${item.totalValue.toStringAsFixed(2)}€",
+                      style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -311,6 +376,106 @@ class _InventoryCardTile extends ConsumerWidget {
     if (variant == 'Reverse Holo') return 'Rev.';
     if (variant == 'Normal') return 'Norm.';
     if (variant == 'Holo') return 'Holo';
+    if (variant == '1st Edition') return '1.Ed';
     return variant;
+  }
+}
+
+// --- NEU: HOLO / GLITZER EFFEKT WIDGET ---
+class HoloEffect extends StatefulWidget {
+  final Widget child;
+  final bool isReverse; // Unterscheidung für später (optional)
+
+  const HoloEffect({super.key, required this.child, this.isReverse = false});
+
+  @override
+  State<HoloEffect> createState() => _HoloEffectState();
+}
+
+class _HoloEffectState extends State<HoloEffect> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // Langsame Animation für das Schimmern (Endlosschleife)
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 5),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // 1. Das Originalbild
+        widget.child,
+
+        // 2. Der Holo-Layer (wird darübergelegt)
+        AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            return Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  // Der Gradient bewegt sich durch die Animation
+                  transform: GradientRotation(_controller.value * 2 * 3.14159), 
+                  colors: [
+                    Colors.transparent,
+                    Colors.white.withOpacity(0.1),
+                    Colors.purple.withOpacity(0.15), // Lila Schimmer
+                    Colors.blue.withOpacity(0.15),   // Blauer Schimmer
+                    Colors.white.withOpacity(0.2),   // Heller Reflex
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.3, 0.45, 0.55, 0.7, 1.0],
+                ),
+                // Overlay sorgt dafür, dass es wie Licht auf dem Bild wirkt
+                backgroundBlendMode: BlendMode.overlay, 
+              ),
+            );
+          },
+        ),
+        
+        // 3. Zusätzliches "Glitzer" (optional, statisches Rauschen für Reverse Holo Look)
+        if (widget.isReverse)
+          Opacity(
+            opacity: 0.15,
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0.3, -0.5),
+                  radius: 1.2,
+                  colors: [
+                    Colors.white,
+                    Colors.transparent,
+                  ],
+                ),
+                backgroundBlendMode: BlendMode.hardLight,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// Helper für die Rotation des Gradients
+class GradientRotation extends GradientTransform {
+  final double radians;
+  const GradientRotation(this.radians);
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
+    return Matrix4.rotationZ(radians);
   }
 }

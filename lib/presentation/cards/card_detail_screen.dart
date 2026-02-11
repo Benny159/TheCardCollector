@@ -500,6 +500,7 @@ class CardDetailScreen extends ConsumerWidget {
         ref.invalidate(cardsForSetProvider(card.setId));
         // Set-Statistik auch neu laden
         ref.invalidate(setStatsProvider(card.setId));
+        await createPortfolioSnapshot(ref);
         
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
