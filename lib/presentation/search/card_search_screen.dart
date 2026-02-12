@@ -311,7 +311,7 @@ class _DashboardView extends ConsumerWidget {
           final item = items[index];
           
           return Container(
-            width: 140, // Feste Breite pro Karte
+            width: 160, // Feste Breite pro Karte
             margin: const EdgeInsets.only(right: 12),
             child: InkWell(
               onTap: () {
@@ -385,7 +385,7 @@ class _DashboardView extends ConsumerWidget {
 // =========================================================
 class _PortfolioChart extends ConsumerWidget {
   final List<db.PortfolioHistoryData> history;
-  final double currentTotal; // Live Wert übergeben!
+  final double currentTotal; // Der Live-Wert aus dem Inventar
 
   const _PortfolioChart({required this.history, required this.currentTotal});
 
@@ -394,23 +394,37 @@ class _PortfolioChart extends ConsumerWidget {
     final filter = ref.watch(chartFilterProvider);
     final now = DateTime.now();
     
-    // 1. Daten vorbereiten (Kopie der Liste)
-    // Wir nehmen die History aus der DB.
-    List<db.PortfolioHistoryData> filteredData = List.from(history);
+    // 1. BASIS-DATEN: Wir kopieren die Historie aus der Datenbank
+    List<db.PortfolioHistoryData> chartData = List.from(history);
 
-    // 2. Den "Live"-Wert als allerletzten Punkt hinzufügen, falls er noch nicht in DB ist (oder abweicht)
-    // Damit das Diagramm wirklich "jetzt" anzeigt.
-    if (filteredData.isEmpty || !isSameDay(filteredData.last.date, now)) {
-        filteredData.add(db.PortfolioHistoryData(id: -1, date: now, totalValue: currentTotal));
-    } else {
-        // Falls für heute schon was in DB steht, aktualisieren wir den Wert visuell mit dem Live-Wert
-        // (Wir erstellen ein temporäres Objekt dafür, da DB Objekte oft final sind)
-        filteredData.removeLast();
-        filteredData.add(db.PortfolioHistoryData(id: -1, date: now, totalValue: currentTotal));
+    // 2. LIVE-WERT EINPFLEGEN
+    // Wir schauen, ob der letzte Eintrag von heute ist.
+    // Wenn ja -> Aktualisieren wir ihn visuell mit dem Live-Wert (currentTotal).
+    // Wenn nein -> Fügen wir den Live-Wert als neuen Punkt für "jetzt" hinzu.
+    if (chartData.isNotEmpty && _isSameDay(chartData.last.date, now)) {
+      chartData.removeLast(); // Den alten "Heute"-Wert aus DB entfernen
+    }
+    // Den aktuellen Live-Wert als "Heute" hinzufügen
+    chartData.add(db.PortfolioHistoryData(id: -1, date: now, totalValue: currentTotal));
+
+    // 3. STARTPUNKT BEI 0 ERZWINGEN (Für die "Schräge")
+    // Wenn wir nur wenige Daten haben oder der erste Wert > 0 ist,
+    // fügen wir künstlich einen Punkt "einen Tag vor dem ersten Eintrag" mit 0€ hinzu.
+    if (chartData.isNotEmpty) {
+      final firstPoint = chartData.first;
+      if (firstPoint.totalValue > 0) {
+        // Wir fügen einen Punkt davor ein
+        chartData.insert(0, db.PortfolioHistoryData(
+          id: -2, 
+          date: firstPoint.date.subtract(const Duration(days: 1)), 
+          totalValue: 0.0
+        ));
+      }
     }
 
-    // 3. Filtern nach Zeit
-    if (filteredData.isNotEmpty) {
+    // 4. FILTERN (Woche, Monat, Jahr)
+    // Jetzt filtern wir erst, NACHDEM wir die Daten aufbereitet haben.
+    if (chartData.isNotEmpty) {
       DateTime start = now;
       switch (filter) {
         case ChartFilter.week: start = now.subtract(const Duration(days: 7)); break;
@@ -418,41 +432,57 @@ class _PortfolioChart extends ConsumerWidget {
         case ChartFilter.year: start = now.subtract(const Duration(days: 365)); break;
         case ChartFilter.all: start = DateTime(2000); break;
       }
-      filteredData = filteredData.where((d) => d.date.isAfter(start)).toList();
+      // Wir behalten alles nach dem Startdatum ODER den allerersten Punkt (damit die Linie links nicht abgeschnitten wirkt)
+      chartData = chartData.where((d) => d.date.isAfter(start) || d.date.isAtSameMomentAs(start)).toList();
     }
 
-    // 4. FIX: Wenn nur 1 Punkt da ist (Heute), fügen wir "Gestern" mit 0€ hinzu
-    // Damit eine Linie entsteht, die bei 0 startet.
-    if (filteredData.length == 1) {
-      final firstDate = filteredData.first.date;
-      filteredData.insert(0, db.PortfolioHistoryData(
-        id: -2, 
-        date: firstDate.subtract(const Duration(days: 1)), 
-        totalValue: 0.0 // Start bei 0!
-      ));
-    } else if (filteredData.isEmpty) {
-      // Fallback für komplett leeres System
-      return const Center(child: Text("Sammle Daten..."));
+    // Fallback falls leer
+    if (chartData.length < 2) {
+       // Sollte durch Schritt 3 eigentlich nicht passieren, aber sicher ist sicher
+       return const Center(child: Text("Sammle Daten... (Füge eine Karte hinzu)"));
     }
 
-    // 5. Spots erstellen
-    final spots = filteredData.map((e) {
-      // X-Achse: Millisekunden seit Epoch (als double)
+    // 5. SPOTS ERSTELLEN (X-Achse = Zeitstempel)
+    final spots = chartData.map((e) {
       return FlSpot(e.date.millisecondsSinceEpoch.toDouble(), e.totalValue);
     }).toList();
 
-    // Min/Max für Y-Achse
+    // Y-Achse Skalierung
     double minY = spots.map((e) => e.y).reduce((a, b) => a < b ? a : b);
     double maxY = spots.map((e) => e.y).reduce((a, b) => a > b ? a : b);
+    if (maxY == 0) maxY = 100; // Verhindert Crash bei komplett 0
     
-    if (maxY == 0) maxY = 10; // Verhindert Crash bei leerem Graphen
-    minY = minY * 0.9;
-    maxY = maxY * 1.1;
+    // Etwas Platz oben und unten lassen
+    maxY = maxY * 1.1; 
+    // minY lassen wir bei 0 oder dem tiefsten Wert
 
     return LineChart(
       LineChartData(
         gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false), // Achsenbeschriftung aus für cleaneren Look
+        // Achsenbeschriftung minimal halten
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)), 
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                // Nur Start und Ende beschriften
+                if (value == spots.first.x || value == spots.last.x) {
+                   final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
+                   return Padding(
+                     padding: const EdgeInsets.only(top: 8.0),
+                     child: Text(DateFormat('dd.MM.').format(date), style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                   );
+                }
+                return const SizedBox();
+              },
+              interval: (spots.last.x - spots.first.x) > 0 ? (spots.last.x - spots.first.x) : 1.0, 
+            ),
+          ),
+        ),
         borderData: FlBorderData(show: false),
         minX: spots.first.x,
         maxX: spots.last.x,
@@ -461,14 +491,14 @@ class _PortfolioChart extends ConsumerWidget {
         lineBarsData: [
           LineChartBarData(
             spots: spots,
-            isCurved: true,
+            isCurved: true, // Macht die Linie rund/schräg
+            curveSmoothness: 0.2,
             color: Colors.blueAccent,
             barWidth: 3,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
-              // Verlauf unter der Linie
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -480,6 +510,7 @@ class _PortfolioChart extends ConsumerWidget {
             ),
           ),
         ],
+        // Tooltip beim Berühren
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
             getTooltipItems: (touchedSpots) {
@@ -497,8 +528,8 @@ class _PortfolioChart extends ConsumerWidget {
       ),
     );
   }
-  
-  bool isSameDay(DateTime a, DateTime b) {
+
+  bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 }
@@ -574,7 +605,7 @@ class _SearchResultsView extends ConsumerWidget {
                         imageUrl: card.smallImageUrl,
                         placeholder: (context, url) => Container(color: Colors.grey[200]),
                         errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
-                        fit: BoxFit.cover,
+                        width: 160,
                       ),
                     ),
                     

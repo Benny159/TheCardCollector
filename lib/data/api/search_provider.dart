@@ -377,28 +377,27 @@ final portfolioHistoryProvider = StreamProvider<List<PortfolioHistoryData>>((ref
 Future<void> createPortfolioSnapshot(WidgetRef ref) async {
   final db = ref.read(databaseProvider);
   
-  // 1. Berechne aktuellen Gesamtwert
-  // (Wir holen die Daten einmalig "on demand")
+  // 1. Aktuellen Wert berechnen
   final items = await ref.read(inventoryProvider.future);
   final double currentTotal = items.fold(0.0, (sum, item) => sum + item.totalValue);
 
-  if (currentTotal == 0) return; // Leeres Inventar nicht speichern (optional)
+  // WICHTIG: Die Zeile "if (currentTotal == 0) return;" HABE ICH ENTFERNT.
+  // Wir wollen auch speichern, wenn man bei 0 startet oder alles verkauft hat.
 
   final today = DateTime.now();
-  // Nur Datum ohne Uhrzeit für den Vergleich
   final todayDate = DateTime(today.year, today.month, today.day);
 
-  // 2. Prüfen, ob für HEUTE schon ein Eintrag existiert
+  // 2. Prüfen ob Eintrag für heute existiert
   final existingEntry = await (db.select(db.portfolioHistory)
     ..where((t) => t.date.equals(todayDate))
   ).getSingleOrNull();
 
   if (existingEntry != null) {
-    // Update (falls sich heute der Wert geändert hat durch Hinzufügen)
+    // Update: Wenn wir uns heute schon eingeloggt haben, aktualisieren wir den Wert auf "jetzt"
     await (db.update(db.portfolioHistory)..where((t) => t.id.equals(existingEntry.id)))
-        .write(PortfolioHistoryCompanion(totalValue: Value(currentTotal)));
+      .write(PortfolioHistoryCompanion(totalValue: Value(currentTotal)));
   } else {
-    // Insert (Neuer Tag)
+    // Insert: Neuer Tag, neuer Eintrag
     await db.into(db.portfolioHistory).insert(
       PortfolioHistoryCompanion.insert(
         date: todayDate,

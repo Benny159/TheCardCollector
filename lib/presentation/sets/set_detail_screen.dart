@@ -405,7 +405,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                   child: Opacity(opacity: isOwned ? 1.0 : 0.5, child: child),
                 );
               },
-              child: CachedNetworkImage(imageUrl: card.smallImageUrl, fit: BoxFit.cover, placeholder: (context, url) => Container(color: Colors.grey[200]), errorWidget: (context, url, error) => const Icon(Icons.broken_image)),
+              child: CachedNetworkImage(imageUrl: card.smallImageUrl, width: 160, placeholder: (context, url) => Container(color: Colors.grey[200]), errorWidget: (context, url, error) => const Icon(Icons.broken_image)),
             ),
             Positioned(
               bottom: 0, left: 0, right: 0,

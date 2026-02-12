@@ -247,9 +247,6 @@ Future<void> _saveToInventory() async {
       
       if (mounted) {
         Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Hinzugefügt!"), backgroundColor: Colors.green),
-        );
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e")));

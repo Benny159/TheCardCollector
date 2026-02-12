@@ -301,7 +301,7 @@ class _InventoryCardTile extends ConsumerWidget {
                 // Das Basis-Bild
                 Widget imageWidget = CachedNetworkImage(
                   imageUrl: item.card.smallImageUrl,
-                  fit: BoxFit.cover,
+                  width: 160,
                   placeholder: (context, url) => Container(color: Colors.grey[200]),
                   errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
                 );
