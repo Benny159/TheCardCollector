@@ -1,6 +1,7 @@
 class ApiSet {
   final String id;
   final String name;
+  final String? nameDe;
   final String series;
   final int printedTotal;
   final int total;
@@ -12,6 +13,7 @@ class ApiSet {
   ApiSet({
     required this.id,
     required this.name,
+    required this.nameDe,
     required this.series,
     required this.printedTotal,
     required this.total,
@@ -25,6 +27,7 @@ class ApiSet {
     return ApiSet(
       id: json['id'] ?? '',
       name: json['name'] ?? 'Unbekannt',
+      nameDe: json['nameDe']  ?? '',
       series: json['series'] ?? '',
       printedTotal: json['printedTotal'] ?? 0,
       total: json['total'] ?? 0,

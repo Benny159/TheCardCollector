@@ -8,6 +8,7 @@ import '../../domain/models/api_card.dart';
 import '../../domain/models/api_set.dart';
 import '../sync/set_importer.dart';
 import '../database/database_provider.dart';
+import '../../data/api/tcgdex_api_client.dart';
 import 'tcg_api_client.dart';
 import 'package:intl/intl.dart';
 
@@ -26,6 +27,7 @@ final allSetsProvider = FutureProvider<List<ApiSet>>((ref) async {
     return localSets.map((s) => ApiSet(
       id: s.id,
       name: s.name,
+      nameDe: s.nameDe,
       series: s.series,
       printedTotal: s.printedTotal,
       total: s.total,
@@ -37,7 +39,8 @@ final allSetsProvider = FutureProvider<List<ApiSet>>((ref) async {
   }
 
   final api = ref.read(apiClientProvider);
-  final importer = SetImporter(api, db);
+  final dexApi = ref.read(tcgDexApiClientProvider);
+  final importer = SetImporter(api, dexApi, db);
   final apiSets = await api.fetchAllSets();
   for (final set in apiSets) {
     await importer.importSetInfo(set);
@@ -59,7 +62,7 @@ final searchResultsProvider = FutureProvider<List<ApiCard>>((ref) async {
   ]);
   
   if (mode == SearchMode.name) {
-    query.where(db.cards.name.like('%$queryText%'));
+    query.where(db.cards.name.like('%$queryText%') | db.cards.nameDe.like('%$queryText%'));
   } else {
     query.where(db.cards.artist.like('%$queryText%'));
   }
@@ -188,6 +191,7 @@ ApiCard _mapToApiCard(
   return ApiCard(
     id: dbCard.id,
     name: dbCard.name,
+    nameDe: dbCard.nameDe,
     supertype: dbCard.supertype ?? '',
     subtypes: parseList(dbCard.subtypes),
     types: parseList(dbCard.types),
@@ -197,6 +201,7 @@ ApiCard _mapToApiCard(
     artist: dbCard.artist ?? '',
     rarity: dbCard.rarity ?? 'Unbekannt',
     flavorText: dbCard.flavorText,
+    flavorTextDe: dbCard.flavorTextDe,
     smallImageUrl: dbCard.imageUrlSmall,
     largeImageUrl: dbCard.imageUrlLarge,
     isOwned: isOwned,
@@ -312,6 +317,7 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
       final apiSet = ApiSet(
         id: dbSet.id,
         name: dbSet.name,
+        nameDe: dbSet.nameDe,
         series: dbSet.series,
         printedTotal: dbSet.printedTotal,
         total: dbSet.total,

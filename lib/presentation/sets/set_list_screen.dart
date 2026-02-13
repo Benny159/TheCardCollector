@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Importiere den search_provider, wo jetzt setStatsProvider definiert ist
 import '../../data/api/search_provider.dart'; 
 import '../../data/api/tcg_api_client.dart';
+import '../../data/api/tcgdex_api_client.dart';
 import '../../data/database/database_provider.dart';
 import '../../data/sync/set_importer.dart';
 import '../../domain/models/api_set.dart';
@@ -138,7 +139,8 @@ class SetListScreen extends ConsumerWidget {
 
     final db = ref.read(databaseProvider);
     final api = ref.read(apiClientProvider);
-    final importer = SetImporter(api, db);
+    final dexApi = ref.read(tcgDexApiClientProvider);
+    final importer = SetImporter(api, dexApi, db);
 
     if (!context.mounted) return;
     
@@ -317,7 +319,8 @@ class _SetTile extends ConsumerWidget {
   void _reloadSet(BuildContext context, WidgetRef ref, ApiSet set) async {
     final db = ref.read(databaseProvider);
     final api = ref.read(apiClientProvider);
-    final importer = SetImporter(api, db);
+    final dexApi = ref.read(tcgDexApiClientProvider);
+    final importer = SetImporter(api, dexApi, db);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Aktualisiere ${set.name}...')),

@@ -58,6 +58,11 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
   late final GeneratedColumn<String> symbolUrl = GeneratedColumn<String>(
       'symbol_url', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameDeMeta = const VerificationMeta('nameDe');
+  @override
+  late final GeneratedColumn<String> nameDe = GeneratedColumn<String>(
+      'name_de', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -68,7 +73,8 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
         releaseDate,
         updatedAt,
         logoUrl,
-        symbolUrl
+        symbolUrl,
+        nameDe
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -137,6 +143,10 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
     } else if (isInserting) {
       context.missing(_symbolUrlMeta);
     }
+    if (data.containsKey('name_de')) {
+      context.handle(_nameDeMeta,
+          nameDe.isAcceptableOrUnknown(data['name_de']!, _nameDeMeta));
+    }
     return context;
   }
 
@@ -164,6 +174,8 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
           .read(DriftSqlType.string, data['${effectivePrefix}logo_url'])!,
       symbolUrl: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}symbol_url'])!,
+      nameDe: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name_de']),
     );
   }
 
@@ -183,6 +195,7 @@ class CardSet extends DataClass implements Insertable<CardSet> {
   final String updatedAt;
   final String logoUrl;
   final String symbolUrl;
+  final String? nameDe;
   const CardSet(
       {required this.id,
       required this.name,
@@ -192,7 +205,8 @@ class CardSet extends DataClass implements Insertable<CardSet> {
       required this.releaseDate,
       required this.updatedAt,
       required this.logoUrl,
-      required this.symbolUrl});
+      required this.symbolUrl,
+      this.nameDe});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -205,6 +219,9 @@ class CardSet extends DataClass implements Insertable<CardSet> {
     map['updated_at'] = Variable<String>(updatedAt);
     map['logo_url'] = Variable<String>(logoUrl);
     map['symbol_url'] = Variable<String>(symbolUrl);
+    if (!nullToAbsent || nameDe != null) {
+      map['name_de'] = Variable<String>(nameDe);
+    }
     return map;
   }
 
@@ -219,6 +236,8 @@ class CardSet extends DataClass implements Insertable<CardSet> {
       updatedAt: Value(updatedAt),
       logoUrl: Value(logoUrl),
       symbolUrl: Value(symbolUrl),
+      nameDe:
+          nameDe == null && nullToAbsent ? const Value.absent() : Value(nameDe),
     );
   }
 
@@ -235,6 +254,7 @@ class CardSet extends DataClass implements Insertable<CardSet> {
       updatedAt: serializer.fromJson<String>(json['updatedAt']),
       logoUrl: serializer.fromJson<String>(json['logoUrl']),
       symbolUrl: serializer.fromJson<String>(json['symbolUrl']),
+      nameDe: serializer.fromJson<String?>(json['nameDe']),
     );
   }
   @override
@@ -250,6 +270,7 @@ class CardSet extends DataClass implements Insertable<CardSet> {
       'updatedAt': serializer.toJson<String>(updatedAt),
       'logoUrl': serializer.toJson<String>(logoUrl),
       'symbolUrl': serializer.toJson<String>(symbolUrl),
+      'nameDe': serializer.toJson<String?>(nameDe),
     };
   }
 
@@ -262,7 +283,8 @@ class CardSet extends DataClass implements Insertable<CardSet> {
           String? releaseDate,
           String? updatedAt,
           String? logoUrl,
-          String? symbolUrl}) =>
+          String? symbolUrl,
+          Value<String?> nameDe = const Value.absent()}) =>
       CardSet(
         id: id ?? this.id,
         name: name ?? this.name,
@@ -273,6 +295,7 @@ class CardSet extends DataClass implements Insertable<CardSet> {
         updatedAt: updatedAt ?? this.updatedAt,
         logoUrl: logoUrl ?? this.logoUrl,
         symbolUrl: symbolUrl ?? this.symbolUrl,
+        nameDe: nameDe.present ? nameDe.value : this.nameDe,
       );
   CardSet copyWithCompanion(CardSetsCompanion data) {
     return CardSet(
@@ -288,6 +311,7 @@ class CardSet extends DataClass implements Insertable<CardSet> {
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       logoUrl: data.logoUrl.present ? data.logoUrl.value : this.logoUrl,
       symbolUrl: data.symbolUrl.present ? data.symbolUrl.value : this.symbolUrl,
+      nameDe: data.nameDe.present ? data.nameDe.value : this.nameDe,
     );
   }
 
@@ -302,14 +326,15 @@ class CardSet extends DataClass implements Insertable<CardSet> {
           ..write('releaseDate: $releaseDate, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('logoUrl: $logoUrl, ')
-          ..write('symbolUrl: $symbolUrl')
+          ..write('symbolUrl: $symbolUrl, ')
+          ..write('nameDe: $nameDe')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, name, series, printedTotal, total,
-      releaseDate, updatedAt, logoUrl, symbolUrl);
+      releaseDate, updatedAt, logoUrl, symbolUrl, nameDe);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -322,7 +347,8 @@ class CardSet extends DataClass implements Insertable<CardSet> {
           other.releaseDate == this.releaseDate &&
           other.updatedAt == this.updatedAt &&
           other.logoUrl == this.logoUrl &&
-          other.symbolUrl == this.symbolUrl);
+          other.symbolUrl == this.symbolUrl &&
+          other.nameDe == this.nameDe);
 }
 
 class CardSetsCompanion extends UpdateCompanion<CardSet> {
@@ -335,6 +361,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
   final Value<String> updatedAt;
   final Value<String> logoUrl;
   final Value<String> symbolUrl;
+  final Value<String?> nameDe;
   final Value<int> rowid;
   const CardSetsCompanion({
     this.id = const Value.absent(),
@@ -346,6 +373,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
     this.updatedAt = const Value.absent(),
     this.logoUrl = const Value.absent(),
     this.symbolUrl = const Value.absent(),
+    this.nameDe = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CardSetsCompanion.insert({
@@ -358,6 +386,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
     required String updatedAt,
     required String logoUrl,
     required String symbolUrl,
+    this.nameDe = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         name = Value(name),
@@ -378,6 +407,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
     Expression<String>? updatedAt,
     Expression<String>? logoUrl,
     Expression<String>? symbolUrl,
+    Expression<String>? nameDe,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -390,6 +420,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
       if (updatedAt != null) 'updated_at': updatedAt,
       if (logoUrl != null) 'logo_url': logoUrl,
       if (symbolUrl != null) 'symbol_url': symbolUrl,
+      if (nameDe != null) 'name_de': nameDe,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -404,6 +435,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
       Value<String>? updatedAt,
       Value<String>? logoUrl,
       Value<String>? symbolUrl,
+      Value<String?>? nameDe,
       Value<int>? rowid}) {
     return CardSetsCompanion(
       id: id ?? this.id,
@@ -415,6 +447,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
       updatedAt: updatedAt ?? this.updatedAt,
       logoUrl: logoUrl ?? this.logoUrl,
       symbolUrl: symbolUrl ?? this.symbolUrl,
+      nameDe: nameDe ?? this.nameDe,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -449,6 +482,9 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
     if (symbolUrl.present) {
       map['symbol_url'] = Variable<String>(symbolUrl.value);
     }
+    if (nameDe.present) {
+      map['name_de'] = Variable<String>(nameDe.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -467,6 +503,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
           ..write('updatedAt: $updatedAt, ')
           ..write('logoUrl: $logoUrl, ')
           ..write('symbolUrl: $symbolUrl, ')
+          ..write('nameDe: $nameDe, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -546,6 +583,17 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
   late final GeneratedColumn<String> flavorText = GeneratedColumn<String>(
       'flavor_text', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _nameDeMeta = const VerificationMeta('nameDe');
+  @override
+  late final GeneratedColumn<String> nameDe = GeneratedColumn<String>(
+      'name_de', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _flavorTextDeMeta =
+      const VerificationMeta('flavorTextDe');
+  @override
+  late final GeneratedColumn<String> flavorTextDe = GeneratedColumn<String>(
+      'flavor_text_de', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -559,7 +607,9 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
         types,
         artist,
         rarity,
-        flavorText
+        flavorText,
+        nameDe,
+        flavorTextDe
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -636,6 +686,16 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
           flavorText.isAcceptableOrUnknown(
               data['flavor_text']!, _flavorTextMeta));
     }
+    if (data.containsKey('name_de')) {
+      context.handle(_nameDeMeta,
+          nameDe.isAcceptableOrUnknown(data['name_de']!, _nameDeMeta));
+    }
+    if (data.containsKey('flavor_text_de')) {
+      context.handle(
+          _flavorTextDeMeta,
+          flavorTextDe.isAcceptableOrUnknown(
+              data['flavor_text_de']!, _flavorTextDeMeta));
+    }
     return context;
   }
 
@@ -669,6 +729,10 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
           .read(DriftSqlType.string, data['${effectivePrefix}rarity']),
       flavorText: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}flavor_text']),
+      nameDe: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name_de']),
+      flavorTextDe: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}flavor_text_de']),
     );
   }
 
@@ -691,6 +755,8 @@ class Card extends DataClass implements Insertable<Card> {
   final String? artist;
   final String? rarity;
   final String? flavorText;
+  final String? nameDe;
+  final String? flavorTextDe;
   const Card(
       {required this.id,
       required this.setId,
@@ -703,7 +769,9 @@ class Card extends DataClass implements Insertable<Card> {
       this.types,
       this.artist,
       this.rarity,
-      this.flavorText});
+      this.flavorText,
+      this.nameDe,
+      this.flavorTextDe});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -731,6 +799,12 @@ class Card extends DataClass implements Insertable<Card> {
     if (!nullToAbsent || flavorText != null) {
       map['flavor_text'] = Variable<String>(flavorText);
     }
+    if (!nullToAbsent || nameDe != null) {
+      map['name_de'] = Variable<String>(nameDe);
+    }
+    if (!nullToAbsent || flavorTextDe != null) {
+      map['flavor_text_de'] = Variable<String>(flavorTextDe);
+    }
     return map;
   }
 
@@ -757,6 +831,11 @@ class Card extends DataClass implements Insertable<Card> {
       flavorText: flavorText == null && nullToAbsent
           ? const Value.absent()
           : Value(flavorText),
+      nameDe:
+          nameDe == null && nullToAbsent ? const Value.absent() : Value(nameDe),
+      flavorTextDe: flavorTextDe == null && nullToAbsent
+          ? const Value.absent()
+          : Value(flavorTextDe),
     );
   }
 
@@ -776,6 +855,8 @@ class Card extends DataClass implements Insertable<Card> {
       artist: serializer.fromJson<String?>(json['artist']),
       rarity: serializer.fromJson<String?>(json['rarity']),
       flavorText: serializer.fromJson<String?>(json['flavorText']),
+      nameDe: serializer.fromJson<String?>(json['nameDe']),
+      flavorTextDe: serializer.fromJson<String?>(json['flavorTextDe']),
     );
   }
   @override
@@ -794,6 +875,8 @@ class Card extends DataClass implements Insertable<Card> {
       'artist': serializer.toJson<String?>(artist),
       'rarity': serializer.toJson<String?>(rarity),
       'flavorText': serializer.toJson<String?>(flavorText),
+      'nameDe': serializer.toJson<String?>(nameDe),
+      'flavorTextDe': serializer.toJson<String?>(flavorTextDe),
     };
   }
 
@@ -809,7 +892,9 @@ class Card extends DataClass implements Insertable<Card> {
           Value<String?> types = const Value.absent(),
           Value<String?> artist = const Value.absent(),
           Value<String?> rarity = const Value.absent(),
-          Value<String?> flavorText = const Value.absent()}) =>
+          Value<String?> flavorText = const Value.absent(),
+          Value<String?> nameDe = const Value.absent(),
+          Value<String?> flavorTextDe = const Value.absent()}) =>
       Card(
         id: id ?? this.id,
         setId: setId ?? this.setId,
@@ -823,6 +908,9 @@ class Card extends DataClass implements Insertable<Card> {
         artist: artist.present ? artist.value : this.artist,
         rarity: rarity.present ? rarity.value : this.rarity,
         flavorText: flavorText.present ? flavorText.value : this.flavorText,
+        nameDe: nameDe.present ? nameDe.value : this.nameDe,
+        flavorTextDe:
+            flavorTextDe.present ? flavorTextDe.value : this.flavorTextDe,
       );
   Card copyWithCompanion(CardsCompanion data) {
     return Card(
@@ -843,6 +931,10 @@ class Card extends DataClass implements Insertable<Card> {
       rarity: data.rarity.present ? data.rarity.value : this.rarity,
       flavorText:
           data.flavorText.present ? data.flavorText.value : this.flavorText,
+      nameDe: data.nameDe.present ? data.nameDe.value : this.nameDe,
+      flavorTextDe: data.flavorTextDe.present
+          ? data.flavorTextDe.value
+          : this.flavorTextDe,
     );
   }
 
@@ -860,14 +952,29 @@ class Card extends DataClass implements Insertable<Card> {
           ..write('types: $types, ')
           ..write('artist: $artist, ')
           ..write('rarity: $rarity, ')
-          ..write('flavorText: $flavorText')
+          ..write('flavorText: $flavorText, ')
+          ..write('nameDe: $nameDe, ')
+          ..write('flavorTextDe: $flavorTextDe')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, setId, name, number, imageUrlSmall,
-      imageUrlLarge, supertype, subtypes, types, artist, rarity, flavorText);
+  int get hashCode => Object.hash(
+      id,
+      setId,
+      name,
+      number,
+      imageUrlSmall,
+      imageUrlLarge,
+      supertype,
+      subtypes,
+      types,
+      artist,
+      rarity,
+      flavorText,
+      nameDe,
+      flavorTextDe);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -883,7 +990,9 @@ class Card extends DataClass implements Insertable<Card> {
           other.types == this.types &&
           other.artist == this.artist &&
           other.rarity == this.rarity &&
-          other.flavorText == this.flavorText);
+          other.flavorText == this.flavorText &&
+          other.nameDe == this.nameDe &&
+          other.flavorTextDe == this.flavorTextDe);
 }
 
 class CardsCompanion extends UpdateCompanion<Card> {
@@ -899,6 +1008,8 @@ class CardsCompanion extends UpdateCompanion<Card> {
   final Value<String?> artist;
   final Value<String?> rarity;
   final Value<String?> flavorText;
+  final Value<String?> nameDe;
+  final Value<String?> flavorTextDe;
   final Value<int> rowid;
   const CardsCompanion({
     this.id = const Value.absent(),
@@ -913,6 +1024,8 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.artist = const Value.absent(),
     this.rarity = const Value.absent(),
     this.flavorText = const Value.absent(),
+    this.nameDe = const Value.absent(),
+    this.flavorTextDe = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CardsCompanion.insert({
@@ -928,6 +1041,8 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.artist = const Value.absent(),
     this.rarity = const Value.absent(),
     this.flavorText = const Value.absent(),
+    this.nameDe = const Value.absent(),
+    this.flavorTextDe = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         setId = Value(setId),
@@ -948,6 +1063,8 @@ class CardsCompanion extends UpdateCompanion<Card> {
     Expression<String>? artist,
     Expression<String>? rarity,
     Expression<String>? flavorText,
+    Expression<String>? nameDe,
+    Expression<String>? flavorTextDe,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -963,6 +1080,8 @@ class CardsCompanion extends UpdateCompanion<Card> {
       if (artist != null) 'artist': artist,
       if (rarity != null) 'rarity': rarity,
       if (flavorText != null) 'flavor_text': flavorText,
+      if (nameDe != null) 'name_de': nameDe,
+      if (flavorTextDe != null) 'flavor_text_de': flavorTextDe,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -980,6 +1099,8 @@ class CardsCompanion extends UpdateCompanion<Card> {
       Value<String?>? artist,
       Value<String?>? rarity,
       Value<String?>? flavorText,
+      Value<String?>? nameDe,
+      Value<String?>? flavorTextDe,
       Value<int>? rowid}) {
     return CardsCompanion(
       id: id ?? this.id,
@@ -994,6 +1115,8 @@ class CardsCompanion extends UpdateCompanion<Card> {
       artist: artist ?? this.artist,
       rarity: rarity ?? this.rarity,
       flavorText: flavorText ?? this.flavorText,
+      nameDe: nameDe ?? this.nameDe,
+      flavorTextDe: flavorTextDe ?? this.flavorTextDe,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1037,6 +1160,12 @@ class CardsCompanion extends UpdateCompanion<Card> {
     if (flavorText.present) {
       map['flavor_text'] = Variable<String>(flavorText.value);
     }
+    if (nameDe.present) {
+      map['name_de'] = Variable<String>(nameDe.value);
+    }
+    if (flavorTextDe.present) {
+      map['flavor_text_de'] = Variable<String>(flavorTextDe.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1058,6 +1187,8 @@ class CardsCompanion extends UpdateCompanion<Card> {
           ..write('artist: $artist, ')
           ..write('rarity: $rarity, ')
           ..write('flavorText: $flavorText, ')
+          ..write('nameDe: $nameDe, ')
+          ..write('flavorTextDe: $flavorTextDe, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2675,6 +2806,7 @@ typedef $$CardSetsTableCreateCompanionBuilder = CardSetsCompanion Function({
   required String updatedAt,
   required String logoUrl,
   required String symbolUrl,
+  Value<String?> nameDe,
   Value<int> rowid,
 });
 typedef $$CardSetsTableUpdateCompanionBuilder = CardSetsCompanion Function({
@@ -2687,6 +2819,7 @@ typedef $$CardSetsTableUpdateCompanionBuilder = CardSetsCompanion Function({
   Value<String> updatedAt,
   Value<String> logoUrl,
   Value<String> symbolUrl,
+  Value<String?> nameDe,
   Value<int> rowid,
 });
 
@@ -2716,6 +2849,7 @@ class $$CardSetsTableTableManager extends RootTableManager<
             Value<String> updatedAt = const Value.absent(),
             Value<String> logoUrl = const Value.absent(),
             Value<String> symbolUrl = const Value.absent(),
+            Value<String?> nameDe = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               CardSetsCompanion(
@@ -2728,6 +2862,7 @@ class $$CardSetsTableTableManager extends RootTableManager<
             updatedAt: updatedAt,
             logoUrl: logoUrl,
             symbolUrl: symbolUrl,
+            nameDe: nameDe,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -2740,6 +2875,7 @@ class $$CardSetsTableTableManager extends RootTableManager<
             required String updatedAt,
             required String logoUrl,
             required String symbolUrl,
+            Value<String?> nameDe = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               CardSetsCompanion.insert(
@@ -2752,6 +2888,7 @@ class $$CardSetsTableTableManager extends RootTableManager<
             updatedAt: updatedAt,
             logoUrl: logoUrl,
             symbolUrl: symbolUrl,
+            nameDe: nameDe,
             rowid: rowid,
           ),
         ));
@@ -2802,6 +2939,11 @@ class $$CardSetsTableFilterComposer
 
   ColumnFilters<String> get symbolUrl => $state.composableBuilder(
       column: $state.table.symbolUrl,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get nameDe => $state.composableBuilder(
+      column: $state.table.nameDe,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -2866,6 +3008,11 @@ class $$CardSetsTableOrderingComposer
       column: $state.table.symbolUrl,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get nameDe => $state.composableBuilder(
+      column: $state.table.nameDe,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
 }
 
 typedef $$CardsTableCreateCompanionBuilder = CardsCompanion Function({
@@ -2881,6 +3028,8 @@ typedef $$CardsTableCreateCompanionBuilder = CardsCompanion Function({
   Value<String?> artist,
   Value<String?> rarity,
   Value<String?> flavorText,
+  Value<String?> nameDe,
+  Value<String?> flavorTextDe,
   Value<int> rowid,
 });
 typedef $$CardsTableUpdateCompanionBuilder = CardsCompanion Function({
@@ -2896,6 +3045,8 @@ typedef $$CardsTableUpdateCompanionBuilder = CardsCompanion Function({
   Value<String?> artist,
   Value<String?> rarity,
   Value<String?> flavorText,
+  Value<String?> nameDe,
+  Value<String?> flavorTextDe,
   Value<int> rowid,
 });
 
@@ -2928,6 +3079,8 @@ class $$CardsTableTableManager extends RootTableManager<
             Value<String?> artist = const Value.absent(),
             Value<String?> rarity = const Value.absent(),
             Value<String?> flavorText = const Value.absent(),
+            Value<String?> nameDe = const Value.absent(),
+            Value<String?> flavorTextDe = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               CardsCompanion(
@@ -2943,6 +3096,8 @@ class $$CardsTableTableManager extends RootTableManager<
             artist: artist,
             rarity: rarity,
             flavorText: flavorText,
+            nameDe: nameDe,
+            flavorTextDe: flavorTextDe,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -2958,6 +3113,8 @@ class $$CardsTableTableManager extends RootTableManager<
             Value<String?> artist = const Value.absent(),
             Value<String?> rarity = const Value.absent(),
             Value<String?> flavorText = const Value.absent(),
+            Value<String?> nameDe = const Value.absent(),
+            Value<String?> flavorTextDe = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               CardsCompanion.insert(
@@ -2973,6 +3130,8 @@ class $$CardsTableTableManager extends RootTableManager<
             artist: artist,
             rarity: rarity,
             flavorText: flavorText,
+            nameDe: nameDe,
+            flavorTextDe: flavorTextDe,
             rowid: rowid,
           ),
         ));
@@ -3033,6 +3192,16 @@ class $$CardsTableFilterComposer
 
   ColumnFilters<String> get flavorText => $state.composableBuilder(
       column: $state.table.flavorText,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get nameDe => $state.composableBuilder(
+      column: $state.table.nameDe,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get flavorTextDe => $state.composableBuilder(
+      column: $state.table.flavorTextDe,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -3145,6 +3314,16 @@ class $$CardsTableOrderingComposer
 
   ColumnOrderings<String> get flavorText => $state.composableBuilder(
       column: $state.table.flavorText,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get nameDe => $state.composableBuilder(
+      column: $state.table.nameDe,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get flavorTextDe => $state.composableBuilder(
+      column: $state.table.flavorTextDe,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 

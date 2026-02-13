@@ -6,6 +6,7 @@ import 'package:drift/drift.dart' as drift; // Für DB Updates
 
 import '../../data/api/search_provider.dart';
 import '../../data/api/tcg_api_client.dart';
+import '../../data/api/tcgdex_api_client.dart';
 import '../../data/database/app_database.dart'; // WICHTIG: Für die UserCard Klasse
 import '../../data/database/database_provider.dart';
 import '../../data/sync/set_importer.dart';
@@ -288,12 +289,12 @@ class CardDetailScreen extends ConsumerWidget {
   Future<void> _updateCardData(BuildContext context, WidgetRef ref) async {
     final api = ref.read(apiClientProvider);
     final db = ref.read(databaseProvider);
-    final importer = SetImporter(api, db);
+    final dexApi = ref.read(tcgDexApiClientProvider);
+    final importer = SetImporter(api, dexApi, db);
 
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aktualisiere Karte...')));
 
     try {
-      await importer.updateSingleCard(card.id);
       ref.invalidate(searchResultsProvider);
       ref.invalidate(cardsForSetProvider(card.setId));
 

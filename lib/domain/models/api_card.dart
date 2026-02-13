@@ -1,6 +1,7 @@
 class ApiCard {
   final String id;
   final String name;
+  final String? nameDe;
   final String supertype;
   final List<String> subtypes; // Jetzt als Liste!
   final List<String> types;    // Jetzt als Liste!
@@ -9,6 +10,7 @@ class ApiCard {
   final String artist;
   final String rarity;
   final String? flavorText;
+  final String? flavorTextDe;
   
   
   // Bilder
@@ -25,6 +27,7 @@ class ApiCard {
   ApiCard({
     required this.id,
     required this.name,
+    required this.nameDe,
     required this.supertype,
     required this.subtypes,
     required this.types,
@@ -33,6 +36,7 @@ class ApiCard {
     required this.artist,
     required this.rarity,
     this.flavorText,
+    required this.flavorTextDe,
     required this.smallImageUrl,
     required this.largeImageUrl,
     this.cardmarket,
@@ -53,6 +57,7 @@ class ApiCard {
     return ApiCard(
       id: json['id'] ?? '',
       name: json['name'] ?? 'Unbekannt',
+      nameDe: json['nameDe'],
       supertype: json['supertype'] ?? '',
       subtypes: parseList(json['subtypes']),
       types: parseList(json['types']),
@@ -63,6 +68,7 @@ class ApiCard {
       artist: json['artist'] ?? '',
       rarity: json['rarity'] ?? '',
       flavorText: json['flavorText'],
+      flavorTextDe: json['flavorTextDe'],
       smallImageUrl: json['images']?['small'] ?? '',
       largeImageUrl: json['images']?['large'] ?? '',
       

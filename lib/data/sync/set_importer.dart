@@ -2,13 +2,15 @@ import 'package:drift/drift.dart';
 import '../../domain/models/api_card.dart';
 import '../../domain/models/api_set.dart';
 import '../api/tcg_api_client.dart';
+import '../api/tcgdex_api_client.dart';
 import '../database/app_database.dart';
 
 class SetImporter {
   final TcgApiClient apiClient;
+  final TcgDexApiClient dexClient;
   final AppDatabase database;
 
-  SetImporter(this.apiClient, this.database);
+  SetImporter(this.apiClient, this.dexClient, this.database);
 
   /// 1. Importiert die Basis-Infos des Sets (Name, Logo, ReleaseDate)
   Future<void> importSetInfo(ApiSet set) async {
@@ -22,7 +24,7 @@ class SetImporter {
             total: Value(set.total),
             releaseDate: Value(set.releaseDate),
             // Wir speichern einfach das aktuelle Datum als "zuletzt aktualisiert"
-            updatedAt: Value(DateTime.now().toString()),
+            updatedAt: Value(DateTime.now().toIso8601String()),
             logoUrl: Value(set.logoUrl),
             symbolUrl: Value(set.symbolUrl),
           ),
@@ -30,98 +32,149 @@ class SetImporter {
         );
   }
 
-  /// 2. Startet den Download aller Karten für dieses Set
-  Future<void> importCardsForSet(String setId) async {
-    print('Starte Karten-Import für Set $setId...');
+  /// 2. Importiert ein Set mit gewünschter Sprache
+  /// [language] ist der Sprachcode für TCGdex (z.B. 'de' oder 'en')
+  Future<void> importSet(ApiSet set, {String language = 'en'}) async {
+    await importSetInfo(set);
     
-    // Wir nutzen unsere "unendliche" API-Methode mit Callback
+    print('Starte Karten-Import für Set ${set.id} (Zusatzsprache: $language)...');
+    
+    // Wir holen ALLE Karten von der Haupt-API (Preise & Bilder sind hier besser)
     await apiClient.fetchAllCardsForSet(
-      setId,
+      set.id,
       onBatchLoaded: (batchCards) async {
-        // Sobald 10 Karten da sind, speichern wir sie sofort
-        await _saveBatch(batchCards);
+        // Diesen Batch verarbeiten (und ggf. mit TCGdex anreichern)
+        await _processAndSaveBatch(set.id, batchCards, language);
       },
+    );
+    
+    // Update Zeitstempel des Sets am Ende
+    await (database.update(database.cardSets)..where((t) => t.id.equals(set.id))).write(
+      CardSetsCompanion(updatedAt: Value(DateTime.now().toIso8601String())),
     );
   }
 
-  /// 3. Speichert einen Stapel Karten und prüft die Preise
-  Future<void> _saveBatch(List<ApiCard> cards) async {
+  /// 3. Verarbeitet einen Stapel Karten (Anreicherung + Speichern)
+  Future<void> _processAndSaveBatch(String setId, List<ApiCard> cards, String lang) async {
+    for (final card in cards) {
+      Map<String, dynamic>? dexData;
+      
+      // BEDINGUNG: Wann fragen wir die zweite API?
+      // 1. Wenn Sprache nicht Englisch ist (wir wollen deutsche Daten laden)
+      // 2. ODER wenn der Künstler fehlt (Datenlücke schließen)
+      bool needsEnrichment = lang != 'en' || (card.artist.isEmpty);
+
+      if (needsEnrichment) {
+        // TCGdex abfragen (SetID + Nummer)
+        dexData = await dexClient.fetchCardDetails(setId, card.number, lang: lang);
+      }
+
+      await _saveMergedCard(card, dexData, lang);
+    }
+  }
+
+  /// 4. Speichert eine einzelne Karte (Zusammengeführt aus beiden Quellen)
+  Future<void> _saveMergedCard(ApiCard apiCard, Map<String, dynamic>? dexData, String requestedLang) async {
+    
+    // Basis-Werte (Englisch) von der Haupt-API
+    String nameEn = apiCard.name;
+    String artist = apiCard.artist;
+    String? flavorEn = apiCard.flavorText;
+
+    // Zusatz-Werte (Deutsch) - Standardmäßig null/leer
+    String? nameDe;
+    String? flavorDe;
+
+    if (dexData != null) {
+      // A) Lücken schließen (Künstler) -> Das füllen wir immer, egal welche Sprache
+      if (artist.isEmpty && dexData['illustrator'] != null) {
+        artist = dexData['illustrator'];
+        // print('Künstler gefüllt: $artist');
+      }
+
+      // B) Deutsche Texte extrahieren (nur wenn 'de' angefordert war)
+      if (requestedLang == 'de') {
+        if (dexData['name'] != null) {
+          nameDe = dexData['name']; 
+        }
+        if (dexData['description'] != null) {
+          flavorDe = dexData['description'];
+        }
+      }
+    }
+
     await database.transaction(() async {
-      for (final card in cards) {
-        if (card.artist.isEmpty) {
-           print('ACHTUNG: Kein Künstler für Karte ${card.name} (ID: ${card.id}) gefunden!');
-        } else {
-           // Optional: Zeige, was gefunden wurde
-           // print('Info: ${card.name} hat Künstler: ${card.artist}');
-        }
-        // A) KARTE SPEICHERN (Nur Stammdaten)
-        await database.into(database.cards).insert(
-              CardsCompanion(
-                id: Value(card.id),
-                setId: Value(card.setId),
-                name: Value(card.name),
-                number: Value(card.number),
-                imageUrlSmall: Value(card.smallImageUrl),
-                imageUrlLarge: Value(card.largeImageUrl),
-                artist: Value(card.artist),
-                rarity: Value(card.rarity),
-                flavorText: Value(card.flavorText),
-                // Listen als String speichern (z.B. "Fire, Water")
-                supertype: Value(card.supertype),
-                subtypes: Value(card.subtypes.join(', ')),
-                types: Value(card.types.join(', ')),
-              ),
-              mode: InsertMode.insertOrReplace,
-            );
-
-        // B) PREIS-CHECK: CARDMARKET (Europa)
-        if (card.cardmarket != null) {
-          // Wir prüfen: Haben wir für DIESE Karte und DIESES Update-Datum schon einen Eintrag?
-          final existingEntry = await (database.select(database.cardMarketPrices)
-                ..where((tbl) => tbl.cardId.equals(card.id))
-                ..where((tbl) => tbl.updatedAt.equals(card.cardmarket!.updatedAt))
-                ..limit(1))
-              .getSingleOrNull();
-
-          // Wenn nein: Neue Zeile anlegen (Historie wächst)
-          if (existingEntry == null) {
-            await database.into(database.cardMarketPrices).insert(
-                  CardMarketPricesCompanion(
-                    cardId: Value(card.id),
-                    fetchedAt: Value(DateTime.now()), // Wann haben WIR es geladen?
-                    updatedAt: Value(card.cardmarket!.updatedAt), // Wann hat die API es aktualisiert?
-                    url: Value(card.cardmarket!.url),
-                    trendPrice: Value(card.cardmarket!.trendPrice),
-                    avg30: Value(card.cardmarket!.avg30),
-                    lowPrice: Value(card.cardmarket!.lowPrice),
-                    reverseHoloTrend: Value(card.cardmarket!.reverseHoloTrend),
-                  ),
-                );
-          }
-        }
-
-        // C) PREIS-CHECK: TCGPLAYER (USA)
-        // Wir arbeiten hier mit dem OBJEKT 'card.tcgplayer', nicht mit JSON!
-        if (card.tcgplayer != null) {
-          final tcg = card.tcgplayer!;
+      // 1) KARTE SPEICHERN (Stammdaten)
+      // Wir nutzen insertOnConflictUpdate mit Value(), damit wir existierende Felder nicht
+      // versehentlich mit null überschreiben, wenn wir z.B. später nur Preise updaten wollen.
+      
+      await database.into(database.cards).insertOnConflictUpdate(
+        CardsCompanion(
+          id: Value(apiCard.id),
+          setId: Value(apiCard.setId),
           
-          final existingEntry = await (database.select(database.tcgPlayerPrices)
-                ..where((tbl) => tbl.cardId.equals(card.id))
-                ..where((tbl) => tbl.updatedAt.equals(tcg.updatedAt ?? ''))
-                ..limit(1))
-              .getSingleOrNull();
+          // ENGLISCH (Immer da)
+          name: Value(nameEn),
+          flavorText: Value(flavorEn),
+          
+          // DEUTSCH (Nur setzen, wenn wir Daten haben)
+          nameDe: nameDe != null ? Value(nameDe) : const Value.absent(),
+          flavorTextDe: flavorDe != null ? Value(flavorDe) : const Value.absent(),
 
-          if (existingEntry == null) {
-            // HIER IST DEINE LOGIK (Normal vs Holofoil Fallback):
-            final prices = tcg.prices;
-            
-            // Wenn "normal" null ist, versuchen wir "holofoil" zu nehmen
-            final mainMarket = prices?.normal?.market ?? prices?.holofoil?.market;
-            final mainLow = prices?.normal?.low ?? prices?.holofoil?.low;
+          number: Value(apiCard.number),
+          imageUrlSmall: Value(apiCard.smallImageUrl),
+          imageUrlLarge: Value(apiCard.largeImageUrl ?? apiCard.smallImageUrl),
+          artist: Value(artist),
+          rarity: Value(apiCard.rarity),
+          supertype: Value(apiCard.supertype),
+          subtypes: Value(apiCard.subtypes.join(', ')),
+          types: Value(apiCard.types.join(', ')),
+        ),
+      );
 
-            await database.into(database.tcgPlayerPrices).insert(
+      // 2) PREISE SPEICHERN (Cardmarket - Europa)
+      if (apiCard.cardmarket != null) {
+        // Prüfen, ob wir für dieses Update-Datum schon einen Eintrag haben
+        final existingEntry = await (database.select(database.cardMarketPrices)
+              ..where((tbl) => tbl.cardId.equals(apiCard.id))
+              ..where((tbl) => tbl.updatedAt.equals(apiCard.cardmarket!.updatedAt))
+              ..limit(1))
+            .getSingleOrNull();
+        if (existingEntry == null) {
+            await database.into(database.cardMarketPrices).insert(
+              CardMarketPricesCompanion(
+                cardId: Value(apiCard.id),
+                fetchedAt: Value(DateTime.now()), // Wann haben WIR es geladen?
+                updatedAt: Value(apiCard.cardmarket!.updatedAt), // Wann hat die API es aktualisiert?
+                url: Value(apiCard.cardmarket!.url),
+                trendPrice: Value(apiCard.cardmarket!.trendPrice),
+                avg30: Value(apiCard.cardmarket!.avg30),
+                lowPrice: Value(apiCard.cardmarket!.lowPrice),
+                reverseHoloTrend: Value(apiCard.cardmarket!.reverseHoloTrend),
+              ),
+            );
+          }
+      }
+
+      // 3) PREISE SPEICHERN (TCGPlayer - USA)
+      if (apiCard.tcgplayer != null) {
+        final tcg = apiCard.tcgplayer!;
+        
+        final existingEntry = await (database.select(database.tcgPlayerPrices)
+              ..where((tbl) => tbl.cardId.equals(apiCard.id))
+              ..where((tbl) => tbl.updatedAt.equals(tcg.updatedAt ?? ''))
+              ..limit(1))
+            .getSingleOrNull();
+
+        if (existingEntry == null) {
+          final prices = tcg.prices;
+          // Fallback Logik für Hauptpreis (Normal -> Holo)
+          final mainMarket = prices?.normal?.market ?? prices?.holofoil?.market;
+          final mainLow = prices?.normal?.low ?? prices?.holofoil?.low;
+
+          await database.into(database.tcgPlayerPrices).insert(
                   TcgPlayerPricesCompanion(
-                    cardId: Value(card.id),
+                    cardId: Value(apiCard.id),
                     fetchedAt: Value(DateTime.now()),
                     updatedAt: Value(tcg.updatedAt ?? ''),
                     url: Value(tcg.url),
@@ -135,48 +188,29 @@ class SetImporter {
                     reverseHoloLow: Value(prices?.reverseHolofoil?.low),
                   ),
                 );
-          }
         }
       }
     });
   }
 
-  Future<void> importSet(ApiSet set) async {
-    await importSetInfo(set);
-    await importCardsForSet(set.id);
-  }
-
+  // --- HILFSFUNKTION FÜR DEN "FULL SYNC" BUTTON ---
   Future<void> syncAllData({Function(String status)? onProgress}) async {
-    // 1. Alle Sets holen
     onProgress?.call('Lade Set-Liste...');
     final allSets = await apiClient.fetchAllSets();
     
     int currentSet = 1;
     
-    // 2. Jedes Set durchgehen
     for (final set in allSets) {
-      onProgress?.call('Set ${currentSet}/${allSets.length}: ${set.name} wird geladen...');
+      onProgress?.call('Set $currentSet/${allSets.length}: ${set.name} wird geladen...');
       
-      // A) Set Infos speichern
-      await importSetInfo(set);
-
-      // B) Karten speichern (Die Endlos-Schleife regelt Fehler automatisch!)
-      await importCardsForSet(set.id);
+      // Standard: Englisch importieren (schneller). 
+      // Wenn du von Anfang an alles Deutsch willst, ändere 'en' zu 'de'.
+      // Bedenke: 'de' verdoppelt die API-Requests und dauert länger.
+      await importSet(set, language: 'de'); 
       
       currentSet++;
     }
     
-    onProgress?.call('Fertig! Die komplette Datenbank ist jetzt lokal.');
-  }
-
-  Future<void> updateSingleCard(String cardId) async {
-    print('Update Karte $cardId...');
-    
-    // 1. Karte frisch von der API holen
-    final card = await apiClient.fetchCard(cardId);
-    
-    // 2. Speichern (Wir nutzen einfach unsere existierende _saveBatch Methode mit einer Liste von 1)
-    // Falls _saveBatch bei dir "private" ist (mit Unterstrich), musst du es innerhalb der Klasse nutzen.
-    await _saveBatch([card]); 
+    onProgress?.call('Fertig! Datenbank aktualisiert.');
   }
 }

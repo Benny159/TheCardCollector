@@ -13,6 +13,8 @@ class CardSets extends Table {
   TextColumn get logoUrl => text()();
   TextColumn get symbolUrl => text()();
 
+  TextColumn get nameDe => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -39,6 +41,9 @@ class Cards extends Table {
   TextColumn get artist => text().nullable()();
   TextColumn get rarity => text().nullable()();
   TextColumn get flavorText => text().nullable()();
+
+  TextColumn get nameDe => text().nullable()();
+  TextColumn get flavorTextDe => text().nullable()(); 
 
   // WICHTIG: Keine Preise mehr hier! Die sind jetzt ausgelagert.
 
