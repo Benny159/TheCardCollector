@@ -33,7 +33,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.set.name),
+        title: Text(widget.set.nameDe ?? widget.set.name),
         centerTitle: true,
       ),
       body: cardsAsync.when(
@@ -42,9 +42,12 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         data: (rawCards) {
           if (rawCards.isEmpty) return const Center(child: Text("Keine Karten gefunden."));
 
-          // 1. SORTIEREN
+          // 1. SORTIEREN (nach SortNumber, was wir in der DB haben, oder Number String fallback)
           final List<ApiCard> allSortedCards = List.from(rawCards);
-          allSortedCards.sort((a, b) => _compareCardNumbers(a.number, b.number));
+          
+          // Die DB liefert sie eigentlich schon sortiert (siehe search_provider), aber sicher ist sicher:
+          // Falls sortNumber nicht verfügbar (alte Logik), nutzen wir den String-Vergleich
+          // allSortedCards.sort((a, b) => _compareCardNumbers(a.number, b.number)); 
 
           // 2. FILTERN
           List<ApiCard> visibleCards = allSortedCards;
@@ -72,19 +75,16 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
             visibleCards = visibleCards.where((c) => !c.isOwned).toList();
           }
 
-          // 3. WERTE BERECHNEN (Auf Basis aller Karten)
+          // 3. WERTE BERECHNEN (Auf Basis ALLER Karten im Set, ungefiltert)
           double totalSetVal = 0.0;
           double userOwnedVal = 0.0;
 
           for (var card in allSortedCards) {
-            // HIER IST DIE LOGIK AUCH WICHTIG FÜR DIE GESAMT-BERECHNUNG:
-            double price = card.cardmarket?.trendPrice ?? 0.0;
-            if (price == 0) {
-               // Fallback auf TCGPlayer
-               price = card.tcgplayer?.prices?.normal?.market ??
-                       card.tcgplayer?.prices?.holofoil?.market ??
-                       card.tcgplayer?.prices?.reverseHolofoil?.market ?? 0.0;
-            }
+            // Einheitliche Preislogik
+            double price = card.cardmarket?.trendPrice ?? 
+                           card.tcgplayer?.prices?.normal?.market ??
+                           card.tcgplayer?.prices?.holofoil?.market ??
+                           card.tcgplayer?.prices?.reverseHolofoil?.market ?? 0.0;
 
             totalSetVal += price;
             if (card.isOwned) userOwnedVal += price;
@@ -148,6 +148,9 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     final bool isMasterActive = !_showStandardSetOnly && _selectedRarities.isEmpty;
     final bool isStandardActive = _showStandardSetOnly;
 
+    // Logo Logik: Deutsch bevorzugen
+    final logoUrl = widget.set.logoUrlDe ?? widget.set.logoUrl;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
@@ -156,10 +159,11 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
           // 1. Logo & Progress
           Row(
             children: [
-              SizedBox(
-                height: 45, width: 80,
-                child: CachedNetworkImage(imageUrl: widget.set.logoUrl, fit: BoxFit.contain),
-              ),
+              if (logoUrl != null)
+                SizedBox(
+                  height: 45, width: 80,
+                  child: CachedNetworkImage(imageUrl: logoUrl, fit: BoxFit.contain),
+                ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -356,20 +360,19 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     );
   }
 
-  // --- PREIS-PRIORITÄT HIER ---
   Widget _buildCardItem(ApiCard card, bool isOwned) {
     // 1. Cardmarket Trend
     double? displayPrice = card.cardmarket?.trendPrice;
     
-    // 2. Fallback: TCGPlayer (Normal -> Holo -> Reverse)
+    // 2. Fallback: TCGPlayer
     if (displayPrice == null || displayPrice == 0) {
-      final tcg = card.tcgplayer?.prices;
-      if (tcg != null) {
-        displayPrice = tcg.normal?.market ?? 
-                       tcg.holofoil?.market ?? 
-                       tcg.reverseHolofoil?.market;
-      }
+      displayPrice = card.tcgplayer?.prices?.normal?.market ?? 
+                     card.tcgplayer?.prices?.holofoil?.market ?? 
+                     card.tcgplayer?.prices?.reverseHolofoil?.market;
     }
+
+    // Bild (Deutsch bevorzugt)
+    final imageUrl = card.imageUrlDe ?? card.smallImageUrl;
 
     return InkWell(
       onTap: () {
@@ -391,6 +394,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // Graufilter Animation
             TweenAnimationBuilder<double>(
               duration: const Duration(milliseconds: 300),
               tween: Tween<double>(begin: 0, end: isOwned ? 1.0 : 0.0),
@@ -405,8 +409,16 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                   child: Opacity(opacity: isOwned ? 1.0 : 0.5, child: child),
                 );
               },
-              child: CachedNetworkImage(imageUrl: card.smallImageUrl, width: 160, placeholder: (context, url) => Container(color: Colors.grey[200]), errorWidget: (context, url, error) => const Icon(Icons.broken_image)),
+              child: CachedNetworkImage(
+                imageUrl: imageUrl, 
+                width: 160, 
+                placeholder: (context, url) => Container(color: Colors.grey[200]), 
+                errorWidget: (context, url, error) => const Icon(Icons.broken_image),
+                fit: BoxFit.cover, // Wichtig für füllende Bilder
+              ),
             ),
+            
+            // Info Leiste unten
             Positioned(
               bottom: 0, left: 0, right: 0,
               child: Opacity(
@@ -418,7 +430,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(card.number, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                      // ANZEIGE DES BERECHNETEN PREISES
                       if (displayPrice != null && displayPrice > 0)
                         Text('${displayPrice.toStringAsFixed(2)}€', style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                     ],
@@ -434,6 +445,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     );
   }
 
+  // Fallback Sortierung (eigentlich macht das die DB jetzt)
   int _compareCardNumbers(String a, String b) {
     final intA = int.tryParse(a);
     final intB = int.tryParse(b);

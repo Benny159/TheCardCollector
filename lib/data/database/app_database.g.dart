@@ -27,19 +27,19 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
       const VerificationMeta('printedTotal');
   @override
   late final GeneratedColumn<int> printedTotal = GeneratedColumn<int>(
-      'printed_total', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
+      'printed_total', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _totalMeta = const VerificationMeta('total');
   @override
   late final GeneratedColumn<int> total = GeneratedColumn<int>(
-      'total', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
+      'total', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _releaseDateMeta =
       const VerificationMeta('releaseDate');
   @override
   late final GeneratedColumn<String> releaseDate = GeneratedColumn<String>(
-      'release_date', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+      'release_date', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _updatedAtMeta =
       const VerificationMeta('updatedAt');
   @override
@@ -50,14 +50,20 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
       const VerificationMeta('logoUrl');
   @override
   late final GeneratedColumn<String> logoUrl = GeneratedColumn<String>(
-      'logo_url', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+      'logo_url', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _logoUrlDeMeta =
+      const VerificationMeta('logoUrlDe');
+  @override
+  late final GeneratedColumn<String> logoUrlDe = GeneratedColumn<String>(
+      'logo_url_de', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _symbolUrlMeta =
       const VerificationMeta('symbolUrl');
   @override
   late final GeneratedColumn<String> symbolUrl = GeneratedColumn<String>(
-      'symbol_url', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+      'symbol_url', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _nameDeMeta = const VerificationMeta('nameDe');
   @override
   late final GeneratedColumn<String> nameDe = GeneratedColumn<String>(
@@ -73,6 +79,7 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
         releaseDate,
         updatedAt,
         logoUrl,
+        logoUrlDe,
         symbolUrl,
         nameDe
       ];
@@ -108,22 +115,16 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
           _printedTotalMeta,
           printedTotal.isAcceptableOrUnknown(
               data['printed_total']!, _printedTotalMeta));
-    } else if (isInserting) {
-      context.missing(_printedTotalMeta);
     }
     if (data.containsKey('total')) {
       context.handle(
           _totalMeta, total.isAcceptableOrUnknown(data['total']!, _totalMeta));
-    } else if (isInserting) {
-      context.missing(_totalMeta);
     }
     if (data.containsKey('release_date')) {
       context.handle(
           _releaseDateMeta,
           releaseDate.isAcceptableOrUnknown(
               data['release_date']!, _releaseDateMeta));
-    } else if (isInserting) {
-      context.missing(_releaseDateMeta);
     }
     if (data.containsKey('updated_at')) {
       context.handle(_updatedAtMeta,
@@ -134,14 +135,16 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
     if (data.containsKey('logo_url')) {
       context.handle(_logoUrlMeta,
           logoUrl.isAcceptableOrUnknown(data['logo_url']!, _logoUrlMeta));
-    } else if (isInserting) {
-      context.missing(_logoUrlMeta);
+    }
+    if (data.containsKey('logo_url_de')) {
+      context.handle(
+          _logoUrlDeMeta,
+          logoUrlDe.isAcceptableOrUnknown(
+              data['logo_url_de']!, _logoUrlDeMeta));
     }
     if (data.containsKey('symbol_url')) {
       context.handle(_symbolUrlMeta,
           symbolUrl.isAcceptableOrUnknown(data['symbol_url']!, _symbolUrlMeta));
-    } else if (isInserting) {
-      context.missing(_symbolUrlMeta);
     }
     if (data.containsKey('name_de')) {
       context.handle(_nameDeMeta,
@@ -163,17 +166,19 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
       series: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}series'])!,
       printedTotal: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}printed_total'])!,
+          .read(DriftSqlType.int, data['${effectivePrefix}printed_total']),
       total: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}total'])!,
+          .read(DriftSqlType.int, data['${effectivePrefix}total']),
       releaseDate: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}release_date'])!,
+          .read(DriftSqlType.string, data['${effectivePrefix}release_date']),
       updatedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}updated_at'])!,
       logoUrl: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}logo_url'])!,
+          .read(DriftSqlType.string, data['${effectivePrefix}logo_url']),
+      logoUrlDe: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}logo_url_de']),
       symbolUrl: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}symbol_url'])!,
+          .read(DriftSqlType.string, data['${effectivePrefix}symbol_url']),
       nameDe: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}name_de']),
     );
@@ -189,23 +194,25 @@ class CardSet extends DataClass implements Insertable<CardSet> {
   final String id;
   final String name;
   final String series;
-  final int printedTotal;
-  final int total;
-  final String releaseDate;
+  final int? printedTotal;
+  final int? total;
+  final String? releaseDate;
   final String updatedAt;
-  final String logoUrl;
-  final String symbolUrl;
+  final String? logoUrl;
+  final String? logoUrlDe;
+  final String? symbolUrl;
   final String? nameDe;
   const CardSet(
       {required this.id,
       required this.name,
       required this.series,
-      required this.printedTotal,
-      required this.total,
-      required this.releaseDate,
+      this.printedTotal,
+      this.total,
+      this.releaseDate,
       required this.updatedAt,
-      required this.logoUrl,
-      required this.symbolUrl,
+      this.logoUrl,
+      this.logoUrlDe,
+      this.symbolUrl,
       this.nameDe});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -213,12 +220,25 @@ class CardSet extends DataClass implements Insertable<CardSet> {
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['series'] = Variable<String>(series);
-    map['printed_total'] = Variable<int>(printedTotal);
-    map['total'] = Variable<int>(total);
-    map['release_date'] = Variable<String>(releaseDate);
+    if (!nullToAbsent || printedTotal != null) {
+      map['printed_total'] = Variable<int>(printedTotal);
+    }
+    if (!nullToAbsent || total != null) {
+      map['total'] = Variable<int>(total);
+    }
+    if (!nullToAbsent || releaseDate != null) {
+      map['release_date'] = Variable<String>(releaseDate);
+    }
     map['updated_at'] = Variable<String>(updatedAt);
-    map['logo_url'] = Variable<String>(logoUrl);
-    map['symbol_url'] = Variable<String>(symbolUrl);
+    if (!nullToAbsent || logoUrl != null) {
+      map['logo_url'] = Variable<String>(logoUrl);
+    }
+    if (!nullToAbsent || logoUrlDe != null) {
+      map['logo_url_de'] = Variable<String>(logoUrlDe);
+    }
+    if (!nullToAbsent || symbolUrl != null) {
+      map['symbol_url'] = Variable<String>(symbolUrl);
+    }
     if (!nullToAbsent || nameDe != null) {
       map['name_de'] = Variable<String>(nameDe);
     }
@@ -230,12 +250,24 @@ class CardSet extends DataClass implements Insertable<CardSet> {
       id: Value(id),
       name: Value(name),
       series: Value(series),
-      printedTotal: Value(printedTotal),
-      total: Value(total),
-      releaseDate: Value(releaseDate),
+      printedTotal: printedTotal == null && nullToAbsent
+          ? const Value.absent()
+          : Value(printedTotal),
+      total:
+          total == null && nullToAbsent ? const Value.absent() : Value(total),
+      releaseDate: releaseDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(releaseDate),
       updatedAt: Value(updatedAt),
-      logoUrl: Value(logoUrl),
-      symbolUrl: Value(symbolUrl),
+      logoUrl: logoUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(logoUrl),
+      logoUrlDe: logoUrlDe == null && nullToAbsent
+          ? const Value.absent()
+          : Value(logoUrlDe),
+      symbolUrl: symbolUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(symbolUrl),
       nameDe:
           nameDe == null && nullToAbsent ? const Value.absent() : Value(nameDe),
     );
@@ -248,12 +280,13 @@ class CardSet extends DataClass implements Insertable<CardSet> {
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       series: serializer.fromJson<String>(json['series']),
-      printedTotal: serializer.fromJson<int>(json['printedTotal']),
-      total: serializer.fromJson<int>(json['total']),
-      releaseDate: serializer.fromJson<String>(json['releaseDate']),
+      printedTotal: serializer.fromJson<int?>(json['printedTotal']),
+      total: serializer.fromJson<int?>(json['total']),
+      releaseDate: serializer.fromJson<String?>(json['releaseDate']),
       updatedAt: serializer.fromJson<String>(json['updatedAt']),
-      logoUrl: serializer.fromJson<String>(json['logoUrl']),
-      symbolUrl: serializer.fromJson<String>(json['symbolUrl']),
+      logoUrl: serializer.fromJson<String?>(json['logoUrl']),
+      logoUrlDe: serializer.fromJson<String?>(json['logoUrlDe']),
+      symbolUrl: serializer.fromJson<String?>(json['symbolUrl']),
       nameDe: serializer.fromJson<String?>(json['nameDe']),
     );
   }
@@ -264,12 +297,13 @@ class CardSet extends DataClass implements Insertable<CardSet> {
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'series': serializer.toJson<String>(series),
-      'printedTotal': serializer.toJson<int>(printedTotal),
-      'total': serializer.toJson<int>(total),
-      'releaseDate': serializer.toJson<String>(releaseDate),
+      'printedTotal': serializer.toJson<int?>(printedTotal),
+      'total': serializer.toJson<int?>(total),
+      'releaseDate': serializer.toJson<String?>(releaseDate),
       'updatedAt': serializer.toJson<String>(updatedAt),
-      'logoUrl': serializer.toJson<String>(logoUrl),
-      'symbolUrl': serializer.toJson<String>(symbolUrl),
+      'logoUrl': serializer.toJson<String?>(logoUrl),
+      'logoUrlDe': serializer.toJson<String?>(logoUrlDe),
+      'symbolUrl': serializer.toJson<String?>(symbolUrl),
       'nameDe': serializer.toJson<String?>(nameDe),
     };
   }
@@ -278,23 +312,26 @@ class CardSet extends DataClass implements Insertable<CardSet> {
           {String? id,
           String? name,
           String? series,
-          int? printedTotal,
-          int? total,
-          String? releaseDate,
+          Value<int?> printedTotal = const Value.absent(),
+          Value<int?> total = const Value.absent(),
+          Value<String?> releaseDate = const Value.absent(),
           String? updatedAt,
-          String? logoUrl,
-          String? symbolUrl,
+          Value<String?> logoUrl = const Value.absent(),
+          Value<String?> logoUrlDe = const Value.absent(),
+          Value<String?> symbolUrl = const Value.absent(),
           Value<String?> nameDe = const Value.absent()}) =>
       CardSet(
         id: id ?? this.id,
         name: name ?? this.name,
         series: series ?? this.series,
-        printedTotal: printedTotal ?? this.printedTotal,
-        total: total ?? this.total,
-        releaseDate: releaseDate ?? this.releaseDate,
+        printedTotal:
+            printedTotal.present ? printedTotal.value : this.printedTotal,
+        total: total.present ? total.value : this.total,
+        releaseDate: releaseDate.present ? releaseDate.value : this.releaseDate,
         updatedAt: updatedAt ?? this.updatedAt,
-        logoUrl: logoUrl ?? this.logoUrl,
-        symbolUrl: symbolUrl ?? this.symbolUrl,
+        logoUrl: logoUrl.present ? logoUrl.value : this.logoUrl,
+        logoUrlDe: logoUrlDe.present ? logoUrlDe.value : this.logoUrlDe,
+        symbolUrl: symbolUrl.present ? symbolUrl.value : this.symbolUrl,
         nameDe: nameDe.present ? nameDe.value : this.nameDe,
       );
   CardSet copyWithCompanion(CardSetsCompanion data) {
@@ -310,6 +347,7 @@ class CardSet extends DataClass implements Insertable<CardSet> {
           data.releaseDate.present ? data.releaseDate.value : this.releaseDate,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       logoUrl: data.logoUrl.present ? data.logoUrl.value : this.logoUrl,
+      logoUrlDe: data.logoUrlDe.present ? data.logoUrlDe.value : this.logoUrlDe,
       symbolUrl: data.symbolUrl.present ? data.symbolUrl.value : this.symbolUrl,
       nameDe: data.nameDe.present ? data.nameDe.value : this.nameDe,
     );
@@ -326,6 +364,7 @@ class CardSet extends DataClass implements Insertable<CardSet> {
           ..write('releaseDate: $releaseDate, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('logoUrl: $logoUrl, ')
+          ..write('logoUrlDe: $logoUrlDe, ')
           ..write('symbolUrl: $symbolUrl, ')
           ..write('nameDe: $nameDe')
           ..write(')'))
@@ -334,7 +373,7 @@ class CardSet extends DataClass implements Insertable<CardSet> {
 
   @override
   int get hashCode => Object.hash(id, name, series, printedTotal, total,
-      releaseDate, updatedAt, logoUrl, symbolUrl, nameDe);
+      releaseDate, updatedAt, logoUrl, logoUrlDe, symbolUrl, nameDe);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -347,6 +386,7 @@ class CardSet extends DataClass implements Insertable<CardSet> {
           other.releaseDate == this.releaseDate &&
           other.updatedAt == this.updatedAt &&
           other.logoUrl == this.logoUrl &&
+          other.logoUrlDe == this.logoUrlDe &&
           other.symbolUrl == this.symbolUrl &&
           other.nameDe == this.nameDe);
 }
@@ -355,12 +395,13 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
   final Value<String> id;
   final Value<String> name;
   final Value<String> series;
-  final Value<int> printedTotal;
-  final Value<int> total;
-  final Value<String> releaseDate;
+  final Value<int?> printedTotal;
+  final Value<int?> total;
+  final Value<String?> releaseDate;
   final Value<String> updatedAt;
-  final Value<String> logoUrl;
-  final Value<String> symbolUrl;
+  final Value<String?> logoUrl;
+  final Value<String?> logoUrlDe;
+  final Value<String?> symbolUrl;
   final Value<String?> nameDe;
   final Value<int> rowid;
   const CardSetsCompanion({
@@ -372,6 +413,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
     this.releaseDate = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.logoUrl = const Value.absent(),
+    this.logoUrlDe = const Value.absent(),
     this.symbolUrl = const Value.absent(),
     this.nameDe = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -380,23 +422,19 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
     required String id,
     required String name,
     required String series,
-    required int printedTotal,
-    required int total,
-    required String releaseDate,
+    this.printedTotal = const Value.absent(),
+    this.total = const Value.absent(),
+    this.releaseDate = const Value.absent(),
     required String updatedAt,
-    required String logoUrl,
-    required String symbolUrl,
+    this.logoUrl = const Value.absent(),
+    this.logoUrlDe = const Value.absent(),
+    this.symbolUrl = const Value.absent(),
     this.nameDe = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         name = Value(name),
         series = Value(series),
-        printedTotal = Value(printedTotal),
-        total = Value(total),
-        releaseDate = Value(releaseDate),
-        updatedAt = Value(updatedAt),
-        logoUrl = Value(logoUrl),
-        symbolUrl = Value(symbolUrl);
+        updatedAt = Value(updatedAt);
   static Insertable<CardSet> custom({
     Expression<String>? id,
     Expression<String>? name,
@@ -406,6 +444,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
     Expression<String>? releaseDate,
     Expression<String>? updatedAt,
     Expression<String>? logoUrl,
+    Expression<String>? logoUrlDe,
     Expression<String>? symbolUrl,
     Expression<String>? nameDe,
     Expression<int>? rowid,
@@ -419,6 +458,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
       if (releaseDate != null) 'release_date': releaseDate,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (logoUrl != null) 'logo_url': logoUrl,
+      if (logoUrlDe != null) 'logo_url_de': logoUrlDe,
       if (symbolUrl != null) 'symbol_url': symbolUrl,
       if (nameDe != null) 'name_de': nameDe,
       if (rowid != null) 'rowid': rowid,
@@ -429,12 +469,13 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
       {Value<String>? id,
       Value<String>? name,
       Value<String>? series,
-      Value<int>? printedTotal,
-      Value<int>? total,
-      Value<String>? releaseDate,
+      Value<int?>? printedTotal,
+      Value<int?>? total,
+      Value<String?>? releaseDate,
       Value<String>? updatedAt,
-      Value<String>? logoUrl,
-      Value<String>? symbolUrl,
+      Value<String?>? logoUrl,
+      Value<String?>? logoUrlDe,
+      Value<String?>? symbolUrl,
       Value<String?>? nameDe,
       Value<int>? rowid}) {
     return CardSetsCompanion(
@@ -446,6 +487,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
       releaseDate: releaseDate ?? this.releaseDate,
       updatedAt: updatedAt ?? this.updatedAt,
       logoUrl: logoUrl ?? this.logoUrl,
+      logoUrlDe: logoUrlDe ?? this.logoUrlDe,
       symbolUrl: symbolUrl ?? this.symbolUrl,
       nameDe: nameDe ?? this.nameDe,
       rowid: rowid ?? this.rowid,
@@ -479,6 +521,9 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
     if (logoUrl.present) {
       map['logo_url'] = Variable<String>(logoUrl.value);
     }
+    if (logoUrlDe.present) {
+      map['logo_url_de'] = Variable<String>(logoUrlDe.value);
+    }
     if (symbolUrl.present) {
       map['symbol_url'] = Variable<String>(symbolUrl.value);
     }
@@ -502,6 +547,7 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
           ..write('releaseDate: $releaseDate, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('logoUrl: $logoUrl, ')
+          ..write('logoUrlDe: $logoUrlDe, ')
           ..write('symbolUrl: $symbolUrl, ')
           ..write('nameDe: $nameDe, ')
           ..write('rowid: $rowid')
@@ -533,39 +579,27 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
   late final GeneratedColumn<String> name = GeneratedColumn<String>(
       'name', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameDeMeta = const VerificationMeta('nameDe');
+  @override
+  late final GeneratedColumn<String> nameDe = GeneratedColumn<String>(
+      'name_de', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _numberMeta = const VerificationMeta('number');
   @override
   late final GeneratedColumn<String> number = GeneratedColumn<String>(
       'number', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _imageUrlSmallMeta =
-      const VerificationMeta('imageUrlSmall');
+  static const VerificationMeta _imageUrlMeta =
+      const VerificationMeta('imageUrl');
   @override
-  late final GeneratedColumn<String> imageUrlSmall = GeneratedColumn<String>(
-      'image_url_small', aliasedName, false,
+  late final GeneratedColumn<String> imageUrl = GeneratedColumn<String>(
+      'image_url', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _imageUrlLargeMeta =
-      const VerificationMeta('imageUrlLarge');
+  static const VerificationMeta _imageUrlDeMeta =
+      const VerificationMeta('imageUrlDe');
   @override
-  late final GeneratedColumn<String> imageUrlLarge = GeneratedColumn<String>(
-      'image_url_large', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _supertypeMeta =
-      const VerificationMeta('supertype');
-  @override
-  late final GeneratedColumn<String> supertype = GeneratedColumn<String>(
-      'supertype', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _subtypesMeta =
-      const VerificationMeta('subtypes');
-  @override
-  late final GeneratedColumn<String> subtypes = GeneratedColumn<String>(
-      'subtypes', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _typesMeta = const VerificationMeta('types');
-  @override
-  late final GeneratedColumn<String> types = GeneratedColumn<String>(
-      'types', aliasedName, true,
+  late final GeneratedColumn<String> imageUrlDe = GeneratedColumn<String>(
+      'image_url_de', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _artistMeta = const VerificationMeta('artist');
   @override
@@ -583,33 +617,89 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
   late final GeneratedColumn<String> flavorText = GeneratedColumn<String>(
       'flavor_text', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _nameDeMeta = const VerificationMeta('nameDe');
-  @override
-  late final GeneratedColumn<String> nameDe = GeneratedColumn<String>(
-      'name_de', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _flavorTextDeMeta =
       const VerificationMeta('flavorTextDe');
   @override
   late final GeneratedColumn<String> flavorTextDe = GeneratedColumn<String>(
       'flavor_text_de', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _hasFirstEditionMeta =
+      const VerificationMeta('hasFirstEdition');
+  @override
+  late final GeneratedColumn<bool> hasFirstEdition = GeneratedColumn<bool>(
+      'has_first_edition', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("has_first_edition" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _hasNormalMeta =
+      const VerificationMeta('hasNormal');
+  @override
+  late final GeneratedColumn<bool> hasNormal = GeneratedColumn<bool>(
+      'has_normal', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("has_normal" IN (0, 1))'),
+      defaultValue: const Constant(true));
+  static const VerificationMeta _hasHoloMeta =
+      const VerificationMeta('hasHolo');
+  @override
+  late final GeneratedColumn<bool> hasHolo = GeneratedColumn<bool>(
+      'has_holo', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("has_holo" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _hasReverseMeta =
+      const VerificationMeta('hasReverse');
+  @override
+  late final GeneratedColumn<bool> hasReverse = GeneratedColumn<bool>(
+      'has_reverse', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("has_reverse" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _hasWPromoMeta =
+      const VerificationMeta('hasWPromo');
+  @override
+  late final GeneratedColumn<bool> hasWPromo = GeneratedColumn<bool>(
+      'has_w_promo', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("has_w_promo" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _sortNumberMeta =
+      const VerificationMeta('sortNumber');
+  @override
+  late final GeneratedColumn<int> sortNumber = GeneratedColumn<int>(
+      'sort_number', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   @override
   List<GeneratedColumn> get $columns => [
         id,
         setId,
         name,
+        nameDe,
         number,
-        imageUrlSmall,
-        imageUrlLarge,
-        supertype,
-        subtypes,
-        types,
+        imageUrl,
+        imageUrlDe,
         artist,
         rarity,
         flavorText,
-        nameDe,
-        flavorTextDe
+        flavorTextDe,
+        hasFirstEdition,
+        hasNormal,
+        hasHolo,
+        hasReverse,
+        hasWPromo,
+        sortNumber
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -638,39 +728,27 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
     } else if (isInserting) {
       context.missing(_nameMeta);
     }
+    if (data.containsKey('name_de')) {
+      context.handle(_nameDeMeta,
+          nameDe.isAcceptableOrUnknown(data['name_de']!, _nameDeMeta));
+    }
     if (data.containsKey('number')) {
       context.handle(_numberMeta,
           number.isAcceptableOrUnknown(data['number']!, _numberMeta));
     } else if (isInserting) {
       context.missing(_numberMeta);
     }
-    if (data.containsKey('image_url_small')) {
-      context.handle(
-          _imageUrlSmallMeta,
-          imageUrlSmall.isAcceptableOrUnknown(
-              data['image_url_small']!, _imageUrlSmallMeta));
+    if (data.containsKey('image_url')) {
+      context.handle(_imageUrlMeta,
+          imageUrl.isAcceptableOrUnknown(data['image_url']!, _imageUrlMeta));
     } else if (isInserting) {
-      context.missing(_imageUrlSmallMeta);
+      context.missing(_imageUrlMeta);
     }
-    if (data.containsKey('image_url_large')) {
+    if (data.containsKey('image_url_de')) {
       context.handle(
-          _imageUrlLargeMeta,
-          imageUrlLarge.isAcceptableOrUnknown(
-              data['image_url_large']!, _imageUrlLargeMeta));
-    } else if (isInserting) {
-      context.missing(_imageUrlLargeMeta);
-    }
-    if (data.containsKey('supertype')) {
-      context.handle(_supertypeMeta,
-          supertype.isAcceptableOrUnknown(data['supertype']!, _supertypeMeta));
-    }
-    if (data.containsKey('subtypes')) {
-      context.handle(_subtypesMeta,
-          subtypes.isAcceptableOrUnknown(data['subtypes']!, _subtypesMeta));
-    }
-    if (data.containsKey('types')) {
-      context.handle(
-          _typesMeta, types.isAcceptableOrUnknown(data['types']!, _typesMeta));
+          _imageUrlDeMeta,
+          imageUrlDe.isAcceptableOrUnknown(
+              data['image_url_de']!, _imageUrlDeMeta));
     }
     if (data.containsKey('artist')) {
       context.handle(_artistMeta,
@@ -686,15 +764,43 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
           flavorText.isAcceptableOrUnknown(
               data['flavor_text']!, _flavorTextMeta));
     }
-    if (data.containsKey('name_de')) {
-      context.handle(_nameDeMeta,
-          nameDe.isAcceptableOrUnknown(data['name_de']!, _nameDeMeta));
-    }
     if (data.containsKey('flavor_text_de')) {
       context.handle(
           _flavorTextDeMeta,
           flavorTextDe.isAcceptableOrUnknown(
               data['flavor_text_de']!, _flavorTextDeMeta));
+    }
+    if (data.containsKey('has_first_edition')) {
+      context.handle(
+          _hasFirstEditionMeta,
+          hasFirstEdition.isAcceptableOrUnknown(
+              data['has_first_edition']!, _hasFirstEditionMeta));
+    }
+    if (data.containsKey('has_normal')) {
+      context.handle(_hasNormalMeta,
+          hasNormal.isAcceptableOrUnknown(data['has_normal']!, _hasNormalMeta));
+    }
+    if (data.containsKey('has_holo')) {
+      context.handle(_hasHoloMeta,
+          hasHolo.isAcceptableOrUnknown(data['has_holo']!, _hasHoloMeta));
+    }
+    if (data.containsKey('has_reverse')) {
+      context.handle(
+          _hasReverseMeta,
+          hasReverse.isAcceptableOrUnknown(
+              data['has_reverse']!, _hasReverseMeta));
+    }
+    if (data.containsKey('has_w_promo')) {
+      context.handle(
+          _hasWPromoMeta,
+          hasWPromo.isAcceptableOrUnknown(
+              data['has_w_promo']!, _hasWPromoMeta));
+    }
+    if (data.containsKey('sort_number')) {
+      context.handle(
+          _sortNumberMeta,
+          sortNumber.isAcceptableOrUnknown(
+              data['sort_number']!, _sortNumberMeta));
     }
     return context;
   }
@@ -711,28 +817,34 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
           .read(DriftSqlType.string, data['${effectivePrefix}set_id'])!,
       name: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      nameDe: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name_de']),
       number: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}number'])!,
-      imageUrlSmall: attachedDatabase.typeMapping.read(
-          DriftSqlType.string, data['${effectivePrefix}image_url_small'])!,
-      imageUrlLarge: attachedDatabase.typeMapping.read(
-          DriftSqlType.string, data['${effectivePrefix}image_url_large'])!,
-      supertype: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}supertype']),
-      subtypes: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}subtypes']),
-      types: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}types']),
+      imageUrl: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}image_url'])!,
+      imageUrlDe: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}image_url_de']),
       artist: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}artist']),
       rarity: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}rarity']),
       flavorText: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}flavor_text']),
-      nameDe: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}name_de']),
       flavorTextDe: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}flavor_text_de']),
+      hasFirstEdition: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}has_first_edition'])!,
+      hasNormal: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}has_normal'])!,
+      hasHolo: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}has_holo'])!,
+      hasReverse: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}has_reverse'])!,
+      hasWPromo: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}has_w_promo'])!,
+      sortNumber: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sort_number'])!,
     );
   }
 
@@ -746,49 +858,51 @@ class Card extends DataClass implements Insertable<Card> {
   final String id;
   final String setId;
   final String name;
+  final String? nameDe;
   final String number;
-  final String imageUrlSmall;
-  final String imageUrlLarge;
-  final String? supertype;
-  final String? subtypes;
-  final String? types;
+  final String imageUrl;
+  final String? imageUrlDe;
   final String? artist;
   final String? rarity;
   final String? flavorText;
-  final String? nameDe;
   final String? flavorTextDe;
+  final bool hasFirstEdition;
+  final bool hasNormal;
+  final bool hasHolo;
+  final bool hasReverse;
+  final bool hasWPromo;
+  final int sortNumber;
   const Card(
       {required this.id,
       required this.setId,
       required this.name,
+      this.nameDe,
       required this.number,
-      required this.imageUrlSmall,
-      required this.imageUrlLarge,
-      this.supertype,
-      this.subtypes,
-      this.types,
+      required this.imageUrl,
+      this.imageUrlDe,
       this.artist,
       this.rarity,
       this.flavorText,
-      this.nameDe,
-      this.flavorTextDe});
+      this.flavorTextDe,
+      required this.hasFirstEdition,
+      required this.hasNormal,
+      required this.hasHolo,
+      required this.hasReverse,
+      required this.hasWPromo,
+      required this.sortNumber});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['set_id'] = Variable<String>(setId);
     map['name'] = Variable<String>(name);
+    if (!nullToAbsent || nameDe != null) {
+      map['name_de'] = Variable<String>(nameDe);
+    }
     map['number'] = Variable<String>(number);
-    map['image_url_small'] = Variable<String>(imageUrlSmall);
-    map['image_url_large'] = Variable<String>(imageUrlLarge);
-    if (!nullToAbsent || supertype != null) {
-      map['supertype'] = Variable<String>(supertype);
-    }
-    if (!nullToAbsent || subtypes != null) {
-      map['subtypes'] = Variable<String>(subtypes);
-    }
-    if (!nullToAbsent || types != null) {
-      map['types'] = Variable<String>(types);
+    map['image_url'] = Variable<String>(imageUrl);
+    if (!nullToAbsent || imageUrlDe != null) {
+      map['image_url_de'] = Variable<String>(imageUrlDe);
     }
     if (!nullToAbsent || artist != null) {
       map['artist'] = Variable<String>(artist);
@@ -799,12 +913,15 @@ class Card extends DataClass implements Insertable<Card> {
     if (!nullToAbsent || flavorText != null) {
       map['flavor_text'] = Variable<String>(flavorText);
     }
-    if (!nullToAbsent || nameDe != null) {
-      map['name_de'] = Variable<String>(nameDe);
-    }
     if (!nullToAbsent || flavorTextDe != null) {
       map['flavor_text_de'] = Variable<String>(flavorTextDe);
     }
+    map['has_first_edition'] = Variable<bool>(hasFirstEdition);
+    map['has_normal'] = Variable<bool>(hasNormal);
+    map['has_holo'] = Variable<bool>(hasHolo);
+    map['has_reverse'] = Variable<bool>(hasReverse);
+    map['has_w_promo'] = Variable<bool>(hasWPromo);
+    map['sort_number'] = Variable<int>(sortNumber);
     return map;
   }
 
@@ -813,17 +930,13 @@ class Card extends DataClass implements Insertable<Card> {
       id: Value(id),
       setId: Value(setId),
       name: Value(name),
+      nameDe:
+          nameDe == null && nullToAbsent ? const Value.absent() : Value(nameDe),
       number: Value(number),
-      imageUrlSmall: Value(imageUrlSmall),
-      imageUrlLarge: Value(imageUrlLarge),
-      supertype: supertype == null && nullToAbsent
+      imageUrl: Value(imageUrl),
+      imageUrlDe: imageUrlDe == null && nullToAbsent
           ? const Value.absent()
-          : Value(supertype),
-      subtypes: subtypes == null && nullToAbsent
-          ? const Value.absent()
-          : Value(subtypes),
-      types:
-          types == null && nullToAbsent ? const Value.absent() : Value(types),
+          : Value(imageUrlDe),
       artist:
           artist == null && nullToAbsent ? const Value.absent() : Value(artist),
       rarity:
@@ -831,11 +944,15 @@ class Card extends DataClass implements Insertable<Card> {
       flavorText: flavorText == null && nullToAbsent
           ? const Value.absent()
           : Value(flavorText),
-      nameDe:
-          nameDe == null && nullToAbsent ? const Value.absent() : Value(nameDe),
       flavorTextDe: flavorTextDe == null && nullToAbsent
           ? const Value.absent()
           : Value(flavorTextDe),
+      hasFirstEdition: Value(hasFirstEdition),
+      hasNormal: Value(hasNormal),
+      hasHolo: Value(hasHolo),
+      hasReverse: Value(hasReverse),
+      hasWPromo: Value(hasWPromo),
+      sortNumber: Value(sortNumber),
     );
   }
 
@@ -846,17 +963,20 @@ class Card extends DataClass implements Insertable<Card> {
       id: serializer.fromJson<String>(json['id']),
       setId: serializer.fromJson<String>(json['setId']),
       name: serializer.fromJson<String>(json['name']),
+      nameDe: serializer.fromJson<String?>(json['nameDe']),
       number: serializer.fromJson<String>(json['number']),
-      imageUrlSmall: serializer.fromJson<String>(json['imageUrlSmall']),
-      imageUrlLarge: serializer.fromJson<String>(json['imageUrlLarge']),
-      supertype: serializer.fromJson<String?>(json['supertype']),
-      subtypes: serializer.fromJson<String?>(json['subtypes']),
-      types: serializer.fromJson<String?>(json['types']),
+      imageUrl: serializer.fromJson<String>(json['imageUrl']),
+      imageUrlDe: serializer.fromJson<String?>(json['imageUrlDe']),
       artist: serializer.fromJson<String?>(json['artist']),
       rarity: serializer.fromJson<String?>(json['rarity']),
       flavorText: serializer.fromJson<String?>(json['flavorText']),
-      nameDe: serializer.fromJson<String?>(json['nameDe']),
       flavorTextDe: serializer.fromJson<String?>(json['flavorTextDe']),
+      hasFirstEdition: serializer.fromJson<bool>(json['hasFirstEdition']),
+      hasNormal: serializer.fromJson<bool>(json['hasNormal']),
+      hasHolo: serializer.fromJson<bool>(json['hasHolo']),
+      hasReverse: serializer.fromJson<bool>(json['hasReverse']),
+      hasWPromo: serializer.fromJson<bool>(json['hasWPromo']),
+      sortNumber: serializer.fromJson<int>(json['sortNumber']),
     );
   }
   @override
@@ -866,17 +986,20 @@ class Card extends DataClass implements Insertable<Card> {
       'id': serializer.toJson<String>(id),
       'setId': serializer.toJson<String>(setId),
       'name': serializer.toJson<String>(name),
+      'nameDe': serializer.toJson<String?>(nameDe),
       'number': serializer.toJson<String>(number),
-      'imageUrlSmall': serializer.toJson<String>(imageUrlSmall),
-      'imageUrlLarge': serializer.toJson<String>(imageUrlLarge),
-      'supertype': serializer.toJson<String?>(supertype),
-      'subtypes': serializer.toJson<String?>(subtypes),
-      'types': serializer.toJson<String?>(types),
+      'imageUrl': serializer.toJson<String>(imageUrl),
+      'imageUrlDe': serializer.toJson<String?>(imageUrlDe),
       'artist': serializer.toJson<String?>(artist),
       'rarity': serializer.toJson<String?>(rarity),
       'flavorText': serializer.toJson<String?>(flavorText),
-      'nameDe': serializer.toJson<String?>(nameDe),
       'flavorTextDe': serializer.toJson<String?>(flavorTextDe),
+      'hasFirstEdition': serializer.toJson<bool>(hasFirstEdition),
+      'hasNormal': serializer.toJson<bool>(hasNormal),
+      'hasHolo': serializer.toJson<bool>(hasHolo),
+      'hasReverse': serializer.toJson<bool>(hasReverse),
+      'hasWPromo': serializer.toJson<bool>(hasWPromo),
+      'sortNumber': serializer.toJson<int>(sortNumber),
     };
   }
 
@@ -884,57 +1007,67 @@ class Card extends DataClass implements Insertable<Card> {
           {String? id,
           String? setId,
           String? name,
+          Value<String?> nameDe = const Value.absent(),
           String? number,
-          String? imageUrlSmall,
-          String? imageUrlLarge,
-          Value<String?> supertype = const Value.absent(),
-          Value<String?> subtypes = const Value.absent(),
-          Value<String?> types = const Value.absent(),
+          String? imageUrl,
+          Value<String?> imageUrlDe = const Value.absent(),
           Value<String?> artist = const Value.absent(),
           Value<String?> rarity = const Value.absent(),
           Value<String?> flavorText = const Value.absent(),
-          Value<String?> nameDe = const Value.absent(),
-          Value<String?> flavorTextDe = const Value.absent()}) =>
+          Value<String?> flavorTextDe = const Value.absent(),
+          bool? hasFirstEdition,
+          bool? hasNormal,
+          bool? hasHolo,
+          bool? hasReverse,
+          bool? hasWPromo,
+          int? sortNumber}) =>
       Card(
         id: id ?? this.id,
         setId: setId ?? this.setId,
         name: name ?? this.name,
+        nameDe: nameDe.present ? nameDe.value : this.nameDe,
         number: number ?? this.number,
-        imageUrlSmall: imageUrlSmall ?? this.imageUrlSmall,
-        imageUrlLarge: imageUrlLarge ?? this.imageUrlLarge,
-        supertype: supertype.present ? supertype.value : this.supertype,
-        subtypes: subtypes.present ? subtypes.value : this.subtypes,
-        types: types.present ? types.value : this.types,
+        imageUrl: imageUrl ?? this.imageUrl,
+        imageUrlDe: imageUrlDe.present ? imageUrlDe.value : this.imageUrlDe,
         artist: artist.present ? artist.value : this.artist,
         rarity: rarity.present ? rarity.value : this.rarity,
         flavorText: flavorText.present ? flavorText.value : this.flavorText,
-        nameDe: nameDe.present ? nameDe.value : this.nameDe,
         flavorTextDe:
             flavorTextDe.present ? flavorTextDe.value : this.flavorTextDe,
+        hasFirstEdition: hasFirstEdition ?? this.hasFirstEdition,
+        hasNormal: hasNormal ?? this.hasNormal,
+        hasHolo: hasHolo ?? this.hasHolo,
+        hasReverse: hasReverse ?? this.hasReverse,
+        hasWPromo: hasWPromo ?? this.hasWPromo,
+        sortNumber: sortNumber ?? this.sortNumber,
       );
   Card copyWithCompanion(CardsCompanion data) {
     return Card(
       id: data.id.present ? data.id.value : this.id,
       setId: data.setId.present ? data.setId.value : this.setId,
       name: data.name.present ? data.name.value : this.name,
+      nameDe: data.nameDe.present ? data.nameDe.value : this.nameDe,
       number: data.number.present ? data.number.value : this.number,
-      imageUrlSmall: data.imageUrlSmall.present
-          ? data.imageUrlSmall.value
-          : this.imageUrlSmall,
-      imageUrlLarge: data.imageUrlLarge.present
-          ? data.imageUrlLarge.value
-          : this.imageUrlLarge,
-      supertype: data.supertype.present ? data.supertype.value : this.supertype,
-      subtypes: data.subtypes.present ? data.subtypes.value : this.subtypes,
-      types: data.types.present ? data.types.value : this.types,
+      imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
+      imageUrlDe:
+          data.imageUrlDe.present ? data.imageUrlDe.value : this.imageUrlDe,
       artist: data.artist.present ? data.artist.value : this.artist,
       rarity: data.rarity.present ? data.rarity.value : this.rarity,
       flavorText:
           data.flavorText.present ? data.flavorText.value : this.flavorText,
-      nameDe: data.nameDe.present ? data.nameDe.value : this.nameDe,
       flavorTextDe: data.flavorTextDe.present
           ? data.flavorTextDe.value
           : this.flavorTextDe,
+      hasFirstEdition: data.hasFirstEdition.present
+          ? data.hasFirstEdition.value
+          : this.hasFirstEdition,
+      hasNormal: data.hasNormal.present ? data.hasNormal.value : this.hasNormal,
+      hasHolo: data.hasHolo.present ? data.hasHolo.value : this.hasHolo,
+      hasReverse:
+          data.hasReverse.present ? data.hasReverse.value : this.hasReverse,
+      hasWPromo: data.hasWPromo.present ? data.hasWPromo.value : this.hasWPromo,
+      sortNumber:
+          data.sortNumber.present ? data.sortNumber.value : this.sortNumber,
     );
   }
 
@@ -944,17 +1077,20 @@ class Card extends DataClass implements Insertable<Card> {
           ..write('id: $id, ')
           ..write('setId: $setId, ')
           ..write('name: $name, ')
+          ..write('nameDe: $nameDe, ')
           ..write('number: $number, ')
-          ..write('imageUrlSmall: $imageUrlSmall, ')
-          ..write('imageUrlLarge: $imageUrlLarge, ')
-          ..write('supertype: $supertype, ')
-          ..write('subtypes: $subtypes, ')
-          ..write('types: $types, ')
+          ..write('imageUrl: $imageUrl, ')
+          ..write('imageUrlDe: $imageUrlDe, ')
           ..write('artist: $artist, ')
           ..write('rarity: $rarity, ')
           ..write('flavorText: $flavorText, ')
-          ..write('nameDe: $nameDe, ')
-          ..write('flavorTextDe: $flavorTextDe')
+          ..write('flavorTextDe: $flavorTextDe, ')
+          ..write('hasFirstEdition: $hasFirstEdition, ')
+          ..write('hasNormal: $hasNormal, ')
+          ..write('hasHolo: $hasHolo, ')
+          ..write('hasReverse: $hasReverse, ')
+          ..write('hasWPromo: $hasWPromo, ')
+          ..write('sortNumber: $sortNumber')
           ..write(')'))
         .toString();
   }
@@ -964,17 +1100,20 @@ class Card extends DataClass implements Insertable<Card> {
       id,
       setId,
       name,
+      nameDe,
       number,
-      imageUrlSmall,
-      imageUrlLarge,
-      supertype,
-      subtypes,
-      types,
+      imageUrl,
+      imageUrlDe,
       artist,
       rarity,
       flavorText,
-      nameDe,
-      flavorTextDe);
+      flavorTextDe,
+      hasFirstEdition,
+      hasNormal,
+      hasHolo,
+      hasReverse,
+      hasWPromo,
+      sortNumber);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -982,106 +1121,123 @@ class Card extends DataClass implements Insertable<Card> {
           other.id == this.id &&
           other.setId == this.setId &&
           other.name == this.name &&
+          other.nameDe == this.nameDe &&
           other.number == this.number &&
-          other.imageUrlSmall == this.imageUrlSmall &&
-          other.imageUrlLarge == this.imageUrlLarge &&
-          other.supertype == this.supertype &&
-          other.subtypes == this.subtypes &&
-          other.types == this.types &&
+          other.imageUrl == this.imageUrl &&
+          other.imageUrlDe == this.imageUrlDe &&
           other.artist == this.artist &&
           other.rarity == this.rarity &&
           other.flavorText == this.flavorText &&
-          other.nameDe == this.nameDe &&
-          other.flavorTextDe == this.flavorTextDe);
+          other.flavorTextDe == this.flavorTextDe &&
+          other.hasFirstEdition == this.hasFirstEdition &&
+          other.hasNormal == this.hasNormal &&
+          other.hasHolo == this.hasHolo &&
+          other.hasReverse == this.hasReverse &&
+          other.hasWPromo == this.hasWPromo &&
+          other.sortNumber == this.sortNumber);
 }
 
 class CardsCompanion extends UpdateCompanion<Card> {
   final Value<String> id;
   final Value<String> setId;
   final Value<String> name;
+  final Value<String?> nameDe;
   final Value<String> number;
-  final Value<String> imageUrlSmall;
-  final Value<String> imageUrlLarge;
-  final Value<String?> supertype;
-  final Value<String?> subtypes;
-  final Value<String?> types;
+  final Value<String> imageUrl;
+  final Value<String?> imageUrlDe;
   final Value<String?> artist;
   final Value<String?> rarity;
   final Value<String?> flavorText;
-  final Value<String?> nameDe;
   final Value<String?> flavorTextDe;
+  final Value<bool> hasFirstEdition;
+  final Value<bool> hasNormal;
+  final Value<bool> hasHolo;
+  final Value<bool> hasReverse;
+  final Value<bool> hasWPromo;
+  final Value<int> sortNumber;
   final Value<int> rowid;
   const CardsCompanion({
     this.id = const Value.absent(),
     this.setId = const Value.absent(),
     this.name = const Value.absent(),
+    this.nameDe = const Value.absent(),
     this.number = const Value.absent(),
-    this.imageUrlSmall = const Value.absent(),
-    this.imageUrlLarge = const Value.absent(),
-    this.supertype = const Value.absent(),
-    this.subtypes = const Value.absent(),
-    this.types = const Value.absent(),
+    this.imageUrl = const Value.absent(),
+    this.imageUrlDe = const Value.absent(),
     this.artist = const Value.absent(),
     this.rarity = const Value.absent(),
     this.flavorText = const Value.absent(),
-    this.nameDe = const Value.absent(),
     this.flavorTextDe = const Value.absent(),
+    this.hasFirstEdition = const Value.absent(),
+    this.hasNormal = const Value.absent(),
+    this.hasHolo = const Value.absent(),
+    this.hasReverse = const Value.absent(),
+    this.hasWPromo = const Value.absent(),
+    this.sortNumber = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CardsCompanion.insert({
     required String id,
     required String setId,
     required String name,
+    this.nameDe = const Value.absent(),
     required String number,
-    required String imageUrlSmall,
-    required String imageUrlLarge,
-    this.supertype = const Value.absent(),
-    this.subtypes = const Value.absent(),
-    this.types = const Value.absent(),
+    required String imageUrl,
+    this.imageUrlDe = const Value.absent(),
     this.artist = const Value.absent(),
     this.rarity = const Value.absent(),
     this.flavorText = const Value.absent(),
-    this.nameDe = const Value.absent(),
     this.flavorTextDe = const Value.absent(),
+    this.hasFirstEdition = const Value.absent(),
+    this.hasNormal = const Value.absent(),
+    this.hasHolo = const Value.absent(),
+    this.hasReverse = const Value.absent(),
+    this.hasWPromo = const Value.absent(),
+    this.sortNumber = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         setId = Value(setId),
         name = Value(name),
         number = Value(number),
-        imageUrlSmall = Value(imageUrlSmall),
-        imageUrlLarge = Value(imageUrlLarge);
+        imageUrl = Value(imageUrl);
   static Insertable<Card> custom({
     Expression<String>? id,
     Expression<String>? setId,
     Expression<String>? name,
+    Expression<String>? nameDe,
     Expression<String>? number,
-    Expression<String>? imageUrlSmall,
-    Expression<String>? imageUrlLarge,
-    Expression<String>? supertype,
-    Expression<String>? subtypes,
-    Expression<String>? types,
+    Expression<String>? imageUrl,
+    Expression<String>? imageUrlDe,
     Expression<String>? artist,
     Expression<String>? rarity,
     Expression<String>? flavorText,
-    Expression<String>? nameDe,
     Expression<String>? flavorTextDe,
+    Expression<bool>? hasFirstEdition,
+    Expression<bool>? hasNormal,
+    Expression<bool>? hasHolo,
+    Expression<bool>? hasReverse,
+    Expression<bool>? hasWPromo,
+    Expression<int>? sortNumber,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (setId != null) 'set_id': setId,
       if (name != null) 'name': name,
+      if (nameDe != null) 'name_de': nameDe,
       if (number != null) 'number': number,
-      if (imageUrlSmall != null) 'image_url_small': imageUrlSmall,
-      if (imageUrlLarge != null) 'image_url_large': imageUrlLarge,
-      if (supertype != null) 'supertype': supertype,
-      if (subtypes != null) 'subtypes': subtypes,
-      if (types != null) 'types': types,
+      if (imageUrl != null) 'image_url': imageUrl,
+      if (imageUrlDe != null) 'image_url_de': imageUrlDe,
       if (artist != null) 'artist': artist,
       if (rarity != null) 'rarity': rarity,
       if (flavorText != null) 'flavor_text': flavorText,
-      if (nameDe != null) 'name_de': nameDe,
       if (flavorTextDe != null) 'flavor_text_de': flavorTextDe,
+      if (hasFirstEdition != null) 'has_first_edition': hasFirstEdition,
+      if (hasNormal != null) 'has_normal': hasNormal,
+      if (hasHolo != null) 'has_holo': hasHolo,
+      if (hasReverse != null) 'has_reverse': hasReverse,
+      if (hasWPromo != null) 'has_w_promo': hasWPromo,
+      if (sortNumber != null) 'sort_number': sortNumber,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1090,33 +1246,39 @@ class CardsCompanion extends UpdateCompanion<Card> {
       {Value<String>? id,
       Value<String>? setId,
       Value<String>? name,
+      Value<String?>? nameDe,
       Value<String>? number,
-      Value<String>? imageUrlSmall,
-      Value<String>? imageUrlLarge,
-      Value<String?>? supertype,
-      Value<String?>? subtypes,
-      Value<String?>? types,
+      Value<String>? imageUrl,
+      Value<String?>? imageUrlDe,
       Value<String?>? artist,
       Value<String?>? rarity,
       Value<String?>? flavorText,
-      Value<String?>? nameDe,
       Value<String?>? flavorTextDe,
+      Value<bool>? hasFirstEdition,
+      Value<bool>? hasNormal,
+      Value<bool>? hasHolo,
+      Value<bool>? hasReverse,
+      Value<bool>? hasWPromo,
+      Value<int>? sortNumber,
       Value<int>? rowid}) {
     return CardsCompanion(
       id: id ?? this.id,
       setId: setId ?? this.setId,
       name: name ?? this.name,
+      nameDe: nameDe ?? this.nameDe,
       number: number ?? this.number,
-      imageUrlSmall: imageUrlSmall ?? this.imageUrlSmall,
-      imageUrlLarge: imageUrlLarge ?? this.imageUrlLarge,
-      supertype: supertype ?? this.supertype,
-      subtypes: subtypes ?? this.subtypes,
-      types: types ?? this.types,
+      imageUrl: imageUrl ?? this.imageUrl,
+      imageUrlDe: imageUrlDe ?? this.imageUrlDe,
       artist: artist ?? this.artist,
       rarity: rarity ?? this.rarity,
       flavorText: flavorText ?? this.flavorText,
-      nameDe: nameDe ?? this.nameDe,
       flavorTextDe: flavorTextDe ?? this.flavorTextDe,
+      hasFirstEdition: hasFirstEdition ?? this.hasFirstEdition,
+      hasNormal: hasNormal ?? this.hasNormal,
+      hasHolo: hasHolo ?? this.hasHolo,
+      hasReverse: hasReverse ?? this.hasReverse,
+      hasWPromo: hasWPromo ?? this.hasWPromo,
+      sortNumber: sortNumber ?? this.sortNumber,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1133,23 +1295,17 @@ class CardsCompanion extends UpdateCompanion<Card> {
     if (name.present) {
       map['name'] = Variable<String>(name.value);
     }
+    if (nameDe.present) {
+      map['name_de'] = Variable<String>(nameDe.value);
+    }
     if (number.present) {
       map['number'] = Variable<String>(number.value);
     }
-    if (imageUrlSmall.present) {
-      map['image_url_small'] = Variable<String>(imageUrlSmall.value);
+    if (imageUrl.present) {
+      map['image_url'] = Variable<String>(imageUrl.value);
     }
-    if (imageUrlLarge.present) {
-      map['image_url_large'] = Variable<String>(imageUrlLarge.value);
-    }
-    if (supertype.present) {
-      map['supertype'] = Variable<String>(supertype.value);
-    }
-    if (subtypes.present) {
-      map['subtypes'] = Variable<String>(subtypes.value);
-    }
-    if (types.present) {
-      map['types'] = Variable<String>(types.value);
+    if (imageUrlDe.present) {
+      map['image_url_de'] = Variable<String>(imageUrlDe.value);
     }
     if (artist.present) {
       map['artist'] = Variable<String>(artist.value);
@@ -1160,11 +1316,26 @@ class CardsCompanion extends UpdateCompanion<Card> {
     if (flavorText.present) {
       map['flavor_text'] = Variable<String>(flavorText.value);
     }
-    if (nameDe.present) {
-      map['name_de'] = Variable<String>(nameDe.value);
-    }
     if (flavorTextDe.present) {
       map['flavor_text_de'] = Variable<String>(flavorTextDe.value);
+    }
+    if (hasFirstEdition.present) {
+      map['has_first_edition'] = Variable<bool>(hasFirstEdition.value);
+    }
+    if (hasNormal.present) {
+      map['has_normal'] = Variable<bool>(hasNormal.value);
+    }
+    if (hasHolo.present) {
+      map['has_holo'] = Variable<bool>(hasHolo.value);
+    }
+    if (hasReverse.present) {
+      map['has_reverse'] = Variable<bool>(hasReverse.value);
+    }
+    if (hasWPromo.present) {
+      map['has_w_promo'] = Variable<bool>(hasWPromo.value);
+    }
+    if (sortNumber.present) {
+      map['sort_number'] = Variable<int>(sortNumber.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -1178,17 +1349,20 @@ class CardsCompanion extends UpdateCompanion<Card> {
           ..write('id: $id, ')
           ..write('setId: $setId, ')
           ..write('name: $name, ')
+          ..write('nameDe: $nameDe, ')
           ..write('number: $number, ')
-          ..write('imageUrlSmall: $imageUrlSmall, ')
-          ..write('imageUrlLarge: $imageUrlLarge, ')
-          ..write('supertype: $supertype, ')
-          ..write('subtypes: $subtypes, ')
-          ..write('types: $types, ')
+          ..write('imageUrl: $imageUrl, ')
+          ..write('imageUrlDe: $imageUrlDe, ')
           ..write('artist: $artist, ')
           ..write('rarity: $rarity, ')
           ..write('flavorText: $flavorText, ')
-          ..write('nameDe: $nameDe, ')
           ..write('flavorTextDe: $flavorTextDe, ')
+          ..write('hasFirstEdition: $hasFirstEdition, ')
+          ..write('hasNormal: $hasNormal, ')
+          ..write('hasHolo: $hasHolo, ')
+          ..write('hasReverse: $hasReverse, ')
+          ..write('hasWPromo: $hasWPromo, ')
+          ..write('sortNumber: $sortNumber, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1224,39 +1398,78 @@ class $CardMarketPricesTable extends CardMarketPrices
   late final GeneratedColumn<DateTime> fetchedAt = GeneratedColumn<DateTime>(
       'fetched_at', aliasedName, false,
       type: DriftSqlType.dateTime, requiredDuringInsert: true);
-  static const VerificationMeta _updatedAtMeta =
-      const VerificationMeta('updatedAt');
+  static const VerificationMeta _averageMeta =
+      const VerificationMeta('average');
   @override
-  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
-      'updated_at', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _trendPriceMeta =
-      const VerificationMeta('trendPrice');
+  late final GeneratedColumn<double> average = GeneratedColumn<double>(
+      'average', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _lowMeta = const VerificationMeta('low');
   @override
-  late final GeneratedColumn<double> trendPrice = GeneratedColumn<double>(
-      'trend_price', aliasedName, true,
+  late final GeneratedColumn<double> low = GeneratedColumn<double>(
+      'low', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _trendMeta = const VerificationMeta('trend');
+  @override
+  late final GeneratedColumn<double> trend = GeneratedColumn<double>(
+      'trend', aliasedName, true,
       type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _avg1Meta = const VerificationMeta('avg1');
   @override
   late final GeneratedColumn<double> avg1 = GeneratedColumn<double>(
       'avg1', aliasedName, true,
       type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _avg7Meta = const VerificationMeta('avg7');
+  @override
+  late final GeneratedColumn<double> avg7 = GeneratedColumn<double>(
+      'avg7', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _avg30Meta = const VerificationMeta('avg30');
   @override
   late final GeneratedColumn<double> avg30 = GeneratedColumn<double>(
       'avg30', aliasedName, true,
       type: DriftSqlType.double, requiredDuringInsert: false);
-  static const VerificationMeta _lowPriceMeta =
-      const VerificationMeta('lowPrice');
+  static const VerificationMeta _avgHoloMeta =
+      const VerificationMeta('avgHolo');
   @override
-  late final GeneratedColumn<double> lowPrice = GeneratedColumn<double>(
-      'low_price', aliasedName, true,
+  late final GeneratedColumn<double> avgHolo = GeneratedColumn<double>(
+      'avg_holo', aliasedName, true,
       type: DriftSqlType.double, requiredDuringInsert: false);
-  static const VerificationMeta _reverseHoloTrendMeta =
-      const VerificationMeta('reverseHoloTrend');
+  static const VerificationMeta _lowHoloMeta =
+      const VerificationMeta('lowHolo');
   @override
-  late final GeneratedColumn<double> reverseHoloTrend = GeneratedColumn<double>(
-      'reverse_holo_trend', aliasedName, true,
+  late final GeneratedColumn<double> lowHolo = GeneratedColumn<double>(
+      'low_holo', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _trendHoloMeta =
+      const VerificationMeta('trendHolo');
+  @override
+  late final GeneratedColumn<double> trendHolo = GeneratedColumn<double>(
+      'trend_holo', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _avg1HoloMeta =
+      const VerificationMeta('avg1Holo');
+  @override
+  late final GeneratedColumn<double> avg1Holo = GeneratedColumn<double>(
+      'avg1_holo', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _avg7HoloMeta =
+      const VerificationMeta('avg7Holo');
+  @override
+  late final GeneratedColumn<double> avg7Holo = GeneratedColumn<double>(
+      'avg7_holo', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _avg30HoloMeta =
+      const VerificationMeta('avg30Holo');
+  @override
+  late final GeneratedColumn<double> avg30Holo = GeneratedColumn<double>(
+      'avg30_holo', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _trendReverseMeta =
+      const VerificationMeta('trendReverse');
+  @override
+  late final GeneratedColumn<double> trendReverse = GeneratedColumn<double>(
+      'trend_reverse', aliasedName, true,
       type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _urlMeta = const VerificationMeta('url');
   @override
@@ -1268,12 +1481,19 @@ class $CardMarketPricesTable extends CardMarketPrices
         id,
         cardId,
         fetchedAt,
-        updatedAt,
-        trendPrice,
+        average,
+        low,
+        trend,
         avg1,
+        avg7,
         avg30,
-        lowPrice,
-        reverseHoloTrend,
+        avgHolo,
+        lowHolo,
+        trendHolo,
+        avg1Holo,
+        avg7Holo,
+        avg30Holo,
+        trendReverse,
         url
       ];
   @override
@@ -1301,35 +1521,59 @@ class $CardMarketPricesTable extends CardMarketPrices
     } else if (isInserting) {
       context.missing(_fetchedAtMeta);
     }
-    if (data.containsKey('updated_at')) {
-      context.handle(_updatedAtMeta,
-          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
-    } else if (isInserting) {
-      context.missing(_updatedAtMeta);
+    if (data.containsKey('average')) {
+      context.handle(_averageMeta,
+          average.isAcceptableOrUnknown(data['average']!, _averageMeta));
     }
-    if (data.containsKey('trend_price')) {
+    if (data.containsKey('low')) {
       context.handle(
-          _trendPriceMeta,
-          trendPrice.isAcceptableOrUnknown(
-              data['trend_price']!, _trendPriceMeta));
+          _lowMeta, low.isAcceptableOrUnknown(data['low']!, _lowMeta));
+    }
+    if (data.containsKey('trend')) {
+      context.handle(
+          _trendMeta, trend.isAcceptableOrUnknown(data['trend']!, _trendMeta));
     }
     if (data.containsKey('avg1')) {
       context.handle(
           _avg1Meta, avg1.isAcceptableOrUnknown(data['avg1']!, _avg1Meta));
     }
+    if (data.containsKey('avg7')) {
+      context.handle(
+          _avg7Meta, avg7.isAcceptableOrUnknown(data['avg7']!, _avg7Meta));
+    }
     if (data.containsKey('avg30')) {
       context.handle(
           _avg30Meta, avg30.isAcceptableOrUnknown(data['avg30']!, _avg30Meta));
     }
-    if (data.containsKey('low_price')) {
-      context.handle(_lowPriceMeta,
-          lowPrice.isAcceptableOrUnknown(data['low_price']!, _lowPriceMeta));
+    if (data.containsKey('avg_holo')) {
+      context.handle(_avgHoloMeta,
+          avgHolo.isAcceptableOrUnknown(data['avg_holo']!, _avgHoloMeta));
     }
-    if (data.containsKey('reverse_holo_trend')) {
+    if (data.containsKey('low_holo')) {
+      context.handle(_lowHoloMeta,
+          lowHolo.isAcceptableOrUnknown(data['low_holo']!, _lowHoloMeta));
+    }
+    if (data.containsKey('trend_holo')) {
+      context.handle(_trendHoloMeta,
+          trendHolo.isAcceptableOrUnknown(data['trend_holo']!, _trendHoloMeta));
+    }
+    if (data.containsKey('avg1_holo')) {
+      context.handle(_avg1HoloMeta,
+          avg1Holo.isAcceptableOrUnknown(data['avg1_holo']!, _avg1HoloMeta));
+    }
+    if (data.containsKey('avg7_holo')) {
+      context.handle(_avg7HoloMeta,
+          avg7Holo.isAcceptableOrUnknown(data['avg7_holo']!, _avg7HoloMeta));
+    }
+    if (data.containsKey('avg30_holo')) {
+      context.handle(_avg30HoloMeta,
+          avg30Holo.isAcceptableOrUnknown(data['avg30_holo']!, _avg30HoloMeta));
+    }
+    if (data.containsKey('trend_reverse')) {
       context.handle(
-          _reverseHoloTrendMeta,
-          reverseHoloTrend.isAcceptableOrUnknown(
-              data['reverse_holo_trend']!, _reverseHoloTrendMeta));
+          _trendReverseMeta,
+          trendReverse.isAcceptableOrUnknown(
+              data['trend_reverse']!, _trendReverseMeta));
     }
     if (data.containsKey('url')) {
       context.handle(
@@ -1350,18 +1594,32 @@ class $CardMarketPricesTable extends CardMarketPrices
           .read(DriftSqlType.string, data['${effectivePrefix}card_id'])!,
       fetchedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}fetched_at'])!,
-      updatedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}updated_at'])!,
-      trendPrice: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}trend_price']),
+      average: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}average']),
+      low: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}low']),
+      trend: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}trend']),
       avg1: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}avg1']),
+      avg7: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}avg7']),
       avg30: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}avg30']),
-      lowPrice: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}low_price']),
-      reverseHoloTrend: attachedDatabase.typeMapping.read(
-          DriftSqlType.double, data['${effectivePrefix}reverse_holo_trend']),
+      avgHolo: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}avg_holo']),
+      lowHolo: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}low_holo']),
+      trendHolo: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}trend_holo']),
+      avg1Holo: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}avg1_holo']),
+      avg7Holo: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}avg7_holo']),
+      avg30Holo: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}avg30_holo']),
+      trendReverse: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}trend_reverse']),
       url: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}url']),
     );
@@ -1377,23 +1635,37 @@ class CardMarketPrice extends DataClass implements Insertable<CardMarketPrice> {
   final int id;
   final String cardId;
   final DateTime fetchedAt;
-  final String updatedAt;
-  final double? trendPrice;
+  final double? average;
+  final double? low;
+  final double? trend;
   final double? avg1;
+  final double? avg7;
   final double? avg30;
-  final double? lowPrice;
-  final double? reverseHoloTrend;
+  final double? avgHolo;
+  final double? lowHolo;
+  final double? trendHolo;
+  final double? avg1Holo;
+  final double? avg7Holo;
+  final double? avg30Holo;
+  final double? trendReverse;
   final String? url;
   const CardMarketPrice(
       {required this.id,
       required this.cardId,
       required this.fetchedAt,
-      required this.updatedAt,
-      this.trendPrice,
+      this.average,
+      this.low,
+      this.trend,
       this.avg1,
+      this.avg7,
       this.avg30,
-      this.lowPrice,
-      this.reverseHoloTrend,
+      this.avgHolo,
+      this.lowHolo,
+      this.trendHolo,
+      this.avg1Holo,
+      this.avg7Holo,
+      this.avg30Holo,
+      this.trendReverse,
       this.url});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1401,21 +1673,44 @@ class CardMarketPrice extends DataClass implements Insertable<CardMarketPrice> {
     map['id'] = Variable<int>(id);
     map['card_id'] = Variable<String>(cardId);
     map['fetched_at'] = Variable<DateTime>(fetchedAt);
-    map['updated_at'] = Variable<String>(updatedAt);
-    if (!nullToAbsent || trendPrice != null) {
-      map['trend_price'] = Variable<double>(trendPrice);
+    if (!nullToAbsent || average != null) {
+      map['average'] = Variable<double>(average);
+    }
+    if (!nullToAbsent || low != null) {
+      map['low'] = Variable<double>(low);
+    }
+    if (!nullToAbsent || trend != null) {
+      map['trend'] = Variable<double>(trend);
     }
     if (!nullToAbsent || avg1 != null) {
       map['avg1'] = Variable<double>(avg1);
     }
+    if (!nullToAbsent || avg7 != null) {
+      map['avg7'] = Variable<double>(avg7);
+    }
     if (!nullToAbsent || avg30 != null) {
       map['avg30'] = Variable<double>(avg30);
     }
-    if (!nullToAbsent || lowPrice != null) {
-      map['low_price'] = Variable<double>(lowPrice);
+    if (!nullToAbsent || avgHolo != null) {
+      map['avg_holo'] = Variable<double>(avgHolo);
     }
-    if (!nullToAbsent || reverseHoloTrend != null) {
-      map['reverse_holo_trend'] = Variable<double>(reverseHoloTrend);
+    if (!nullToAbsent || lowHolo != null) {
+      map['low_holo'] = Variable<double>(lowHolo);
+    }
+    if (!nullToAbsent || trendHolo != null) {
+      map['trend_holo'] = Variable<double>(trendHolo);
+    }
+    if (!nullToAbsent || avg1Holo != null) {
+      map['avg1_holo'] = Variable<double>(avg1Holo);
+    }
+    if (!nullToAbsent || avg7Holo != null) {
+      map['avg7_holo'] = Variable<double>(avg7Holo);
+    }
+    if (!nullToAbsent || avg30Holo != null) {
+      map['avg30_holo'] = Variable<double>(avg30Holo);
+    }
+    if (!nullToAbsent || trendReverse != null) {
+      map['trend_reverse'] = Variable<double>(trendReverse);
     }
     if (!nullToAbsent || url != null) {
       map['url'] = Variable<String>(url);
@@ -1428,19 +1723,37 @@ class CardMarketPrice extends DataClass implements Insertable<CardMarketPrice> {
       id: Value(id),
       cardId: Value(cardId),
       fetchedAt: Value(fetchedAt),
-      updatedAt: Value(updatedAt),
-      trendPrice: trendPrice == null && nullToAbsent
+      average: average == null && nullToAbsent
           ? const Value.absent()
-          : Value(trendPrice),
+          : Value(average),
+      low: low == null && nullToAbsent ? const Value.absent() : Value(low),
+      trend:
+          trend == null && nullToAbsent ? const Value.absent() : Value(trend),
       avg1: avg1 == null && nullToAbsent ? const Value.absent() : Value(avg1),
+      avg7: avg7 == null && nullToAbsent ? const Value.absent() : Value(avg7),
       avg30:
           avg30 == null && nullToAbsent ? const Value.absent() : Value(avg30),
-      lowPrice: lowPrice == null && nullToAbsent
+      avgHolo: avgHolo == null && nullToAbsent
           ? const Value.absent()
-          : Value(lowPrice),
-      reverseHoloTrend: reverseHoloTrend == null && nullToAbsent
+          : Value(avgHolo),
+      lowHolo: lowHolo == null && nullToAbsent
           ? const Value.absent()
-          : Value(reverseHoloTrend),
+          : Value(lowHolo),
+      trendHolo: trendHolo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(trendHolo),
+      avg1Holo: avg1Holo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(avg1Holo),
+      avg7Holo: avg7Holo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(avg7Holo),
+      avg30Holo: avg30Holo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(avg30Holo),
+      trendReverse: trendReverse == null && nullToAbsent
+          ? const Value.absent()
+          : Value(trendReverse),
       url: url == null && nullToAbsent ? const Value.absent() : Value(url),
     );
   }
@@ -1452,12 +1765,19 @@ class CardMarketPrice extends DataClass implements Insertable<CardMarketPrice> {
       id: serializer.fromJson<int>(json['id']),
       cardId: serializer.fromJson<String>(json['cardId']),
       fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
-      updatedAt: serializer.fromJson<String>(json['updatedAt']),
-      trendPrice: serializer.fromJson<double?>(json['trendPrice']),
+      average: serializer.fromJson<double?>(json['average']),
+      low: serializer.fromJson<double?>(json['low']),
+      trend: serializer.fromJson<double?>(json['trend']),
       avg1: serializer.fromJson<double?>(json['avg1']),
+      avg7: serializer.fromJson<double?>(json['avg7']),
       avg30: serializer.fromJson<double?>(json['avg30']),
-      lowPrice: serializer.fromJson<double?>(json['lowPrice']),
-      reverseHoloTrend: serializer.fromJson<double?>(json['reverseHoloTrend']),
+      avgHolo: serializer.fromJson<double?>(json['avgHolo']),
+      lowHolo: serializer.fromJson<double?>(json['lowHolo']),
+      trendHolo: serializer.fromJson<double?>(json['trendHolo']),
+      avg1Holo: serializer.fromJson<double?>(json['avg1Holo']),
+      avg7Holo: serializer.fromJson<double?>(json['avg7Holo']),
+      avg30Holo: serializer.fromJson<double?>(json['avg30Holo']),
+      trendReverse: serializer.fromJson<double?>(json['trendReverse']),
       url: serializer.fromJson<String?>(json['url']),
     );
   }
@@ -1468,12 +1788,19 @@ class CardMarketPrice extends DataClass implements Insertable<CardMarketPrice> {
       'id': serializer.toJson<int>(id),
       'cardId': serializer.toJson<String>(cardId),
       'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
-      'updatedAt': serializer.toJson<String>(updatedAt),
-      'trendPrice': serializer.toJson<double?>(trendPrice),
+      'average': serializer.toJson<double?>(average),
+      'low': serializer.toJson<double?>(low),
+      'trend': serializer.toJson<double?>(trend),
       'avg1': serializer.toJson<double?>(avg1),
+      'avg7': serializer.toJson<double?>(avg7),
       'avg30': serializer.toJson<double?>(avg30),
-      'lowPrice': serializer.toJson<double?>(lowPrice),
-      'reverseHoloTrend': serializer.toJson<double?>(reverseHoloTrend),
+      'avgHolo': serializer.toJson<double?>(avgHolo),
+      'lowHolo': serializer.toJson<double?>(lowHolo),
+      'trendHolo': serializer.toJson<double?>(trendHolo),
+      'avg1Holo': serializer.toJson<double?>(avg1Holo),
+      'avg7Holo': serializer.toJson<double?>(avg7Holo),
+      'avg30Holo': serializer.toJson<double?>(avg30Holo),
+      'trendReverse': serializer.toJson<double?>(trendReverse),
       'url': serializer.toJson<String?>(url),
     };
   }
@@ -1482,25 +1809,38 @@ class CardMarketPrice extends DataClass implements Insertable<CardMarketPrice> {
           {int? id,
           String? cardId,
           DateTime? fetchedAt,
-          String? updatedAt,
-          Value<double?> trendPrice = const Value.absent(),
+          Value<double?> average = const Value.absent(),
+          Value<double?> low = const Value.absent(),
+          Value<double?> trend = const Value.absent(),
           Value<double?> avg1 = const Value.absent(),
+          Value<double?> avg7 = const Value.absent(),
           Value<double?> avg30 = const Value.absent(),
-          Value<double?> lowPrice = const Value.absent(),
-          Value<double?> reverseHoloTrend = const Value.absent(),
+          Value<double?> avgHolo = const Value.absent(),
+          Value<double?> lowHolo = const Value.absent(),
+          Value<double?> trendHolo = const Value.absent(),
+          Value<double?> avg1Holo = const Value.absent(),
+          Value<double?> avg7Holo = const Value.absent(),
+          Value<double?> avg30Holo = const Value.absent(),
+          Value<double?> trendReverse = const Value.absent(),
           Value<String?> url = const Value.absent()}) =>
       CardMarketPrice(
         id: id ?? this.id,
         cardId: cardId ?? this.cardId,
         fetchedAt: fetchedAt ?? this.fetchedAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        trendPrice: trendPrice.present ? trendPrice.value : this.trendPrice,
+        average: average.present ? average.value : this.average,
+        low: low.present ? low.value : this.low,
+        trend: trend.present ? trend.value : this.trend,
         avg1: avg1.present ? avg1.value : this.avg1,
+        avg7: avg7.present ? avg7.value : this.avg7,
         avg30: avg30.present ? avg30.value : this.avg30,
-        lowPrice: lowPrice.present ? lowPrice.value : this.lowPrice,
-        reverseHoloTrend: reverseHoloTrend.present
-            ? reverseHoloTrend.value
-            : this.reverseHoloTrend,
+        avgHolo: avgHolo.present ? avgHolo.value : this.avgHolo,
+        lowHolo: lowHolo.present ? lowHolo.value : this.lowHolo,
+        trendHolo: trendHolo.present ? trendHolo.value : this.trendHolo,
+        avg1Holo: avg1Holo.present ? avg1Holo.value : this.avg1Holo,
+        avg7Holo: avg7Holo.present ? avg7Holo.value : this.avg7Holo,
+        avg30Holo: avg30Holo.present ? avg30Holo.value : this.avg30Holo,
+        trendReverse:
+            trendReverse.present ? trendReverse.value : this.trendReverse,
         url: url.present ? url.value : this.url,
       );
   CardMarketPrice copyWithCompanion(CardMarketPricesCompanion data) {
@@ -1508,15 +1848,21 @@ class CardMarketPrice extends DataClass implements Insertable<CardMarketPrice> {
       id: data.id.present ? data.id.value : this.id,
       cardId: data.cardId.present ? data.cardId.value : this.cardId,
       fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-      trendPrice:
-          data.trendPrice.present ? data.trendPrice.value : this.trendPrice,
+      average: data.average.present ? data.average.value : this.average,
+      low: data.low.present ? data.low.value : this.low,
+      trend: data.trend.present ? data.trend.value : this.trend,
       avg1: data.avg1.present ? data.avg1.value : this.avg1,
+      avg7: data.avg7.present ? data.avg7.value : this.avg7,
       avg30: data.avg30.present ? data.avg30.value : this.avg30,
-      lowPrice: data.lowPrice.present ? data.lowPrice.value : this.lowPrice,
-      reverseHoloTrend: data.reverseHoloTrend.present
-          ? data.reverseHoloTrend.value
-          : this.reverseHoloTrend,
+      avgHolo: data.avgHolo.present ? data.avgHolo.value : this.avgHolo,
+      lowHolo: data.lowHolo.present ? data.lowHolo.value : this.lowHolo,
+      trendHolo: data.trendHolo.present ? data.trendHolo.value : this.trendHolo,
+      avg1Holo: data.avg1Holo.present ? data.avg1Holo.value : this.avg1Holo,
+      avg7Holo: data.avg7Holo.present ? data.avg7Holo.value : this.avg7Holo,
+      avg30Holo: data.avg30Holo.present ? data.avg30Holo.value : this.avg30Holo,
+      trendReverse: data.trendReverse.present
+          ? data.trendReverse.value
+          : this.trendReverse,
       url: data.url.present ? data.url.value : this.url,
     );
   }
@@ -1527,20 +1873,43 @@ class CardMarketPrice extends DataClass implements Insertable<CardMarketPrice> {
           ..write('id: $id, ')
           ..write('cardId: $cardId, ')
           ..write('fetchedAt: $fetchedAt, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('trendPrice: $trendPrice, ')
+          ..write('average: $average, ')
+          ..write('low: $low, ')
+          ..write('trend: $trend, ')
           ..write('avg1: $avg1, ')
+          ..write('avg7: $avg7, ')
           ..write('avg30: $avg30, ')
-          ..write('lowPrice: $lowPrice, ')
-          ..write('reverseHoloTrend: $reverseHoloTrend, ')
+          ..write('avgHolo: $avgHolo, ')
+          ..write('lowHolo: $lowHolo, ')
+          ..write('trendHolo: $trendHolo, ')
+          ..write('avg1Holo: $avg1Holo, ')
+          ..write('avg7Holo: $avg7Holo, ')
+          ..write('avg30Holo: $avg30Holo, ')
+          ..write('trendReverse: $trendReverse, ')
           ..write('url: $url')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, cardId, fetchedAt, updatedAt, trendPrice,
-      avg1, avg30, lowPrice, reverseHoloTrend, url);
+  int get hashCode => Object.hash(
+      id,
+      cardId,
+      fetchedAt,
+      average,
+      low,
+      trend,
+      avg1,
+      avg7,
+      avg30,
+      avgHolo,
+      lowHolo,
+      trendHolo,
+      avg1Holo,
+      avg7Holo,
+      avg30Holo,
+      trendReverse,
+      url);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1548,12 +1917,19 @@ class CardMarketPrice extends DataClass implements Insertable<CardMarketPrice> {
           other.id == this.id &&
           other.cardId == this.cardId &&
           other.fetchedAt == this.fetchedAt &&
-          other.updatedAt == this.updatedAt &&
-          other.trendPrice == this.trendPrice &&
+          other.average == this.average &&
+          other.low == this.low &&
+          other.trend == this.trend &&
           other.avg1 == this.avg1 &&
+          other.avg7 == this.avg7 &&
           other.avg30 == this.avg30 &&
-          other.lowPrice == this.lowPrice &&
-          other.reverseHoloTrend == this.reverseHoloTrend &&
+          other.avgHolo == this.avgHolo &&
+          other.lowHolo == this.lowHolo &&
+          other.trendHolo == this.trendHolo &&
+          other.avg1Holo == this.avg1Holo &&
+          other.avg7Holo == this.avg7Holo &&
+          other.avg30Holo == this.avg30Holo &&
+          other.trendReverse == this.trendReverse &&
           other.url == this.url);
 }
 
@@ -1561,61 +1937,95 @@ class CardMarketPricesCompanion extends UpdateCompanion<CardMarketPrice> {
   final Value<int> id;
   final Value<String> cardId;
   final Value<DateTime> fetchedAt;
-  final Value<String> updatedAt;
-  final Value<double?> trendPrice;
+  final Value<double?> average;
+  final Value<double?> low;
+  final Value<double?> trend;
   final Value<double?> avg1;
+  final Value<double?> avg7;
   final Value<double?> avg30;
-  final Value<double?> lowPrice;
-  final Value<double?> reverseHoloTrend;
+  final Value<double?> avgHolo;
+  final Value<double?> lowHolo;
+  final Value<double?> trendHolo;
+  final Value<double?> avg1Holo;
+  final Value<double?> avg7Holo;
+  final Value<double?> avg30Holo;
+  final Value<double?> trendReverse;
   final Value<String?> url;
   const CardMarketPricesCompanion({
     this.id = const Value.absent(),
     this.cardId = const Value.absent(),
     this.fetchedAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-    this.trendPrice = const Value.absent(),
+    this.average = const Value.absent(),
+    this.low = const Value.absent(),
+    this.trend = const Value.absent(),
     this.avg1 = const Value.absent(),
+    this.avg7 = const Value.absent(),
     this.avg30 = const Value.absent(),
-    this.lowPrice = const Value.absent(),
-    this.reverseHoloTrend = const Value.absent(),
+    this.avgHolo = const Value.absent(),
+    this.lowHolo = const Value.absent(),
+    this.trendHolo = const Value.absent(),
+    this.avg1Holo = const Value.absent(),
+    this.avg7Holo = const Value.absent(),
+    this.avg30Holo = const Value.absent(),
+    this.trendReverse = const Value.absent(),
     this.url = const Value.absent(),
   });
   CardMarketPricesCompanion.insert({
     this.id = const Value.absent(),
     required String cardId,
     required DateTime fetchedAt,
-    required String updatedAt,
-    this.trendPrice = const Value.absent(),
+    this.average = const Value.absent(),
+    this.low = const Value.absent(),
+    this.trend = const Value.absent(),
     this.avg1 = const Value.absent(),
+    this.avg7 = const Value.absent(),
     this.avg30 = const Value.absent(),
-    this.lowPrice = const Value.absent(),
-    this.reverseHoloTrend = const Value.absent(),
+    this.avgHolo = const Value.absent(),
+    this.lowHolo = const Value.absent(),
+    this.trendHolo = const Value.absent(),
+    this.avg1Holo = const Value.absent(),
+    this.avg7Holo = const Value.absent(),
+    this.avg30Holo = const Value.absent(),
+    this.trendReverse = const Value.absent(),
     this.url = const Value.absent(),
   })  : cardId = Value(cardId),
-        fetchedAt = Value(fetchedAt),
-        updatedAt = Value(updatedAt);
+        fetchedAt = Value(fetchedAt);
   static Insertable<CardMarketPrice> custom({
     Expression<int>? id,
     Expression<String>? cardId,
     Expression<DateTime>? fetchedAt,
-    Expression<String>? updatedAt,
-    Expression<double>? trendPrice,
+    Expression<double>? average,
+    Expression<double>? low,
+    Expression<double>? trend,
     Expression<double>? avg1,
+    Expression<double>? avg7,
     Expression<double>? avg30,
-    Expression<double>? lowPrice,
-    Expression<double>? reverseHoloTrend,
+    Expression<double>? avgHolo,
+    Expression<double>? lowHolo,
+    Expression<double>? trendHolo,
+    Expression<double>? avg1Holo,
+    Expression<double>? avg7Holo,
+    Expression<double>? avg30Holo,
+    Expression<double>? trendReverse,
     Expression<String>? url,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (cardId != null) 'card_id': cardId,
       if (fetchedAt != null) 'fetched_at': fetchedAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-      if (trendPrice != null) 'trend_price': trendPrice,
+      if (average != null) 'average': average,
+      if (low != null) 'low': low,
+      if (trend != null) 'trend': trend,
       if (avg1 != null) 'avg1': avg1,
+      if (avg7 != null) 'avg7': avg7,
       if (avg30 != null) 'avg30': avg30,
-      if (lowPrice != null) 'low_price': lowPrice,
-      if (reverseHoloTrend != null) 'reverse_holo_trend': reverseHoloTrend,
+      if (avgHolo != null) 'avg_holo': avgHolo,
+      if (lowHolo != null) 'low_holo': lowHolo,
+      if (trendHolo != null) 'trend_holo': trendHolo,
+      if (avg1Holo != null) 'avg1_holo': avg1Holo,
+      if (avg7Holo != null) 'avg7_holo': avg7Holo,
+      if (avg30Holo != null) 'avg30_holo': avg30Holo,
+      if (trendReverse != null) 'trend_reverse': trendReverse,
       if (url != null) 'url': url,
     });
   }
@@ -1624,23 +2034,37 @@ class CardMarketPricesCompanion extends UpdateCompanion<CardMarketPrice> {
       {Value<int>? id,
       Value<String>? cardId,
       Value<DateTime>? fetchedAt,
-      Value<String>? updatedAt,
-      Value<double?>? trendPrice,
+      Value<double?>? average,
+      Value<double?>? low,
+      Value<double?>? trend,
       Value<double?>? avg1,
+      Value<double?>? avg7,
       Value<double?>? avg30,
-      Value<double?>? lowPrice,
-      Value<double?>? reverseHoloTrend,
+      Value<double?>? avgHolo,
+      Value<double?>? lowHolo,
+      Value<double?>? trendHolo,
+      Value<double?>? avg1Holo,
+      Value<double?>? avg7Holo,
+      Value<double?>? avg30Holo,
+      Value<double?>? trendReverse,
       Value<String?>? url}) {
     return CardMarketPricesCompanion(
       id: id ?? this.id,
       cardId: cardId ?? this.cardId,
       fetchedAt: fetchedAt ?? this.fetchedAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      trendPrice: trendPrice ?? this.trendPrice,
+      average: average ?? this.average,
+      low: low ?? this.low,
+      trend: trend ?? this.trend,
       avg1: avg1 ?? this.avg1,
+      avg7: avg7 ?? this.avg7,
       avg30: avg30 ?? this.avg30,
-      lowPrice: lowPrice ?? this.lowPrice,
-      reverseHoloTrend: reverseHoloTrend ?? this.reverseHoloTrend,
+      avgHolo: avgHolo ?? this.avgHolo,
+      lowHolo: lowHolo ?? this.lowHolo,
+      trendHolo: trendHolo ?? this.trendHolo,
+      avg1Holo: avg1Holo ?? this.avg1Holo,
+      avg7Holo: avg7Holo ?? this.avg7Holo,
+      avg30Holo: avg30Holo ?? this.avg30Holo,
+      trendReverse: trendReverse ?? this.trendReverse,
       url: url ?? this.url,
     );
   }
@@ -1657,23 +2081,44 @@ class CardMarketPricesCompanion extends UpdateCompanion<CardMarketPrice> {
     if (fetchedAt.present) {
       map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
     }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<String>(updatedAt.value);
+    if (average.present) {
+      map['average'] = Variable<double>(average.value);
     }
-    if (trendPrice.present) {
-      map['trend_price'] = Variable<double>(trendPrice.value);
+    if (low.present) {
+      map['low'] = Variable<double>(low.value);
+    }
+    if (trend.present) {
+      map['trend'] = Variable<double>(trend.value);
     }
     if (avg1.present) {
       map['avg1'] = Variable<double>(avg1.value);
     }
+    if (avg7.present) {
+      map['avg7'] = Variable<double>(avg7.value);
+    }
     if (avg30.present) {
       map['avg30'] = Variable<double>(avg30.value);
     }
-    if (lowPrice.present) {
-      map['low_price'] = Variable<double>(lowPrice.value);
+    if (avgHolo.present) {
+      map['avg_holo'] = Variable<double>(avgHolo.value);
     }
-    if (reverseHoloTrend.present) {
-      map['reverse_holo_trend'] = Variable<double>(reverseHoloTrend.value);
+    if (lowHolo.present) {
+      map['low_holo'] = Variable<double>(lowHolo.value);
+    }
+    if (trendHolo.present) {
+      map['trend_holo'] = Variable<double>(trendHolo.value);
+    }
+    if (avg1Holo.present) {
+      map['avg1_holo'] = Variable<double>(avg1Holo.value);
+    }
+    if (avg7Holo.present) {
+      map['avg7_holo'] = Variable<double>(avg7Holo.value);
+    }
+    if (avg30Holo.present) {
+      map['avg30_holo'] = Variable<double>(avg30Holo.value);
+    }
+    if (trendReverse.present) {
+      map['trend_reverse'] = Variable<double>(trendReverse.value);
     }
     if (url.present) {
       map['url'] = Variable<String>(url.value);
@@ -1687,12 +2132,19 @@ class CardMarketPricesCompanion extends UpdateCompanion<CardMarketPrice> {
           ..write('id: $id, ')
           ..write('cardId: $cardId, ')
           ..write('fetchedAt: $fetchedAt, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('trendPrice: $trendPrice, ')
+          ..write('average: $average, ')
+          ..write('low: $low, ')
+          ..write('trend: $trend, ')
           ..write('avg1: $avg1, ')
+          ..write('avg7: $avg7, ')
           ..write('avg30: $avg30, ')
-          ..write('lowPrice: $lowPrice, ')
-          ..write('reverseHoloTrend: $reverseHoloTrend, ')
+          ..write('avgHolo: $avgHolo, ')
+          ..write('lowHolo: $lowHolo, ')
+          ..write('trendHolo: $trendHolo, ')
+          ..write('avg1Holo: $avg1Holo, ')
+          ..write('avg7Holo: $avg7Holo, ')
+          ..write('avg30Holo: $avg30Holo, ')
+          ..write('trendReverse: $trendReverse, ')
           ..write('url: $url')
           ..write(')'))
         .toString();
@@ -1728,12 +2180,6 @@ class $TcgPlayerPricesTable extends TcgPlayerPrices
   late final GeneratedColumn<DateTime> fetchedAt = GeneratedColumn<DateTime>(
       'fetched_at', aliasedName, false,
       type: DriftSqlType.dateTime, requiredDuringInsert: true);
-  static const VerificationMeta _updatedAtMeta =
-      const VerificationMeta('updatedAt');
-  @override
-  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
-      'updated_at', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _normalMarketMeta =
       const VerificationMeta('normalMarket');
   @override
@@ -1746,17 +2192,65 @@ class $TcgPlayerPricesTable extends TcgPlayerPrices
   late final GeneratedColumn<double> normalLow = GeneratedColumn<double>(
       'normal_low', aliasedName, true,
       type: DriftSqlType.double, requiredDuringInsert: false);
-  static const VerificationMeta _reverseHoloMarketMeta =
-      const VerificationMeta('reverseHoloMarket');
+  static const VerificationMeta _normalMidMeta =
+      const VerificationMeta('normalMid');
   @override
-  late final GeneratedColumn<double> reverseHoloMarket =
-      GeneratedColumn<double>('reverse_holo_market', aliasedName, true,
-          type: DriftSqlType.double, requiredDuringInsert: false);
-  static const VerificationMeta _reverseHoloLowMeta =
-      const VerificationMeta('reverseHoloLow');
+  late final GeneratedColumn<double> normalMid = GeneratedColumn<double>(
+      'normal_mid', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _normalDirectLowMeta =
+      const VerificationMeta('normalDirectLow');
   @override
-  late final GeneratedColumn<double> reverseHoloLow = GeneratedColumn<double>(
-      'reverse_holo_low', aliasedName, true,
+  late final GeneratedColumn<double> normalDirectLow = GeneratedColumn<double>(
+      'normal_direct_low', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _holoMarketMeta =
+      const VerificationMeta('holoMarket');
+  @override
+  late final GeneratedColumn<double> holoMarket = GeneratedColumn<double>(
+      'holo_market', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _holoLowMeta =
+      const VerificationMeta('holoLow');
+  @override
+  late final GeneratedColumn<double> holoLow = GeneratedColumn<double>(
+      'holo_low', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _holoMidMeta =
+      const VerificationMeta('holoMid');
+  @override
+  late final GeneratedColumn<double> holoMid = GeneratedColumn<double>(
+      'holo_mid', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _holoDirectLowMeta =
+      const VerificationMeta('holoDirectLow');
+  @override
+  late final GeneratedColumn<double> holoDirectLow = GeneratedColumn<double>(
+      'holo_direct_low', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _reverseMarketMeta =
+      const VerificationMeta('reverseMarket');
+  @override
+  late final GeneratedColumn<double> reverseMarket = GeneratedColumn<double>(
+      'reverse_market', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _reverseLowMeta =
+      const VerificationMeta('reverseLow');
+  @override
+  late final GeneratedColumn<double> reverseLow = GeneratedColumn<double>(
+      'reverse_low', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _reverseMidMeta =
+      const VerificationMeta('reverseMid');
+  @override
+  late final GeneratedColumn<double> reverseMid = GeneratedColumn<double>(
+      'reverse_mid', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _reverseDirectLowMeta =
+      const VerificationMeta('reverseDirectLow');
+  @override
+  late final GeneratedColumn<double> reverseDirectLow = GeneratedColumn<double>(
+      'reverse_direct_low', aliasedName, true,
       type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _urlMeta = const VerificationMeta('url');
   @override
@@ -1768,11 +2262,18 @@ class $TcgPlayerPricesTable extends TcgPlayerPrices
         id,
         cardId,
         fetchedAt,
-        updatedAt,
         normalMarket,
         normalLow,
-        reverseHoloMarket,
-        reverseHoloLow,
+        normalMid,
+        normalDirectLow,
+        holoMarket,
+        holoLow,
+        holoMid,
+        holoDirectLow,
+        reverseMarket,
+        reverseLow,
+        reverseMid,
+        reverseDirectLow,
         url
       ];
   @override
@@ -1800,12 +2301,6 @@ class $TcgPlayerPricesTable extends TcgPlayerPrices
     } else if (isInserting) {
       context.missing(_fetchedAtMeta);
     }
-    if (data.containsKey('updated_at')) {
-      context.handle(_updatedAtMeta,
-          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
-    } else if (isInserting) {
-      context.missing(_updatedAtMeta);
-    }
     if (data.containsKey('normal_market')) {
       context.handle(
           _normalMarketMeta,
@@ -1816,17 +2311,59 @@ class $TcgPlayerPricesTable extends TcgPlayerPrices
       context.handle(_normalLowMeta,
           normalLow.isAcceptableOrUnknown(data['normal_low']!, _normalLowMeta));
     }
-    if (data.containsKey('reverse_holo_market')) {
-      context.handle(
-          _reverseHoloMarketMeta,
-          reverseHoloMarket.isAcceptableOrUnknown(
-              data['reverse_holo_market']!, _reverseHoloMarketMeta));
+    if (data.containsKey('normal_mid')) {
+      context.handle(_normalMidMeta,
+          normalMid.isAcceptableOrUnknown(data['normal_mid']!, _normalMidMeta));
     }
-    if (data.containsKey('reverse_holo_low')) {
+    if (data.containsKey('normal_direct_low')) {
       context.handle(
-          _reverseHoloLowMeta,
-          reverseHoloLow.isAcceptableOrUnknown(
-              data['reverse_holo_low']!, _reverseHoloLowMeta));
+          _normalDirectLowMeta,
+          normalDirectLow.isAcceptableOrUnknown(
+              data['normal_direct_low']!, _normalDirectLowMeta));
+    }
+    if (data.containsKey('holo_market')) {
+      context.handle(
+          _holoMarketMeta,
+          holoMarket.isAcceptableOrUnknown(
+              data['holo_market']!, _holoMarketMeta));
+    }
+    if (data.containsKey('holo_low')) {
+      context.handle(_holoLowMeta,
+          holoLow.isAcceptableOrUnknown(data['holo_low']!, _holoLowMeta));
+    }
+    if (data.containsKey('holo_mid')) {
+      context.handle(_holoMidMeta,
+          holoMid.isAcceptableOrUnknown(data['holo_mid']!, _holoMidMeta));
+    }
+    if (data.containsKey('holo_direct_low')) {
+      context.handle(
+          _holoDirectLowMeta,
+          holoDirectLow.isAcceptableOrUnknown(
+              data['holo_direct_low']!, _holoDirectLowMeta));
+    }
+    if (data.containsKey('reverse_market')) {
+      context.handle(
+          _reverseMarketMeta,
+          reverseMarket.isAcceptableOrUnknown(
+              data['reverse_market']!, _reverseMarketMeta));
+    }
+    if (data.containsKey('reverse_low')) {
+      context.handle(
+          _reverseLowMeta,
+          reverseLow.isAcceptableOrUnknown(
+              data['reverse_low']!, _reverseLowMeta));
+    }
+    if (data.containsKey('reverse_mid')) {
+      context.handle(
+          _reverseMidMeta,
+          reverseMid.isAcceptableOrUnknown(
+              data['reverse_mid']!, _reverseMidMeta));
+    }
+    if (data.containsKey('reverse_direct_low')) {
+      context.handle(
+          _reverseDirectLowMeta,
+          reverseDirectLow.isAcceptableOrUnknown(
+              data['reverse_direct_low']!, _reverseDirectLowMeta));
     }
     if (data.containsKey('url')) {
       context.handle(
@@ -1847,16 +2384,30 @@ class $TcgPlayerPricesTable extends TcgPlayerPrices
           .read(DriftSqlType.string, data['${effectivePrefix}card_id'])!,
       fetchedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}fetched_at'])!,
-      updatedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}updated_at'])!,
       normalMarket: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}normal_market']),
       normalLow: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}normal_low']),
-      reverseHoloMarket: attachedDatabase.typeMapping.read(
-          DriftSqlType.double, data['${effectivePrefix}reverse_holo_market']),
-      reverseHoloLow: attachedDatabase.typeMapping.read(
-          DriftSqlType.double, data['${effectivePrefix}reverse_holo_low']),
+      normalMid: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}normal_mid']),
+      normalDirectLow: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}normal_direct_low']),
+      holoMarket: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}holo_market']),
+      holoLow: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}holo_low']),
+      holoMid: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}holo_mid']),
+      holoDirectLow: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}holo_direct_low']),
+      reverseMarket: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}reverse_market']),
+      reverseLow: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}reverse_low']),
+      reverseMid: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}reverse_mid']),
+      reverseDirectLow: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}reverse_direct_low']),
       url: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}url']),
     );
@@ -1872,21 +2423,35 @@ class TcgPlayerPrice extends DataClass implements Insertable<TcgPlayerPrice> {
   final int id;
   final String cardId;
   final DateTime fetchedAt;
-  final String updatedAt;
   final double? normalMarket;
   final double? normalLow;
-  final double? reverseHoloMarket;
-  final double? reverseHoloLow;
+  final double? normalMid;
+  final double? normalDirectLow;
+  final double? holoMarket;
+  final double? holoLow;
+  final double? holoMid;
+  final double? holoDirectLow;
+  final double? reverseMarket;
+  final double? reverseLow;
+  final double? reverseMid;
+  final double? reverseDirectLow;
   final String? url;
   const TcgPlayerPrice(
       {required this.id,
       required this.cardId,
       required this.fetchedAt,
-      required this.updatedAt,
       this.normalMarket,
       this.normalLow,
-      this.reverseHoloMarket,
-      this.reverseHoloLow,
+      this.normalMid,
+      this.normalDirectLow,
+      this.holoMarket,
+      this.holoLow,
+      this.holoMid,
+      this.holoDirectLow,
+      this.reverseMarket,
+      this.reverseLow,
+      this.reverseMid,
+      this.reverseDirectLow,
       this.url});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1894,18 +2459,41 @@ class TcgPlayerPrice extends DataClass implements Insertable<TcgPlayerPrice> {
     map['id'] = Variable<int>(id);
     map['card_id'] = Variable<String>(cardId);
     map['fetched_at'] = Variable<DateTime>(fetchedAt);
-    map['updated_at'] = Variable<String>(updatedAt);
     if (!nullToAbsent || normalMarket != null) {
       map['normal_market'] = Variable<double>(normalMarket);
     }
     if (!nullToAbsent || normalLow != null) {
       map['normal_low'] = Variable<double>(normalLow);
     }
-    if (!nullToAbsent || reverseHoloMarket != null) {
-      map['reverse_holo_market'] = Variable<double>(reverseHoloMarket);
+    if (!nullToAbsent || normalMid != null) {
+      map['normal_mid'] = Variable<double>(normalMid);
     }
-    if (!nullToAbsent || reverseHoloLow != null) {
-      map['reverse_holo_low'] = Variable<double>(reverseHoloLow);
+    if (!nullToAbsent || normalDirectLow != null) {
+      map['normal_direct_low'] = Variable<double>(normalDirectLow);
+    }
+    if (!nullToAbsent || holoMarket != null) {
+      map['holo_market'] = Variable<double>(holoMarket);
+    }
+    if (!nullToAbsent || holoLow != null) {
+      map['holo_low'] = Variable<double>(holoLow);
+    }
+    if (!nullToAbsent || holoMid != null) {
+      map['holo_mid'] = Variable<double>(holoMid);
+    }
+    if (!nullToAbsent || holoDirectLow != null) {
+      map['holo_direct_low'] = Variable<double>(holoDirectLow);
+    }
+    if (!nullToAbsent || reverseMarket != null) {
+      map['reverse_market'] = Variable<double>(reverseMarket);
+    }
+    if (!nullToAbsent || reverseLow != null) {
+      map['reverse_low'] = Variable<double>(reverseLow);
+    }
+    if (!nullToAbsent || reverseMid != null) {
+      map['reverse_mid'] = Variable<double>(reverseMid);
+    }
+    if (!nullToAbsent || reverseDirectLow != null) {
+      map['reverse_direct_low'] = Variable<double>(reverseDirectLow);
     }
     if (!nullToAbsent || url != null) {
       map['url'] = Variable<String>(url);
@@ -1918,19 +2506,42 @@ class TcgPlayerPrice extends DataClass implements Insertable<TcgPlayerPrice> {
       id: Value(id),
       cardId: Value(cardId),
       fetchedAt: Value(fetchedAt),
-      updatedAt: Value(updatedAt),
       normalMarket: normalMarket == null && nullToAbsent
           ? const Value.absent()
           : Value(normalMarket),
       normalLow: normalLow == null && nullToAbsent
           ? const Value.absent()
           : Value(normalLow),
-      reverseHoloMarket: reverseHoloMarket == null && nullToAbsent
+      normalMid: normalMid == null && nullToAbsent
           ? const Value.absent()
-          : Value(reverseHoloMarket),
-      reverseHoloLow: reverseHoloLow == null && nullToAbsent
+          : Value(normalMid),
+      normalDirectLow: normalDirectLow == null && nullToAbsent
           ? const Value.absent()
-          : Value(reverseHoloLow),
+          : Value(normalDirectLow),
+      holoMarket: holoMarket == null && nullToAbsent
+          ? const Value.absent()
+          : Value(holoMarket),
+      holoLow: holoLow == null && nullToAbsent
+          ? const Value.absent()
+          : Value(holoLow),
+      holoMid: holoMid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(holoMid),
+      holoDirectLow: holoDirectLow == null && nullToAbsent
+          ? const Value.absent()
+          : Value(holoDirectLow),
+      reverseMarket: reverseMarket == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reverseMarket),
+      reverseLow: reverseLow == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reverseLow),
+      reverseMid: reverseMid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reverseMid),
+      reverseDirectLow: reverseDirectLow == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reverseDirectLow),
       url: url == null && nullToAbsent ? const Value.absent() : Value(url),
     );
   }
@@ -1942,12 +2553,18 @@ class TcgPlayerPrice extends DataClass implements Insertable<TcgPlayerPrice> {
       id: serializer.fromJson<int>(json['id']),
       cardId: serializer.fromJson<String>(json['cardId']),
       fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
-      updatedAt: serializer.fromJson<String>(json['updatedAt']),
       normalMarket: serializer.fromJson<double?>(json['normalMarket']),
       normalLow: serializer.fromJson<double?>(json['normalLow']),
-      reverseHoloMarket:
-          serializer.fromJson<double?>(json['reverseHoloMarket']),
-      reverseHoloLow: serializer.fromJson<double?>(json['reverseHoloLow']),
+      normalMid: serializer.fromJson<double?>(json['normalMid']),
+      normalDirectLow: serializer.fromJson<double?>(json['normalDirectLow']),
+      holoMarket: serializer.fromJson<double?>(json['holoMarket']),
+      holoLow: serializer.fromJson<double?>(json['holoLow']),
+      holoMid: serializer.fromJson<double?>(json['holoMid']),
+      holoDirectLow: serializer.fromJson<double?>(json['holoDirectLow']),
+      reverseMarket: serializer.fromJson<double?>(json['reverseMarket']),
+      reverseLow: serializer.fromJson<double?>(json['reverseLow']),
+      reverseMid: serializer.fromJson<double?>(json['reverseMid']),
+      reverseDirectLow: serializer.fromJson<double?>(json['reverseDirectLow']),
       url: serializer.fromJson<String?>(json['url']),
     );
   }
@@ -1958,11 +2575,18 @@ class TcgPlayerPrice extends DataClass implements Insertable<TcgPlayerPrice> {
       'id': serializer.toJson<int>(id),
       'cardId': serializer.toJson<String>(cardId),
       'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
-      'updatedAt': serializer.toJson<String>(updatedAt),
       'normalMarket': serializer.toJson<double?>(normalMarket),
       'normalLow': serializer.toJson<double?>(normalLow),
-      'reverseHoloMarket': serializer.toJson<double?>(reverseHoloMarket),
-      'reverseHoloLow': serializer.toJson<double?>(reverseHoloLow),
+      'normalMid': serializer.toJson<double?>(normalMid),
+      'normalDirectLow': serializer.toJson<double?>(normalDirectLow),
+      'holoMarket': serializer.toJson<double?>(holoMarket),
+      'holoLow': serializer.toJson<double?>(holoLow),
+      'holoMid': serializer.toJson<double?>(holoMid),
+      'holoDirectLow': serializer.toJson<double?>(holoDirectLow),
+      'reverseMarket': serializer.toJson<double?>(reverseMarket),
+      'reverseLow': serializer.toJson<double?>(reverseLow),
+      'reverseMid': serializer.toJson<double?>(reverseMid),
+      'reverseDirectLow': serializer.toJson<double?>(reverseDirectLow),
       'url': serializer.toJson<String?>(url),
     };
   }
@@ -1971,25 +2595,42 @@ class TcgPlayerPrice extends DataClass implements Insertable<TcgPlayerPrice> {
           {int? id,
           String? cardId,
           DateTime? fetchedAt,
-          String? updatedAt,
           Value<double?> normalMarket = const Value.absent(),
           Value<double?> normalLow = const Value.absent(),
-          Value<double?> reverseHoloMarket = const Value.absent(),
-          Value<double?> reverseHoloLow = const Value.absent(),
+          Value<double?> normalMid = const Value.absent(),
+          Value<double?> normalDirectLow = const Value.absent(),
+          Value<double?> holoMarket = const Value.absent(),
+          Value<double?> holoLow = const Value.absent(),
+          Value<double?> holoMid = const Value.absent(),
+          Value<double?> holoDirectLow = const Value.absent(),
+          Value<double?> reverseMarket = const Value.absent(),
+          Value<double?> reverseLow = const Value.absent(),
+          Value<double?> reverseMid = const Value.absent(),
+          Value<double?> reverseDirectLow = const Value.absent(),
           Value<String?> url = const Value.absent()}) =>
       TcgPlayerPrice(
         id: id ?? this.id,
         cardId: cardId ?? this.cardId,
         fetchedAt: fetchedAt ?? this.fetchedAt,
-        updatedAt: updatedAt ?? this.updatedAt,
         normalMarket:
             normalMarket.present ? normalMarket.value : this.normalMarket,
         normalLow: normalLow.present ? normalLow.value : this.normalLow,
-        reverseHoloMarket: reverseHoloMarket.present
-            ? reverseHoloMarket.value
-            : this.reverseHoloMarket,
-        reverseHoloLow:
-            reverseHoloLow.present ? reverseHoloLow.value : this.reverseHoloLow,
+        normalMid: normalMid.present ? normalMid.value : this.normalMid,
+        normalDirectLow: normalDirectLow.present
+            ? normalDirectLow.value
+            : this.normalDirectLow,
+        holoMarket: holoMarket.present ? holoMarket.value : this.holoMarket,
+        holoLow: holoLow.present ? holoLow.value : this.holoLow,
+        holoMid: holoMid.present ? holoMid.value : this.holoMid,
+        holoDirectLow:
+            holoDirectLow.present ? holoDirectLow.value : this.holoDirectLow,
+        reverseMarket:
+            reverseMarket.present ? reverseMarket.value : this.reverseMarket,
+        reverseLow: reverseLow.present ? reverseLow.value : this.reverseLow,
+        reverseMid: reverseMid.present ? reverseMid.value : this.reverseMid,
+        reverseDirectLow: reverseDirectLow.present
+            ? reverseDirectLow.value
+            : this.reverseDirectLow,
         url: url.present ? url.value : this.url,
       );
   TcgPlayerPrice copyWithCompanion(TcgPlayerPricesCompanion data) {
@@ -1997,17 +2638,31 @@ class TcgPlayerPrice extends DataClass implements Insertable<TcgPlayerPrice> {
       id: data.id.present ? data.id.value : this.id,
       cardId: data.cardId.present ? data.cardId.value : this.cardId,
       fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       normalMarket: data.normalMarket.present
           ? data.normalMarket.value
           : this.normalMarket,
       normalLow: data.normalLow.present ? data.normalLow.value : this.normalLow,
-      reverseHoloMarket: data.reverseHoloMarket.present
-          ? data.reverseHoloMarket.value
-          : this.reverseHoloMarket,
-      reverseHoloLow: data.reverseHoloLow.present
-          ? data.reverseHoloLow.value
-          : this.reverseHoloLow,
+      normalMid: data.normalMid.present ? data.normalMid.value : this.normalMid,
+      normalDirectLow: data.normalDirectLow.present
+          ? data.normalDirectLow.value
+          : this.normalDirectLow,
+      holoMarket:
+          data.holoMarket.present ? data.holoMarket.value : this.holoMarket,
+      holoLow: data.holoLow.present ? data.holoLow.value : this.holoLow,
+      holoMid: data.holoMid.present ? data.holoMid.value : this.holoMid,
+      holoDirectLow: data.holoDirectLow.present
+          ? data.holoDirectLow.value
+          : this.holoDirectLow,
+      reverseMarket: data.reverseMarket.present
+          ? data.reverseMarket.value
+          : this.reverseMarket,
+      reverseLow:
+          data.reverseLow.present ? data.reverseLow.value : this.reverseLow,
+      reverseMid:
+          data.reverseMid.present ? data.reverseMid.value : this.reverseMid,
+      reverseDirectLow: data.reverseDirectLow.present
+          ? data.reverseDirectLow.value
+          : this.reverseDirectLow,
       url: data.url.present ? data.url.value : this.url,
     );
   }
@@ -2018,19 +2673,41 @@ class TcgPlayerPrice extends DataClass implements Insertable<TcgPlayerPrice> {
           ..write('id: $id, ')
           ..write('cardId: $cardId, ')
           ..write('fetchedAt: $fetchedAt, ')
-          ..write('updatedAt: $updatedAt, ')
           ..write('normalMarket: $normalMarket, ')
           ..write('normalLow: $normalLow, ')
-          ..write('reverseHoloMarket: $reverseHoloMarket, ')
-          ..write('reverseHoloLow: $reverseHoloLow, ')
+          ..write('normalMid: $normalMid, ')
+          ..write('normalDirectLow: $normalDirectLow, ')
+          ..write('holoMarket: $holoMarket, ')
+          ..write('holoLow: $holoLow, ')
+          ..write('holoMid: $holoMid, ')
+          ..write('holoDirectLow: $holoDirectLow, ')
+          ..write('reverseMarket: $reverseMarket, ')
+          ..write('reverseLow: $reverseLow, ')
+          ..write('reverseMid: $reverseMid, ')
+          ..write('reverseDirectLow: $reverseDirectLow, ')
           ..write('url: $url')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, cardId, fetchedAt, updatedAt,
-      normalMarket, normalLow, reverseHoloMarket, reverseHoloLow, url);
+  int get hashCode => Object.hash(
+      id,
+      cardId,
+      fetchedAt,
+      normalMarket,
+      normalLow,
+      normalMid,
+      normalDirectLow,
+      holoMarket,
+      holoLow,
+      holoMid,
+      holoDirectLow,
+      reverseMarket,
+      reverseLow,
+      reverseMid,
+      reverseDirectLow,
+      url);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2038,11 +2715,18 @@ class TcgPlayerPrice extends DataClass implements Insertable<TcgPlayerPrice> {
           other.id == this.id &&
           other.cardId == this.cardId &&
           other.fetchedAt == this.fetchedAt &&
-          other.updatedAt == this.updatedAt &&
           other.normalMarket == this.normalMarket &&
           other.normalLow == this.normalLow &&
-          other.reverseHoloMarket == this.reverseHoloMarket &&
-          other.reverseHoloLow == this.reverseHoloLow &&
+          other.normalMid == this.normalMid &&
+          other.normalDirectLow == this.normalDirectLow &&
+          other.holoMarket == this.holoMarket &&
+          other.holoLow == this.holoLow &&
+          other.holoMid == this.holoMid &&
+          other.holoDirectLow == this.holoDirectLow &&
+          other.reverseMarket == this.reverseMarket &&
+          other.reverseLow == this.reverseLow &&
+          other.reverseMid == this.reverseMid &&
+          other.reverseDirectLow == this.reverseDirectLow &&
           other.url == this.url);
 }
 
@@ -2050,56 +2734,90 @@ class TcgPlayerPricesCompanion extends UpdateCompanion<TcgPlayerPrice> {
   final Value<int> id;
   final Value<String> cardId;
   final Value<DateTime> fetchedAt;
-  final Value<String> updatedAt;
   final Value<double?> normalMarket;
   final Value<double?> normalLow;
-  final Value<double?> reverseHoloMarket;
-  final Value<double?> reverseHoloLow;
+  final Value<double?> normalMid;
+  final Value<double?> normalDirectLow;
+  final Value<double?> holoMarket;
+  final Value<double?> holoLow;
+  final Value<double?> holoMid;
+  final Value<double?> holoDirectLow;
+  final Value<double?> reverseMarket;
+  final Value<double?> reverseLow;
+  final Value<double?> reverseMid;
+  final Value<double?> reverseDirectLow;
   final Value<String?> url;
   const TcgPlayerPricesCompanion({
     this.id = const Value.absent(),
     this.cardId = const Value.absent(),
     this.fetchedAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
     this.normalMarket = const Value.absent(),
     this.normalLow = const Value.absent(),
-    this.reverseHoloMarket = const Value.absent(),
-    this.reverseHoloLow = const Value.absent(),
+    this.normalMid = const Value.absent(),
+    this.normalDirectLow = const Value.absent(),
+    this.holoMarket = const Value.absent(),
+    this.holoLow = const Value.absent(),
+    this.holoMid = const Value.absent(),
+    this.holoDirectLow = const Value.absent(),
+    this.reverseMarket = const Value.absent(),
+    this.reverseLow = const Value.absent(),
+    this.reverseMid = const Value.absent(),
+    this.reverseDirectLow = const Value.absent(),
     this.url = const Value.absent(),
   });
   TcgPlayerPricesCompanion.insert({
     this.id = const Value.absent(),
     required String cardId,
     required DateTime fetchedAt,
-    required String updatedAt,
     this.normalMarket = const Value.absent(),
     this.normalLow = const Value.absent(),
-    this.reverseHoloMarket = const Value.absent(),
-    this.reverseHoloLow = const Value.absent(),
+    this.normalMid = const Value.absent(),
+    this.normalDirectLow = const Value.absent(),
+    this.holoMarket = const Value.absent(),
+    this.holoLow = const Value.absent(),
+    this.holoMid = const Value.absent(),
+    this.holoDirectLow = const Value.absent(),
+    this.reverseMarket = const Value.absent(),
+    this.reverseLow = const Value.absent(),
+    this.reverseMid = const Value.absent(),
+    this.reverseDirectLow = const Value.absent(),
     this.url = const Value.absent(),
   })  : cardId = Value(cardId),
-        fetchedAt = Value(fetchedAt),
-        updatedAt = Value(updatedAt);
+        fetchedAt = Value(fetchedAt);
   static Insertable<TcgPlayerPrice> custom({
     Expression<int>? id,
     Expression<String>? cardId,
     Expression<DateTime>? fetchedAt,
-    Expression<String>? updatedAt,
     Expression<double>? normalMarket,
     Expression<double>? normalLow,
-    Expression<double>? reverseHoloMarket,
-    Expression<double>? reverseHoloLow,
+    Expression<double>? normalMid,
+    Expression<double>? normalDirectLow,
+    Expression<double>? holoMarket,
+    Expression<double>? holoLow,
+    Expression<double>? holoMid,
+    Expression<double>? holoDirectLow,
+    Expression<double>? reverseMarket,
+    Expression<double>? reverseLow,
+    Expression<double>? reverseMid,
+    Expression<double>? reverseDirectLow,
     Expression<String>? url,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (cardId != null) 'card_id': cardId,
       if (fetchedAt != null) 'fetched_at': fetchedAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
       if (normalMarket != null) 'normal_market': normalMarket,
       if (normalLow != null) 'normal_low': normalLow,
-      if (reverseHoloMarket != null) 'reverse_holo_market': reverseHoloMarket,
-      if (reverseHoloLow != null) 'reverse_holo_low': reverseHoloLow,
+      if (normalMid != null) 'normal_mid': normalMid,
+      if (normalDirectLow != null) 'normal_direct_low': normalDirectLow,
+      if (holoMarket != null) 'holo_market': holoMarket,
+      if (holoLow != null) 'holo_low': holoLow,
+      if (holoMid != null) 'holo_mid': holoMid,
+      if (holoDirectLow != null) 'holo_direct_low': holoDirectLow,
+      if (reverseMarket != null) 'reverse_market': reverseMarket,
+      if (reverseLow != null) 'reverse_low': reverseLow,
+      if (reverseMid != null) 'reverse_mid': reverseMid,
+      if (reverseDirectLow != null) 'reverse_direct_low': reverseDirectLow,
       if (url != null) 'url': url,
     });
   }
@@ -2108,21 +2826,35 @@ class TcgPlayerPricesCompanion extends UpdateCompanion<TcgPlayerPrice> {
       {Value<int>? id,
       Value<String>? cardId,
       Value<DateTime>? fetchedAt,
-      Value<String>? updatedAt,
       Value<double?>? normalMarket,
       Value<double?>? normalLow,
-      Value<double?>? reverseHoloMarket,
-      Value<double?>? reverseHoloLow,
+      Value<double?>? normalMid,
+      Value<double?>? normalDirectLow,
+      Value<double?>? holoMarket,
+      Value<double?>? holoLow,
+      Value<double?>? holoMid,
+      Value<double?>? holoDirectLow,
+      Value<double?>? reverseMarket,
+      Value<double?>? reverseLow,
+      Value<double?>? reverseMid,
+      Value<double?>? reverseDirectLow,
       Value<String?>? url}) {
     return TcgPlayerPricesCompanion(
       id: id ?? this.id,
       cardId: cardId ?? this.cardId,
       fetchedAt: fetchedAt ?? this.fetchedAt,
-      updatedAt: updatedAt ?? this.updatedAt,
       normalMarket: normalMarket ?? this.normalMarket,
       normalLow: normalLow ?? this.normalLow,
-      reverseHoloMarket: reverseHoloMarket ?? this.reverseHoloMarket,
-      reverseHoloLow: reverseHoloLow ?? this.reverseHoloLow,
+      normalMid: normalMid ?? this.normalMid,
+      normalDirectLow: normalDirectLow ?? this.normalDirectLow,
+      holoMarket: holoMarket ?? this.holoMarket,
+      holoLow: holoLow ?? this.holoLow,
+      holoMid: holoMid ?? this.holoMid,
+      holoDirectLow: holoDirectLow ?? this.holoDirectLow,
+      reverseMarket: reverseMarket ?? this.reverseMarket,
+      reverseLow: reverseLow ?? this.reverseLow,
+      reverseMid: reverseMid ?? this.reverseMid,
+      reverseDirectLow: reverseDirectLow ?? this.reverseDirectLow,
       url: url ?? this.url,
     );
   }
@@ -2139,20 +2871,41 @@ class TcgPlayerPricesCompanion extends UpdateCompanion<TcgPlayerPrice> {
     if (fetchedAt.present) {
       map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
     }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<String>(updatedAt.value);
-    }
     if (normalMarket.present) {
       map['normal_market'] = Variable<double>(normalMarket.value);
     }
     if (normalLow.present) {
       map['normal_low'] = Variable<double>(normalLow.value);
     }
-    if (reverseHoloMarket.present) {
-      map['reverse_holo_market'] = Variable<double>(reverseHoloMarket.value);
+    if (normalMid.present) {
+      map['normal_mid'] = Variable<double>(normalMid.value);
     }
-    if (reverseHoloLow.present) {
-      map['reverse_holo_low'] = Variable<double>(reverseHoloLow.value);
+    if (normalDirectLow.present) {
+      map['normal_direct_low'] = Variable<double>(normalDirectLow.value);
+    }
+    if (holoMarket.present) {
+      map['holo_market'] = Variable<double>(holoMarket.value);
+    }
+    if (holoLow.present) {
+      map['holo_low'] = Variable<double>(holoLow.value);
+    }
+    if (holoMid.present) {
+      map['holo_mid'] = Variable<double>(holoMid.value);
+    }
+    if (holoDirectLow.present) {
+      map['holo_direct_low'] = Variable<double>(holoDirectLow.value);
+    }
+    if (reverseMarket.present) {
+      map['reverse_market'] = Variable<double>(reverseMarket.value);
+    }
+    if (reverseLow.present) {
+      map['reverse_low'] = Variable<double>(reverseLow.value);
+    }
+    if (reverseMid.present) {
+      map['reverse_mid'] = Variable<double>(reverseMid.value);
+    }
+    if (reverseDirectLow.present) {
+      map['reverse_direct_low'] = Variable<double>(reverseDirectLow.value);
     }
     if (url.present) {
       map['url'] = Variable<String>(url.value);
@@ -2166,11 +2919,18 @@ class TcgPlayerPricesCompanion extends UpdateCompanion<TcgPlayerPrice> {
           ..write('id: $id, ')
           ..write('cardId: $cardId, ')
           ..write('fetchedAt: $fetchedAt, ')
-          ..write('updatedAt: $updatedAt, ')
           ..write('normalMarket: $normalMarket, ')
           ..write('normalLow: $normalLow, ')
-          ..write('reverseHoloMarket: $reverseHoloMarket, ')
-          ..write('reverseHoloLow: $reverseHoloLow, ')
+          ..write('normalMid: $normalMid, ')
+          ..write('normalDirectLow: $normalDirectLow, ')
+          ..write('holoMarket: $holoMarket, ')
+          ..write('holoLow: $holoLow, ')
+          ..write('holoMid: $holoMid, ')
+          ..write('holoDirectLow: $holoDirectLow, ')
+          ..write('reverseMarket: $reverseMarket, ')
+          ..write('reverseLow: $reverseLow, ')
+          ..write('reverseMid: $reverseMid, ')
+          ..write('reverseDirectLow: $reverseDirectLow, ')
           ..write('url: $url')
           ..write(')'))
         .toString();
@@ -2800,12 +3560,13 @@ typedef $$CardSetsTableCreateCompanionBuilder = CardSetsCompanion Function({
   required String id,
   required String name,
   required String series,
-  required int printedTotal,
-  required int total,
-  required String releaseDate,
+  Value<int?> printedTotal,
+  Value<int?> total,
+  Value<String?> releaseDate,
   required String updatedAt,
-  required String logoUrl,
-  required String symbolUrl,
+  Value<String?> logoUrl,
+  Value<String?> logoUrlDe,
+  Value<String?> symbolUrl,
   Value<String?> nameDe,
   Value<int> rowid,
 });
@@ -2813,12 +3574,13 @@ typedef $$CardSetsTableUpdateCompanionBuilder = CardSetsCompanion Function({
   Value<String> id,
   Value<String> name,
   Value<String> series,
-  Value<int> printedTotal,
-  Value<int> total,
-  Value<String> releaseDate,
+  Value<int?> printedTotal,
+  Value<int?> total,
+  Value<String?> releaseDate,
   Value<String> updatedAt,
-  Value<String> logoUrl,
-  Value<String> symbolUrl,
+  Value<String?> logoUrl,
+  Value<String?> logoUrlDe,
+  Value<String?> symbolUrl,
   Value<String?> nameDe,
   Value<int> rowid,
 });
@@ -2843,12 +3605,13 @@ class $$CardSetsTableTableManager extends RootTableManager<
             Value<String> id = const Value.absent(),
             Value<String> name = const Value.absent(),
             Value<String> series = const Value.absent(),
-            Value<int> printedTotal = const Value.absent(),
-            Value<int> total = const Value.absent(),
-            Value<String> releaseDate = const Value.absent(),
+            Value<int?> printedTotal = const Value.absent(),
+            Value<int?> total = const Value.absent(),
+            Value<String?> releaseDate = const Value.absent(),
             Value<String> updatedAt = const Value.absent(),
-            Value<String> logoUrl = const Value.absent(),
-            Value<String> symbolUrl = const Value.absent(),
+            Value<String?> logoUrl = const Value.absent(),
+            Value<String?> logoUrlDe = const Value.absent(),
+            Value<String?> symbolUrl = const Value.absent(),
             Value<String?> nameDe = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -2861,6 +3624,7 @@ class $$CardSetsTableTableManager extends RootTableManager<
             releaseDate: releaseDate,
             updatedAt: updatedAt,
             logoUrl: logoUrl,
+            logoUrlDe: logoUrlDe,
             symbolUrl: symbolUrl,
             nameDe: nameDe,
             rowid: rowid,
@@ -2869,12 +3633,13 @@ class $$CardSetsTableTableManager extends RootTableManager<
             required String id,
             required String name,
             required String series,
-            required int printedTotal,
-            required int total,
-            required String releaseDate,
+            Value<int?> printedTotal = const Value.absent(),
+            Value<int?> total = const Value.absent(),
+            Value<String?> releaseDate = const Value.absent(),
             required String updatedAt,
-            required String logoUrl,
-            required String symbolUrl,
+            Value<String?> logoUrl = const Value.absent(),
+            Value<String?> logoUrlDe = const Value.absent(),
+            Value<String?> symbolUrl = const Value.absent(),
             Value<String?> nameDe = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -2887,6 +3652,7 @@ class $$CardSetsTableTableManager extends RootTableManager<
             releaseDate: releaseDate,
             updatedAt: updatedAt,
             logoUrl: logoUrl,
+            logoUrlDe: logoUrlDe,
             symbolUrl: symbolUrl,
             nameDe: nameDe,
             rowid: rowid,
@@ -2934,6 +3700,11 @@ class $$CardSetsTableFilterComposer
 
   ColumnFilters<String> get logoUrl => $state.composableBuilder(
       column: $state.table.logoUrl,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get logoUrlDe => $state.composableBuilder(
+      column: $state.table.logoUrlDe,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -3004,6 +3775,11 @@ class $$CardSetsTableOrderingComposer
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
+  ColumnOrderings<String> get logoUrlDe => $state.composableBuilder(
+      column: $state.table.logoUrlDe,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
   ColumnOrderings<String> get symbolUrl => $state.composableBuilder(
       column: $state.table.symbolUrl,
       builder: (column, joinBuilders) =>
@@ -3019,34 +3795,40 @@ typedef $$CardsTableCreateCompanionBuilder = CardsCompanion Function({
   required String id,
   required String setId,
   required String name,
+  Value<String?> nameDe,
   required String number,
-  required String imageUrlSmall,
-  required String imageUrlLarge,
-  Value<String?> supertype,
-  Value<String?> subtypes,
-  Value<String?> types,
+  required String imageUrl,
+  Value<String?> imageUrlDe,
   Value<String?> artist,
   Value<String?> rarity,
   Value<String?> flavorText,
-  Value<String?> nameDe,
   Value<String?> flavorTextDe,
+  Value<bool> hasFirstEdition,
+  Value<bool> hasNormal,
+  Value<bool> hasHolo,
+  Value<bool> hasReverse,
+  Value<bool> hasWPromo,
+  Value<int> sortNumber,
   Value<int> rowid,
 });
 typedef $$CardsTableUpdateCompanionBuilder = CardsCompanion Function({
   Value<String> id,
   Value<String> setId,
   Value<String> name,
+  Value<String?> nameDe,
   Value<String> number,
-  Value<String> imageUrlSmall,
-  Value<String> imageUrlLarge,
-  Value<String?> supertype,
-  Value<String?> subtypes,
-  Value<String?> types,
+  Value<String> imageUrl,
+  Value<String?> imageUrlDe,
   Value<String?> artist,
   Value<String?> rarity,
   Value<String?> flavorText,
-  Value<String?> nameDe,
   Value<String?> flavorTextDe,
+  Value<bool> hasFirstEdition,
+  Value<bool> hasNormal,
+  Value<bool> hasHolo,
+  Value<bool> hasReverse,
+  Value<bool> hasWPromo,
+  Value<int> sortNumber,
   Value<int> rowid,
 });
 
@@ -3070,68 +3852,80 @@ class $$CardsTableTableManager extends RootTableManager<
             Value<String> id = const Value.absent(),
             Value<String> setId = const Value.absent(),
             Value<String> name = const Value.absent(),
+            Value<String?> nameDe = const Value.absent(),
             Value<String> number = const Value.absent(),
-            Value<String> imageUrlSmall = const Value.absent(),
-            Value<String> imageUrlLarge = const Value.absent(),
-            Value<String?> supertype = const Value.absent(),
-            Value<String?> subtypes = const Value.absent(),
-            Value<String?> types = const Value.absent(),
+            Value<String> imageUrl = const Value.absent(),
+            Value<String?> imageUrlDe = const Value.absent(),
             Value<String?> artist = const Value.absent(),
             Value<String?> rarity = const Value.absent(),
             Value<String?> flavorText = const Value.absent(),
-            Value<String?> nameDe = const Value.absent(),
             Value<String?> flavorTextDe = const Value.absent(),
+            Value<bool> hasFirstEdition = const Value.absent(),
+            Value<bool> hasNormal = const Value.absent(),
+            Value<bool> hasHolo = const Value.absent(),
+            Value<bool> hasReverse = const Value.absent(),
+            Value<bool> hasWPromo = const Value.absent(),
+            Value<int> sortNumber = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               CardsCompanion(
             id: id,
             setId: setId,
             name: name,
+            nameDe: nameDe,
             number: number,
-            imageUrlSmall: imageUrlSmall,
-            imageUrlLarge: imageUrlLarge,
-            supertype: supertype,
-            subtypes: subtypes,
-            types: types,
+            imageUrl: imageUrl,
+            imageUrlDe: imageUrlDe,
             artist: artist,
             rarity: rarity,
             flavorText: flavorText,
-            nameDe: nameDe,
             flavorTextDe: flavorTextDe,
+            hasFirstEdition: hasFirstEdition,
+            hasNormal: hasNormal,
+            hasHolo: hasHolo,
+            hasReverse: hasReverse,
+            hasWPromo: hasWPromo,
+            sortNumber: sortNumber,
             rowid: rowid,
           ),
           createCompanionCallback: ({
             required String id,
             required String setId,
             required String name,
+            Value<String?> nameDe = const Value.absent(),
             required String number,
-            required String imageUrlSmall,
-            required String imageUrlLarge,
-            Value<String?> supertype = const Value.absent(),
-            Value<String?> subtypes = const Value.absent(),
-            Value<String?> types = const Value.absent(),
+            required String imageUrl,
+            Value<String?> imageUrlDe = const Value.absent(),
             Value<String?> artist = const Value.absent(),
             Value<String?> rarity = const Value.absent(),
             Value<String?> flavorText = const Value.absent(),
-            Value<String?> nameDe = const Value.absent(),
             Value<String?> flavorTextDe = const Value.absent(),
+            Value<bool> hasFirstEdition = const Value.absent(),
+            Value<bool> hasNormal = const Value.absent(),
+            Value<bool> hasHolo = const Value.absent(),
+            Value<bool> hasReverse = const Value.absent(),
+            Value<bool> hasWPromo = const Value.absent(),
+            Value<int> sortNumber = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               CardsCompanion.insert(
             id: id,
             setId: setId,
             name: name,
+            nameDe: nameDe,
             number: number,
-            imageUrlSmall: imageUrlSmall,
-            imageUrlLarge: imageUrlLarge,
-            supertype: supertype,
-            subtypes: subtypes,
-            types: types,
+            imageUrl: imageUrl,
+            imageUrlDe: imageUrlDe,
             artist: artist,
             rarity: rarity,
             flavorText: flavorText,
-            nameDe: nameDe,
             flavorTextDe: flavorTextDe,
+            hasFirstEdition: hasFirstEdition,
+            hasNormal: hasNormal,
+            hasHolo: hasHolo,
+            hasReverse: hasReverse,
+            hasWPromo: hasWPromo,
+            sortNumber: sortNumber,
             rowid: rowid,
           ),
         ));
@@ -3150,33 +3944,23 @@ class $$CardsTableFilterComposer
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
+  ColumnFilters<String> get nameDe => $state.composableBuilder(
+      column: $state.table.nameDe,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
   ColumnFilters<String> get number => $state.composableBuilder(
       column: $state.table.number,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
-  ColumnFilters<String> get imageUrlSmall => $state.composableBuilder(
-      column: $state.table.imageUrlSmall,
+  ColumnFilters<String> get imageUrl => $state.composableBuilder(
+      column: $state.table.imageUrl,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
-  ColumnFilters<String> get imageUrlLarge => $state.composableBuilder(
-      column: $state.table.imageUrlLarge,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get supertype => $state.composableBuilder(
-      column: $state.table.supertype,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get subtypes => $state.composableBuilder(
-      column: $state.table.subtypes,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get types => $state.composableBuilder(
-      column: $state.table.types,
+  ColumnFilters<String> get imageUrlDe => $state.composableBuilder(
+      column: $state.table.imageUrlDe,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -3195,13 +3979,38 @@ class $$CardsTableFilterComposer
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
-  ColumnFilters<String> get nameDe => $state.composableBuilder(
-      column: $state.table.nameDe,
+  ColumnFilters<String> get flavorTextDe => $state.composableBuilder(
+      column: $state.table.flavorTextDe,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
-  ColumnFilters<String> get flavorTextDe => $state.composableBuilder(
-      column: $state.table.flavorTextDe,
+  ColumnFilters<bool> get hasFirstEdition => $state.composableBuilder(
+      column: $state.table.hasFirstEdition,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get hasNormal => $state.composableBuilder(
+      column: $state.table.hasNormal,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get hasHolo => $state.composableBuilder(
+      column: $state.table.hasHolo,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get hasReverse => $state.composableBuilder(
+      column: $state.table.hasReverse,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get hasWPromo => $state.composableBuilder(
+      column: $state.table.hasWPromo,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<int> get sortNumber => $state.composableBuilder(
+      column: $state.table.sortNumber,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -3272,33 +4081,23 @@ class $$CardsTableOrderingComposer
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
+  ColumnOrderings<String> get nameDe => $state.composableBuilder(
+      column: $state.table.nameDe,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
   ColumnOrderings<String> get number => $state.composableBuilder(
       column: $state.table.number,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
-  ColumnOrderings<String> get imageUrlSmall => $state.composableBuilder(
-      column: $state.table.imageUrlSmall,
+  ColumnOrderings<String> get imageUrl => $state.composableBuilder(
+      column: $state.table.imageUrl,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
-  ColumnOrderings<String> get imageUrlLarge => $state.composableBuilder(
-      column: $state.table.imageUrlLarge,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get supertype => $state.composableBuilder(
-      column: $state.table.supertype,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get subtypes => $state.composableBuilder(
-      column: $state.table.subtypes,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get types => $state.composableBuilder(
-      column: $state.table.types,
+  ColumnOrderings<String> get imageUrlDe => $state.composableBuilder(
+      column: $state.table.imageUrlDe,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
@@ -3317,13 +4116,38 @@ class $$CardsTableOrderingComposer
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
-  ColumnOrderings<String> get nameDe => $state.composableBuilder(
-      column: $state.table.nameDe,
+  ColumnOrderings<String> get flavorTextDe => $state.composableBuilder(
+      column: $state.table.flavorTextDe,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
-  ColumnOrderings<String> get flavorTextDe => $state.composableBuilder(
-      column: $state.table.flavorTextDe,
+  ColumnOrderings<bool> get hasFirstEdition => $state.composableBuilder(
+      column: $state.table.hasFirstEdition,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get hasNormal => $state.composableBuilder(
+      column: $state.table.hasNormal,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get hasHolo => $state.composableBuilder(
+      column: $state.table.hasHolo,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get hasReverse => $state.composableBuilder(
+      column: $state.table.hasReverse,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get hasWPromo => $state.composableBuilder(
+      column: $state.table.hasWPromo,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<int> get sortNumber => $state.composableBuilder(
+      column: $state.table.sortNumber,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
@@ -3345,12 +4169,19 @@ typedef $$CardMarketPricesTableCreateCompanionBuilder
   Value<int> id,
   required String cardId,
   required DateTime fetchedAt,
-  required String updatedAt,
-  Value<double?> trendPrice,
+  Value<double?> average,
+  Value<double?> low,
+  Value<double?> trend,
   Value<double?> avg1,
+  Value<double?> avg7,
   Value<double?> avg30,
-  Value<double?> lowPrice,
-  Value<double?> reverseHoloTrend,
+  Value<double?> avgHolo,
+  Value<double?> lowHolo,
+  Value<double?> trendHolo,
+  Value<double?> avg1Holo,
+  Value<double?> avg7Holo,
+  Value<double?> avg30Holo,
+  Value<double?> trendReverse,
   Value<String?> url,
 });
 typedef $$CardMarketPricesTableUpdateCompanionBuilder
@@ -3358,12 +4189,19 @@ typedef $$CardMarketPricesTableUpdateCompanionBuilder
   Value<int> id,
   Value<String> cardId,
   Value<DateTime> fetchedAt,
-  Value<String> updatedAt,
-  Value<double?> trendPrice,
+  Value<double?> average,
+  Value<double?> low,
+  Value<double?> trend,
   Value<double?> avg1,
+  Value<double?> avg7,
   Value<double?> avg30,
-  Value<double?> lowPrice,
-  Value<double?> reverseHoloTrend,
+  Value<double?> avgHolo,
+  Value<double?> lowHolo,
+  Value<double?> trendHolo,
+  Value<double?> avg1Holo,
+  Value<double?> avg7Holo,
+  Value<double?> avg30Holo,
+  Value<double?> trendReverse,
   Value<String?> url,
 });
 
@@ -3388,48 +4226,76 @@ class $$CardMarketPricesTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<String> cardId = const Value.absent(),
             Value<DateTime> fetchedAt = const Value.absent(),
-            Value<String> updatedAt = const Value.absent(),
-            Value<double?> trendPrice = const Value.absent(),
+            Value<double?> average = const Value.absent(),
+            Value<double?> low = const Value.absent(),
+            Value<double?> trend = const Value.absent(),
             Value<double?> avg1 = const Value.absent(),
+            Value<double?> avg7 = const Value.absent(),
             Value<double?> avg30 = const Value.absent(),
-            Value<double?> lowPrice = const Value.absent(),
-            Value<double?> reverseHoloTrend = const Value.absent(),
+            Value<double?> avgHolo = const Value.absent(),
+            Value<double?> lowHolo = const Value.absent(),
+            Value<double?> trendHolo = const Value.absent(),
+            Value<double?> avg1Holo = const Value.absent(),
+            Value<double?> avg7Holo = const Value.absent(),
+            Value<double?> avg30Holo = const Value.absent(),
+            Value<double?> trendReverse = const Value.absent(),
             Value<String?> url = const Value.absent(),
           }) =>
               CardMarketPricesCompanion(
             id: id,
             cardId: cardId,
             fetchedAt: fetchedAt,
-            updatedAt: updatedAt,
-            trendPrice: trendPrice,
+            average: average,
+            low: low,
+            trend: trend,
             avg1: avg1,
+            avg7: avg7,
             avg30: avg30,
-            lowPrice: lowPrice,
-            reverseHoloTrend: reverseHoloTrend,
+            avgHolo: avgHolo,
+            lowHolo: lowHolo,
+            trendHolo: trendHolo,
+            avg1Holo: avg1Holo,
+            avg7Holo: avg7Holo,
+            avg30Holo: avg30Holo,
+            trendReverse: trendReverse,
             url: url,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required String cardId,
             required DateTime fetchedAt,
-            required String updatedAt,
-            Value<double?> trendPrice = const Value.absent(),
+            Value<double?> average = const Value.absent(),
+            Value<double?> low = const Value.absent(),
+            Value<double?> trend = const Value.absent(),
             Value<double?> avg1 = const Value.absent(),
+            Value<double?> avg7 = const Value.absent(),
             Value<double?> avg30 = const Value.absent(),
-            Value<double?> lowPrice = const Value.absent(),
-            Value<double?> reverseHoloTrend = const Value.absent(),
+            Value<double?> avgHolo = const Value.absent(),
+            Value<double?> lowHolo = const Value.absent(),
+            Value<double?> trendHolo = const Value.absent(),
+            Value<double?> avg1Holo = const Value.absent(),
+            Value<double?> avg7Holo = const Value.absent(),
+            Value<double?> avg30Holo = const Value.absent(),
+            Value<double?> trendReverse = const Value.absent(),
             Value<String?> url = const Value.absent(),
           }) =>
               CardMarketPricesCompanion.insert(
             id: id,
             cardId: cardId,
             fetchedAt: fetchedAt,
-            updatedAt: updatedAt,
-            trendPrice: trendPrice,
+            average: average,
+            low: low,
+            trend: trend,
             avg1: avg1,
+            avg7: avg7,
             avg30: avg30,
-            lowPrice: lowPrice,
-            reverseHoloTrend: reverseHoloTrend,
+            avgHolo: avgHolo,
+            lowHolo: lowHolo,
+            trendHolo: trendHolo,
+            avg1Holo: avg1Holo,
+            avg7Holo: avg7Holo,
+            avg30Holo: avg30Holo,
+            trendReverse: trendReverse,
             url: url,
           ),
         ));
@@ -3448,13 +4314,18 @@ class $$CardMarketPricesTableFilterComposer
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
-  ColumnFilters<String> get updatedAt => $state.composableBuilder(
-      column: $state.table.updatedAt,
+  ColumnFilters<double> get average => $state.composableBuilder(
+      column: $state.table.average,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
-  ColumnFilters<double> get trendPrice => $state.composableBuilder(
-      column: $state.table.trendPrice,
+  ColumnFilters<double> get low => $state.composableBuilder(
+      column: $state.table.low,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get trend => $state.composableBuilder(
+      column: $state.table.trend,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -3463,18 +4334,48 @@ class $$CardMarketPricesTableFilterComposer
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
+  ColumnFilters<double> get avg7 => $state.composableBuilder(
+      column: $state.table.avg7,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
   ColumnFilters<double> get avg30 => $state.composableBuilder(
       column: $state.table.avg30,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
-  ColumnFilters<double> get lowPrice => $state.composableBuilder(
-      column: $state.table.lowPrice,
+  ColumnFilters<double> get avgHolo => $state.composableBuilder(
+      column: $state.table.avgHolo,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
-  ColumnFilters<double> get reverseHoloTrend => $state.composableBuilder(
-      column: $state.table.reverseHoloTrend,
+  ColumnFilters<double> get lowHolo => $state.composableBuilder(
+      column: $state.table.lowHolo,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get trendHolo => $state.composableBuilder(
+      column: $state.table.trendHolo,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get avg1Holo => $state.composableBuilder(
+      column: $state.table.avg1Holo,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get avg7Holo => $state.composableBuilder(
+      column: $state.table.avg7Holo,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get avg30Holo => $state.composableBuilder(
+      column: $state.table.avg30Holo,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get trendReverse => $state.composableBuilder(
+      column: $state.table.trendReverse,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -3509,13 +4410,18 @@ class $$CardMarketPricesTableOrderingComposer
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
-  ColumnOrderings<String> get updatedAt => $state.composableBuilder(
-      column: $state.table.updatedAt,
+  ColumnOrderings<double> get average => $state.composableBuilder(
+      column: $state.table.average,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
-  ColumnOrderings<double> get trendPrice => $state.composableBuilder(
-      column: $state.table.trendPrice,
+  ColumnOrderings<double> get low => $state.composableBuilder(
+      column: $state.table.low,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get trend => $state.composableBuilder(
+      column: $state.table.trend,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
@@ -3524,18 +4430,48 @@ class $$CardMarketPricesTableOrderingComposer
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
+  ColumnOrderings<double> get avg7 => $state.composableBuilder(
+      column: $state.table.avg7,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
   ColumnOrderings<double> get avg30 => $state.composableBuilder(
       column: $state.table.avg30,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
-  ColumnOrderings<double> get lowPrice => $state.composableBuilder(
-      column: $state.table.lowPrice,
+  ColumnOrderings<double> get avgHolo => $state.composableBuilder(
+      column: $state.table.avgHolo,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
-  ColumnOrderings<double> get reverseHoloTrend => $state.composableBuilder(
-      column: $state.table.reverseHoloTrend,
+  ColumnOrderings<double> get lowHolo => $state.composableBuilder(
+      column: $state.table.lowHolo,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get trendHolo => $state.composableBuilder(
+      column: $state.table.trendHolo,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get avg1Holo => $state.composableBuilder(
+      column: $state.table.avg1Holo,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get avg7Holo => $state.composableBuilder(
+      column: $state.table.avg7Holo,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get avg30Holo => $state.composableBuilder(
+      column: $state.table.avg30Holo,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get trendReverse => $state.composableBuilder(
+      column: $state.table.trendReverse,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
@@ -3562,11 +4498,18 @@ typedef $$TcgPlayerPricesTableCreateCompanionBuilder = TcgPlayerPricesCompanion
   Value<int> id,
   required String cardId,
   required DateTime fetchedAt,
-  required String updatedAt,
   Value<double?> normalMarket,
   Value<double?> normalLow,
-  Value<double?> reverseHoloMarket,
-  Value<double?> reverseHoloLow,
+  Value<double?> normalMid,
+  Value<double?> normalDirectLow,
+  Value<double?> holoMarket,
+  Value<double?> holoLow,
+  Value<double?> holoMid,
+  Value<double?> holoDirectLow,
+  Value<double?> reverseMarket,
+  Value<double?> reverseLow,
+  Value<double?> reverseMid,
+  Value<double?> reverseDirectLow,
   Value<String?> url,
 });
 typedef $$TcgPlayerPricesTableUpdateCompanionBuilder = TcgPlayerPricesCompanion
@@ -3574,11 +4517,18 @@ typedef $$TcgPlayerPricesTableUpdateCompanionBuilder = TcgPlayerPricesCompanion
   Value<int> id,
   Value<String> cardId,
   Value<DateTime> fetchedAt,
-  Value<String> updatedAt,
   Value<double?> normalMarket,
   Value<double?> normalLow,
-  Value<double?> reverseHoloMarket,
-  Value<double?> reverseHoloLow,
+  Value<double?> normalMid,
+  Value<double?> normalDirectLow,
+  Value<double?> holoMarket,
+  Value<double?> holoLow,
+  Value<double?> holoMid,
+  Value<double?> holoDirectLow,
+  Value<double?> reverseMarket,
+  Value<double?> reverseLow,
+  Value<double?> reverseMid,
+  Value<double?> reverseDirectLow,
   Value<String?> url,
 });
 
@@ -3603,44 +4553,72 @@ class $$TcgPlayerPricesTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<String> cardId = const Value.absent(),
             Value<DateTime> fetchedAt = const Value.absent(),
-            Value<String> updatedAt = const Value.absent(),
             Value<double?> normalMarket = const Value.absent(),
             Value<double?> normalLow = const Value.absent(),
-            Value<double?> reverseHoloMarket = const Value.absent(),
-            Value<double?> reverseHoloLow = const Value.absent(),
+            Value<double?> normalMid = const Value.absent(),
+            Value<double?> normalDirectLow = const Value.absent(),
+            Value<double?> holoMarket = const Value.absent(),
+            Value<double?> holoLow = const Value.absent(),
+            Value<double?> holoMid = const Value.absent(),
+            Value<double?> holoDirectLow = const Value.absent(),
+            Value<double?> reverseMarket = const Value.absent(),
+            Value<double?> reverseLow = const Value.absent(),
+            Value<double?> reverseMid = const Value.absent(),
+            Value<double?> reverseDirectLow = const Value.absent(),
             Value<String?> url = const Value.absent(),
           }) =>
               TcgPlayerPricesCompanion(
             id: id,
             cardId: cardId,
             fetchedAt: fetchedAt,
-            updatedAt: updatedAt,
             normalMarket: normalMarket,
             normalLow: normalLow,
-            reverseHoloMarket: reverseHoloMarket,
-            reverseHoloLow: reverseHoloLow,
+            normalMid: normalMid,
+            normalDirectLow: normalDirectLow,
+            holoMarket: holoMarket,
+            holoLow: holoLow,
+            holoMid: holoMid,
+            holoDirectLow: holoDirectLow,
+            reverseMarket: reverseMarket,
+            reverseLow: reverseLow,
+            reverseMid: reverseMid,
+            reverseDirectLow: reverseDirectLow,
             url: url,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required String cardId,
             required DateTime fetchedAt,
-            required String updatedAt,
             Value<double?> normalMarket = const Value.absent(),
             Value<double?> normalLow = const Value.absent(),
-            Value<double?> reverseHoloMarket = const Value.absent(),
-            Value<double?> reverseHoloLow = const Value.absent(),
+            Value<double?> normalMid = const Value.absent(),
+            Value<double?> normalDirectLow = const Value.absent(),
+            Value<double?> holoMarket = const Value.absent(),
+            Value<double?> holoLow = const Value.absent(),
+            Value<double?> holoMid = const Value.absent(),
+            Value<double?> holoDirectLow = const Value.absent(),
+            Value<double?> reverseMarket = const Value.absent(),
+            Value<double?> reverseLow = const Value.absent(),
+            Value<double?> reverseMid = const Value.absent(),
+            Value<double?> reverseDirectLow = const Value.absent(),
             Value<String?> url = const Value.absent(),
           }) =>
               TcgPlayerPricesCompanion.insert(
             id: id,
             cardId: cardId,
             fetchedAt: fetchedAt,
-            updatedAt: updatedAt,
             normalMarket: normalMarket,
             normalLow: normalLow,
-            reverseHoloMarket: reverseHoloMarket,
-            reverseHoloLow: reverseHoloLow,
+            normalMid: normalMid,
+            normalDirectLow: normalDirectLow,
+            holoMarket: holoMarket,
+            holoLow: holoLow,
+            holoMid: holoMid,
+            holoDirectLow: holoDirectLow,
+            reverseMarket: reverseMarket,
+            reverseLow: reverseLow,
+            reverseMid: reverseMid,
+            reverseDirectLow: reverseDirectLow,
             url: url,
           ),
         ));
@@ -3659,11 +4637,6 @@ class $$TcgPlayerPricesTableFilterComposer
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
-  ColumnFilters<String> get updatedAt => $state.composableBuilder(
-      column: $state.table.updatedAt,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
   ColumnFilters<double> get normalMarket => $state.composableBuilder(
       column: $state.table.normalMarket,
       builder: (column, joinBuilders) =>
@@ -3674,13 +4647,53 @@ class $$TcgPlayerPricesTableFilterComposer
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
-  ColumnFilters<double> get reverseHoloMarket => $state.composableBuilder(
-      column: $state.table.reverseHoloMarket,
+  ColumnFilters<double> get normalMid => $state.composableBuilder(
+      column: $state.table.normalMid,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
-  ColumnFilters<double> get reverseHoloLow => $state.composableBuilder(
-      column: $state.table.reverseHoloLow,
+  ColumnFilters<double> get normalDirectLow => $state.composableBuilder(
+      column: $state.table.normalDirectLow,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get holoMarket => $state.composableBuilder(
+      column: $state.table.holoMarket,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get holoLow => $state.composableBuilder(
+      column: $state.table.holoLow,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get holoMid => $state.composableBuilder(
+      column: $state.table.holoMid,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get holoDirectLow => $state.composableBuilder(
+      column: $state.table.holoDirectLow,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get reverseMarket => $state.composableBuilder(
+      column: $state.table.reverseMarket,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get reverseLow => $state.composableBuilder(
+      column: $state.table.reverseLow,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get reverseMid => $state.composableBuilder(
+      column: $state.table.reverseMid,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get reverseDirectLow => $state.composableBuilder(
+      column: $state.table.reverseDirectLow,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -3715,11 +4728,6 @@ class $$TcgPlayerPricesTableOrderingComposer
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
-  ColumnOrderings<String> get updatedAt => $state.composableBuilder(
-      column: $state.table.updatedAt,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
   ColumnOrderings<double> get normalMarket => $state.composableBuilder(
       column: $state.table.normalMarket,
       builder: (column, joinBuilders) =>
@@ -3730,13 +4738,53 @@ class $$TcgPlayerPricesTableOrderingComposer
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
-  ColumnOrderings<double> get reverseHoloMarket => $state.composableBuilder(
-      column: $state.table.reverseHoloMarket,
+  ColumnOrderings<double> get normalMid => $state.composableBuilder(
+      column: $state.table.normalMid,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
-  ColumnOrderings<double> get reverseHoloLow => $state.composableBuilder(
-      column: $state.table.reverseHoloLow,
+  ColumnOrderings<double> get normalDirectLow => $state.composableBuilder(
+      column: $state.table.normalDirectLow,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get holoMarket => $state.composableBuilder(
+      column: $state.table.holoMarket,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get holoLow => $state.composableBuilder(
+      column: $state.table.holoLow,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get holoMid => $state.composableBuilder(
+      column: $state.table.holoMid,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get holoDirectLow => $state.composableBuilder(
+      column: $state.table.holoDirectLow,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get reverseMarket => $state.composableBuilder(
+      column: $state.table.reverseMarket,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get reverseLow => $state.composableBuilder(
+      column: $state.table.reverseLow,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get reverseMid => $state.composableBuilder(
+      column: $state.table.reverseMid,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get reverseDirectLow => $state.composableBuilder(
+      column: $state.table.reverseDirectLow,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 

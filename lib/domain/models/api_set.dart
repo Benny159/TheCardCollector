@@ -6,35 +6,44 @@ class ApiSet {
   final int printedTotal;
   final int total;
   final String releaseDate;
-  final String symbolUrl;
-  final String logoUrl;
-  final String? updatedAt; // Optional, falls die API es liefert
+  final String updatedAt;
+  
+  final String? symbolUrl; // Nullable, da manche Sets kein Symbol haben
+  final String? logoUrl;   // Nullable (Englisch)
+  final String? logoUrlDe; // <--- NEU: Nullable (Deutsch)
 
   ApiSet({
     required this.id,
     required this.name,
-    required this.nameDe,
+    this.nameDe,
     required this.series,
     required this.printedTotal,
     required this.total,
     required this.releaseDate,
-    required this.symbolUrl,
-    required this.logoUrl,
-    this.updatedAt,
+    required this.updatedAt,
+    this.symbolUrl,
+    this.logoUrl,
+    this.logoUrlDe, // <--- NEU
   });
 
-  factory ApiSet.fromJson(Map<String, dynamic> json) {
+  // --- WICHTIG: Diese Factory ist NUR für die "Alte API" (PokemonTCG.io) ---
+  // Wir nutzen sie im TcgApiClient, um eine Liste zu laden, aus der wir
+  // uns dann NUR das 'releaseDate' klauen.
+  factory ApiSet.fromOldApiJson(Map<String, dynamic> json) {
     return ApiSet(
       id: json['id'] ?? '',
       name: json['name'] ?? 'Unbekannt',
-      nameDe: json['nameDe']  ?? '',
+      nameDe: null, // Alte API hat kein Deutsch
       series: json['series'] ?? '',
       printedTotal: json['printedTotal'] ?? 0,
       total: json['total'] ?? 0,
       releaseDate: json['releaseDate'] ?? '',
-      updatedAt: json['updatedAt'], 
-      symbolUrl: json['images']?['symbol'] ?? '',
-      logoUrl: json['images']?['logo'] ?? '',
+      updatedAt: json['updatedAt'] ?? '',
+      
+      // Die Alte API hat Logos in einem Unter-Objekt 'images'
+      symbolUrl: json['images']?['symbol'],
+      logoUrl: json['images']?['logo'],
+      logoUrlDe: null, // Alte API hat kein DE Logo
     );
   }
 }

@@ -21,7 +21,6 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
   String _condition = 'NM';
   String _language = 'Deutsch';
   
-  // Dynamische Liste
   List<String> _availableVariants = [];
   late String _variant; 
 
@@ -34,39 +33,22 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
     _initVariants();
   }
 
-  // --- INTELLIGENTE VARIANTE-ERKENNUNG ---
+  // --- NEUE LOGIK: VARIANTEN AUS DB-FLAGS ---
   void _initVariants() {
-    final prices = widget.card.tcgplayer?.prices;
     List<String> detected = [];
 
-    // 1. VERSUCH: Wir vertrauen den Preis-Daten (falls vorhanden)
-    // Das ist am sichersten: Wenn TCGPlayer einen Preis für 'reverseHolofoil' hat, gibt es die Karte auch.
+    // Wir schauen einfach auf die Flags, die wir von TCGdex/DB haben
+    if (widget.card.hasNormal) detected.add('Normal');
+    if (widget.card.hasHolo) detected.add('Holo');
+    if (widget.card.hasReverse) detected.add('Reverse Holo');
+    if (widget.card.hasFirstEdition) detected.add('1st Edition');
+    if (widget.card.hasWPromo) detected.add('WPromo');
 
-
-    // 2. FALLBACK: Wenn KEINE Preis-Daten da sind (oder nur unvollständige)
-    // Das passiert oft. Dann raten wir basierend auf der Rarität.
-    if (detected.isEmpty) {
-      final r = widget.card.rarity.toLowerCase();
-
-      if (r == 'common' || r == 'uncommon' || r == 'rare') {
-         // Spezialkarten gibt es meist nur in einer Version.
-         // Wir nennen sie Standardmäßig "Normal" (oder "Holo", je nach Geschmack).
-         detected.add('Normal');
-         detected.add('Reverse Holo');
-      }
-      // C) Standard Karten (Common, Uncommon, Rare)
-      // Die haben Normal + Reverse Holo (außer ganz alte Sets, aber lieber eine Option zu viel als zu wenig)
-      else {
-         detected.add('Normal');
-      }
-    }
-
-    // 3. Sicherheitsnetz & Sortierung
+    // Fallback: Wenn gar nichts gesetzt ist (sollte nicht passieren), nehmen wir Normal
     if (detected.isEmpty) detected.add('Normal');
     
-    // Duplikate entfernen (Set) und sortieren
-    detected = detected.toSet().toList();
-    final order = ['Normal', 'Holo', 'Reverse Holo', '1st Edition'];
+    // Sortierung für schöne UX
+    final order = ['Normal', 'Holo', 'Reverse Holo', '1st Edition', 'WPromo'];
     detected.sort((a, b) {
       int indexA = order.indexOf(a);
       int indexB = order.indexOf(b);
@@ -77,17 +59,17 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
 
     setState(() {
       _availableVariants = detected;
-      _variant = detected.first;
+      _variant = detected.first; // Standardauswahl: Das erste verfügbare
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool isOwned = widget.card.isOwned;
+    // Padding für Tastatur
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(
-      padding: const EdgeInsets.all(20),
-      margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomPadding),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -101,9 +83,9 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text("Inventar verwalten", style: Theme.of(context).textTheme.titleLarge),
-              if (isOwned)
+              if (widget.card.isOwned)
                 const Chip(
-                  label: Text("Im Besitz", style: TextStyle(color: Colors.white, fontSize: 10)),
+                  label: Text("Bereits im Besitz", style: TextStyle(color: Colors.white, fontSize: 10)),
                   backgroundColor: Colors.green,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
@@ -111,18 +93,28 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(widget.card.name, style: const TextStyle(color: Colors.grey)),
+          Text(widget.card.nameDe ?? widget.card.name, style: const TextStyle(color: Colors.grey)),
           const Divider(),
 
           // 1. Variante & Sprache
           Row(
             children: [
               Expanded(
-                child: _buildDropdown("Variante", _availableVariants, _variant, (val) => setState(() => _variant = val!)),
+                child: _buildDropdown(
+                  "Variante", 
+                  _availableVariants, 
+                  _variant, 
+                  (val) => setState(() => _variant = val!)
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _buildDropdown("Sprache", _languages, _language, (val) => setState(() => _language = val!)),
+                child: _buildDropdown(
+                  "Sprache", 
+                  _languages, 
+                  _language, 
+                  (val) => setState(() => _language = val!)
+                ),
               ),
             ],
           ),
@@ -133,10 +125,22 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
           Row(
             children: [
               Expanded(
-                child: _buildDropdown("Zustand", _conditions, _condition, (val) => setState(() => _condition = val!)),
+                child: _buildDropdown(
+                  "Zustand", 
+                  _conditions, 
+                  _condition, 
+                  (val) => setState(() => _condition = val!)
+                ),
               ),
               const SizedBox(width: 20),
-              _buildCounter(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Anzahl", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 4),
+                  _buildCounter(),
+                ],
+              ),
             ],
           ),
 
@@ -148,6 +152,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
                   child: const Text("Abbrechen"),
                 ),
               ),
@@ -156,6 +161,10 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
                 child: FilledButton.icon(
                   icon: const Icon(Icons.save),
                   label: const Text("Hinzufügen"),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.blue[800],
+                    padding: const EdgeInsets.symmetric(vertical: 12)
+                  ),
                   onPressed: _saveToInventory,
                 ),
               ),
@@ -167,18 +176,19 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
   }
 
   Widget _buildDropdown(String label, List<String> items, String value, Function(String?) onChanged) {
-    // Sicherheit: Falls der aktuell gewählte Wert (z.B. "Reverse Holo") in der neuen Liste nicht existiert, nimm den ersten.
+    // Sicherheit: Falls der aktuell gewählte Wert in der Liste nicht existiert
     final safeValue = items.contains(value) ? value : items.firstOrNull ?? value;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 4),
         DropdownButtonFormField<String>(
-          value: safeValue,
+          initialValue: safeValue,
           isDense: true,
           decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
           items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
@@ -191,25 +201,35 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
   Widget _buildCounter() {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: Colors.grey.shade400),
         borderRadius: BorderRadius.circular(8),
       ),
+      height: 48, // Match dropdown height roughly
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.remove),
+            icon: const Icon(Icons.remove, size: 18),
             onPressed: () => setState(() { if (_quantity > 1) _quantity--; }),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 40),
           ),
-          Text("$_quantity", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Container(
+            width: 30,
+            alignment: Alignment.center,
+            child: Text("$_quantity", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
           IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => setState(() => _quantity++)),
+            icon: const Icon(Icons.add, size: 18),
+            onPressed: () => setState(() => _quantity++),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 40),
+          ),
         ],
       ),
     );
   }
 
-Future<void> _saveToInventory() async {
+  Future<void> _saveToInventory() async {
     final db = ref.read(databaseProvider);
     
     try {
@@ -247,9 +267,12 @@ Future<void> _saveToInventory() async {
       
       if (mounted) {
         Navigator.pop(context, true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$_quantity x $_variant hinzugefügt!'), backgroundColor: Colors.green)
+        );
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e")));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red));
     }
   }
 

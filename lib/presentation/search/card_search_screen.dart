@@ -1,20 +1,15 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:fl_chart/fl_chart.dart'; // WICHTIG: Für das Diagramm
+import 'package:fl_chart/fl_chart.dart'; 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart'; // WICHTIG: Für Datumsformatierung
+import 'package:intl/intl.dart'; 
 
-// WICHTIG: "as db" verhindert den Konflikt zwischen UI-Card und Datenbank-Card!
 import '../../data/database/app_database.dart' as db; 
-
-import '../../data/api/search_provider.dart';        // Enthält historyProvider & top10Provider
-import '../../data/api/tcg_api_client.dart';
-import '../../data/database/database_provider.dart';
-import '../../data/sync/set_importer.dart';
+import '../../data/api/search_provider.dart'; 
+import '../../domain/models/api_card.dart'; // Wichtig für ApiCard Klasse
 import '../cards/card_detail_screen.dart';
 import '../inventory/inventory_bottom_sheet.dart';
 
-// Filter für das Diagramm
 enum ChartFilter { week, month, year, all }
 final chartFilterProvider = StateProvider<ChartFilter>((ref) => ChartFilter.week);
 
@@ -31,11 +26,9 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
   @override
   void initState() {
     super.initState();
-    // Den aktuellen Suchtext laden
     final initialQuery = ref.read(searchQueryProvider);
     _searchController = TextEditingController(text: initialQuery);
 
-    // Snapshot des Inventarwerts erstellen (für das Diagramm)
     Future.delayed(Duration.zero, () {
       createPortfolioSnapshot(ref);
     });
@@ -49,7 +42,6 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Prüfen, ob wir gerade suchen
     final searchQuery = ref.watch(searchQueryProvider);
     final isSearching = searchQuery.isNotEmpty;
     final currentMode = ref.watch(searchModeProvider);
@@ -60,7 +52,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
       ),
       body: Column(
         children: [
-          // --- 1. SUCHLEISTE (Immer sichtbar) ---
+          // --- 1. SUCHLEISTE ---
           Container(
             padding: const EdgeInsets.all(12),
             color: Theme.of(context).colorScheme.surface,
@@ -82,14 +74,11 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                             onPressed: () {
                               _searchController.clear();
                               ref.read(searchQueryProvider.notifier).state = '';
-                              FocusScope.of(context).unfocus(); // Tastatur zu
+                              FocusScope.of(context).unfocus(); 
                             },
                           )
                         : null,
                   ),
-                  onChanged: (val) {
-                    // Optional: Live-Suche hier aktivieren
-                  },
                   onSubmitted: (val) {
                     ref.read(searchQueryProvider.notifier).state = val;
                   },
@@ -97,7 +86,6 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                 
                 const SizedBox(height: 8),
                 
-                // Filter Chips
                 Row(
                   children: [
                     _buildFilterChip("Karten Name", SearchMode.name, ref),
@@ -109,11 +97,11 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
             ),
           ),
 
-          // --- 2. INHALT (Entweder Suchergebnisse ODER Dashboard) ---
+          // --- 2. INHALT ---
           Expanded(
             child: isSearching 
-              ? const _SearchResultsView() // Zeigt die Karten Raster
-              : const _DashboardView(),    // Zeigt Graph und Top 10
+              ? const _SearchResultsView() 
+              : const _DashboardView(),    
           ),
         ],
       ),
@@ -141,7 +129,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
 }
 
 // =========================================================
-// VIEW 1: DASHBOARD (Graph & Top 10)
+// VIEW 1: DASHBOARD
 // =========================================================
 class _DashboardView extends ConsumerWidget {
   const _DashboardView();
@@ -149,8 +137,9 @@ class _DashboardView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final historyAsync = ref.watch(portfolioHistoryProvider);
-    final top10Cards = ref.watch(top10CardsProvider);
+    final top10Cards = ref.watch(top10CardsProvider); // Korrekter Provider Name
     final inventoryAsync = ref.watch(inventoryProvider);
+    
     final double totalValue = inventoryAsync.valueOrNull?.fold(0.0, (sum, i) => sum! + i.totalValue) ?? 0.0;
 
     return SingleChildScrollView(
@@ -158,17 +147,17 @@ class _DashboardView extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. HEADER
+          // HEADER
           _buildPortfolioHeader(context, totalValue, historyAsync),
           
           const SizedBox(height: 24),
           
-          // 2. CHART FILTER
+          // CHART FILTER
           _buildChartFilterButtons(ref),
 
           const SizedBox(height: 16),
 
-          // 3. DIAGRAMM (MIT FIX FÜR 0-LINIE)
+          // DIAGRAMM
           SizedBox(
             height: 200,
             child: historyAsync.when(
@@ -180,7 +169,7 @@ class _DashboardView extends ConsumerWidget {
 
           const SizedBox(height: 32),
 
-          // 4. TOP 10 KARTEN (Horizontales Karussell)
+          // TOP 10 KARTEN
           const Text("Deine Top 10 Karten", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           
@@ -200,35 +189,24 @@ class _DashboardView extends ConsumerWidget {
     );
   }
 
-  // --- LOGIK-UPDATE: VERGLEICH ZUM VORTAG ---
   Widget _buildPortfolioHeader(BuildContext context, double currentTotal, AsyncValue<List<db.PortfolioHistoryData>> historyAsync) {
     double change = 0.0;
     double percent = 0.0;
-    
     final history = historyAsync.valueOrNull ?? [];
-    
-    // 1. Wir suchen den Wert von "Gestern" (oder dem letzten Tag, der NICHT heute ist)
     double previousValue = 0.0;
     final today = DateTime.now();
 
-    // Liste rückwärts durchgehen
     for (var i = history.length - 1; i >= 0; i--) {
-      // Wenn das Datum NICHT heute ist, haben wir unseren Vergleichswert
       if (!_isSameDay(history[i].date, today)) {
         previousValue = history[i].totalValue;
-        break; // Gefunden, Abbruch
+        break; 
       }
     }
 
-    // 2. Berechnung: Heute (Live) minus Letzter anderer Tag
-    // Wenn es keinen anderen Tag gibt (erster Tag der Nutzung), ist previousValue 0.
-    // Dann ist der Gewinn = gesamter Inventarwert.
     change = currentTotal - previousValue;
-    
     if (previousValue > 0) {
       percent = (change / previousValue) * 100;
     } else if (currentTotal > 0) {
-      // Wenn wir bei 0 gestartet sind und jetzt was haben -> 100% Gewinn
       percent = 100.0; 
     }
 
@@ -301,17 +279,18 @@ class _DashboardView extends ConsumerWidget {
   }
 
   Widget _buildTop10List(List<InventoryItem> items, BuildContext context) {
-    // Feste Höhe für die horizontale Liste (Kartenhöhe + Text)
     return SizedBox(
       height: 240, 
       child: ListView.builder(
-        scrollDirection: Axis.horizontal, // <--- SEITLICH SCROLLEN
+        scrollDirection: Axis.horizontal, 
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
+          // Bild-Logik: Deutsch wenn verfügbar
+          final imageUrl = item.card.imageUrlDe ?? item.card.smallImageUrl;
           
           return Container(
-            width: 160, // Feste Breite pro Karte
+            width: 160, 
             margin: const EdgeInsets.only(right: 12),
             child: InkWell(
               onTap: () {
@@ -320,7 +299,6 @@ class _DashboardView extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // DAS BILD (Groß wie in der Suche)
                   Expanded(
                     child: Card(
                       elevation: 4,
@@ -332,12 +310,11 @@ class _DashboardView extends ConsumerWidget {
                           Hero(
                             tag: "top10_${item.card.id}",
                             child: CachedNetworkImage(
-                              imageUrl: item.card.smallImageUrl,
+                              imageUrl: imageUrl,
                               fit: BoxFit.cover,
                               placeholder: (_,__) => Container(color: Colors.grey[200]),
                             ),
                           ),
-                          // Menge Badge (oben rechts)
                           Positioned(
                             top: 4, right: 4,
                             child: Container(
@@ -353,10 +330,7 @@ class _DashboardView extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  
                   const SizedBox(height: 4),
-                  
-                  // TEXT INFOS (Unter der Karte)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -381,11 +355,11 @@ class _DashboardView extends ConsumerWidget {
 }
 
 // =========================================================
-// CHART LOGIK (fl_chart)
+// CHART LOGIK
 // =========================================================
 class _PortfolioChart extends ConsumerWidget {
   final List<db.PortfolioHistoryData> history;
-  final double currentTotal; // Der Live-Wert aus dem Inventar
+  final double currentTotal;
 
   const _PortfolioChart({required this.history, required this.currentTotal});
 
@@ -394,26 +368,16 @@ class _PortfolioChart extends ConsumerWidget {
     final filter = ref.watch(chartFilterProvider);
     final now = DateTime.now();
     
-    // 1. BASIS-DATEN: Wir kopieren die Historie aus der Datenbank
     List<db.PortfolioHistoryData> chartData = List.from(history);
 
-    // 2. LIVE-WERT EINPFLEGEN
-    // Wir schauen, ob der letzte Eintrag von heute ist.
-    // Wenn ja -> Aktualisieren wir ihn visuell mit dem Live-Wert (currentTotal).
-    // Wenn nein -> Fügen wir den Live-Wert als neuen Punkt für "jetzt" hinzu.
     if (chartData.isNotEmpty && _isSameDay(chartData.last.date, now)) {
-      chartData.removeLast(); // Den alten "Heute"-Wert aus DB entfernen
+      chartData.removeLast(); 
     }
-    // Den aktuellen Live-Wert als "Heute" hinzufügen
     chartData.add(db.PortfolioHistoryData(id: -1, date: now, totalValue: currentTotal));
 
-    // 3. STARTPUNKT BEI 0 ERZWINGEN (Für die "Schräge")
-    // Wenn wir nur wenige Daten haben oder der erste Wert > 0 ist,
-    // fügen wir künstlich einen Punkt "einen Tag vor dem ersten Eintrag" mit 0€ hinzu.
     if (chartData.isNotEmpty) {
       final firstPoint = chartData.first;
       if (firstPoint.totalValue > 0) {
-        // Wir fügen einen Punkt davor ein
         chartData.insert(0, db.PortfolioHistoryData(
           id: -2, 
           date: firstPoint.date.subtract(const Duration(days: 1)), 
@@ -422,8 +386,6 @@ class _PortfolioChart extends ConsumerWidget {
       }
     }
 
-    // 4. FILTERN (Woche, Monat, Jahr)
-    // Jetzt filtern wir erst, NACHDEM wir die Daten aufbereitet haben.
     if (chartData.isNotEmpty) {
       DateTime start = now;
       switch (filter) {
@@ -432,34 +394,25 @@ class _PortfolioChart extends ConsumerWidget {
         case ChartFilter.year: start = now.subtract(const Duration(days: 365)); break;
         case ChartFilter.all: start = DateTime(2000); break;
       }
-      // Wir behalten alles nach dem Startdatum ODER den allerersten Punkt (damit die Linie links nicht abgeschnitten wirkt)
       chartData = chartData.where((d) => d.date.isAfter(start) || d.date.isAtSameMomentAs(start)).toList();
     }
 
-    // Fallback falls leer
     if (chartData.length < 2) {
-       // Sollte durch Schritt 3 eigentlich nicht passieren, aber sicher ist sicher
        return const Center(child: Text("Sammle Daten... (Füge eine Karte hinzu)"));
     }
 
-    // 5. SPOTS ERSTELLEN (X-Achse = Zeitstempel)
     final spots = chartData.map((e) {
       return FlSpot(e.date.millisecondsSinceEpoch.toDouble(), e.totalValue);
     }).toList();
 
-    // Y-Achse Skalierung
     double minY = spots.map((e) => e.y).reduce((a, b) => a < b ? a : b);
     double maxY = spots.map((e) => e.y).reduce((a, b) => a > b ? a : b);
-    if (maxY == 0) maxY = 100; // Verhindert Crash bei komplett 0
-    
-    // Etwas Platz oben und unten lassen
+    if (maxY == 0) maxY = 100; 
     maxY = maxY * 1.1; 
-    // minY lassen wir bei 0 oder dem tiefsten Wert
 
     return LineChart(
       LineChartData(
         gridData: const FlGridData(show: false),
-        // Achsenbeschriftung minimal halten
         titlesData: FlTitlesData(
           show: true,
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -469,7 +422,6 @@ class _PortfolioChart extends ConsumerWidget {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) {
-                // Nur Start und Ende beschriften
                 if (value == spots.first.x || value == spots.last.x) {
                    final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
                    return Padding(
@@ -491,7 +443,7 @@ class _PortfolioChart extends ConsumerWidget {
         lineBarsData: [
           LineChartBarData(
             spots: spots,
-            isCurved: true, // Macht die Linie rund/schräg
+            isCurved: true,
             curveSmoothness: 0.2,
             color: Colors.blueAccent,
             barWidth: 3,
@@ -510,7 +462,6 @@ class _PortfolioChart extends ConsumerWidget {
             ),
           ),
         ],
-        // Tooltip beim Berühren
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
             getTooltipItems: (touchedSpots) {
@@ -535,7 +486,7 @@ class _PortfolioChart extends ConsumerWidget {
 }
 
 // =========================================================
-// VIEW 2: SUCHERGEBNISSE (Grid View)
+// VIEW 2: SUCHERGEBNISSE
 // =========================================================
 class _SearchResultsView extends ConsumerWidget {
   const _SearchResultsView();
@@ -547,13 +498,13 @@ class _SearchResultsView extends ConsumerWidget {
     return searchAsyncValue.when(
       data: (cards) {
         if (cards.isEmpty) {
-          return Center(
+          return const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.search_off, size: 64, color: Colors.grey),
-                const SizedBox(height: 16),
-                const Text('Keine Karten gefunden.'),
+                Icon(Icons.search_off, size: 64, color: Colors.grey),
+                SizedBox(height: 16),
+                Text('Keine Karten gefunden.'),
               ],
             ),
           );
@@ -572,13 +523,16 @@ class _SearchResultsView extends ConsumerWidget {
             final card = cards[index];
             final bool isOwned = card.isOwned;
 
-            // --- PREIS BERECHNUNG ---
+            // Preisberechnung (Priorität: Cardmarket Trend -> TCGPlayer)
             double? displayPrice = card.cardmarket?.trendPrice;
             if (displayPrice == null || displayPrice == 0) {
               displayPrice = card.tcgplayer?.prices?.normal?.market ?? 
                              card.tcgplayer?.prices?.holofoil?.market ?? 
                              card.tcgplayer?.prices?.reverseHolofoil?.market;
             }
+            
+            // Bild (Deutsch bevorzugt)
+            final imageUrl = card.imageUrlDe ?? card.smallImageUrl;
 
             return InkWell(
               onTap: () {
@@ -598,18 +552,15 @@ class _SearchResultsView extends ConsumerWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // BILD
                     Hero(
                       tag: card.id,
                       child: CachedNetworkImage(
-                        imageUrl: card.smallImageUrl,
+                        imageUrl: imageUrl,
                         placeholder: (context, url) => Container(color: Colors.grey[200]),
                         errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
-                        width: 160,
+                        fit: BoxFit.cover,
                       ),
                     ),
-                    
-                    // INFO-BALKEN UNTEN
                     Positioned(
                       bottom: 0, left: 0, right: 0,
                       child: Container(

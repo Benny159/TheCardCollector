@@ -1,21 +1,18 @@
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// --- WICHTIG: DIESER IMPORT HAT GEFEHLT ---
 import '../database/app_database.dart'; 
-
 import '../../domain/models/api_card.dart';
 import '../../domain/models/api_set.dart';
 import '../sync/set_importer.dart';
 import '../database/database_provider.dart';
 import '../../data/api/tcgdex_api_client.dart';
-import 'tcg_api_client.dart';
-import 'package:intl/intl.dart';
 
 // --- 1. CONFIG ---
 enum SearchMode { name, artist }
 final searchModeProvider = StateProvider<SearchMode>((ref) => SearchMode.name);
 final searchQueryProvider = StateProvider<String>((ref) => '');
+final inventoryGroupBySetProvider = StateProvider<bool>((ref) => false);
 
 // --- 2. SETS PROVIDER ---
 final allSetsProvider = FutureProvider<List<ApiSet>>((ref) async {
@@ -23,32 +20,37 @@ final allSetsProvider = FutureProvider<List<ApiSet>>((ref) async {
   final localSets = await db.select(db.cardSets).get();
   
   if (localSets.isNotEmpty) {
-    localSets.sort((a, b) => b.releaseDate.compareTo(a.releaseDate));
+    // JETZT KÖNNEN WIR WIEDER NACH DATUM SORTIEREN!
+    localSets.sort((a, b) {
+       final dateA = a.releaseDate ?? '';
+       final dateB = b.releaseDate ?? '';
+       return dateB.compareTo(dateA); // Neueste zuerst
+    });
+
     return localSets.map((s) => ApiSet(
       id: s.id,
       name: s.name,
       nameDe: s.nameDe,
       series: s.series,
-      printedTotal: s.printedTotal,
-      total: s.total,
-      releaseDate: s.releaseDate,
+      printedTotal: s.printedTotal ?? 0,
+      total: s.total ?? 0,
+      releaseDate: s.releaseDate ?? '',
       updatedAt: s.updatedAt,
       logoUrl: s.logoUrl,
+      logoUrlDe: s.logoUrlDe,
       symbolUrl: s.symbolUrl,
     )).toList();
   }
 
-  final api = ref.read(apiClientProvider);
+  // Fallback: Initialer Download (nur Metadaten der Sets)
   final dexApi = ref.read(tcgDexApiClientProvider);
-  final importer = SetImporter(api, dexApi, db);
-  final apiSets = await api.fetchAllSets();
-  for (final set in apiSets) {
-    await importer.importSetInfo(set);
-  }
-  return apiSets;
+  final importer = SetImporter(dexApi, db);
+  await importer.syncAllData(); 
+  
+  return [];
 });
 
-// --- 3. SEARCH PROVIDER (Optimiert) ---
+// --- 3. SEARCH PROVIDER ---
 final searchResultsProvider = FutureProvider<List<ApiCard>>((ref) async {
   final queryText = ref.watch(searchQueryProvider);
   final mode = ref.watch(searchModeProvider);
@@ -67,12 +69,11 @@ final searchResultsProvider = FutureProvider<List<ApiCard>>((ref) async {
     query.where(db.cards.artist.like('%$queryText%'));
   }
   
+  query.limit(100);
+
   final rows = await query.get();
-  
-  // -- TURBO: Wir holen Inventar-Daten für alle gefundenen Karten auf einmal --
   final cardIds = rows.map((r) => r.readTable(db.cards).id).toList();
   final ownedSet = await _fetchOwnedIds(db, cardIds);
-  // -----------------------------------------------------------------------
 
   List<ApiCard> results = [];
 
@@ -92,48 +93,45 @@ final searchResultsProvider = FutureProvider<List<ApiCard>>((ref) async {
           ..limit(1))
         .getSingleOrNull();
 
-    results.add(_mapToApiCard(card, set.printedTotal, ownedSet.contains(card.id), cmPrice, tcgPrice));
+    results.add(_mapToApiCard(card, set.printedTotal ?? 0, ownedSet.contains(card.id), cmPrice, tcgPrice));
   }
 
   return results;
 });
 
-// --- 4. SET LIST PROVIDER (ULTRA OPTIMIERT) ---
+// --- 4. SET LIST PROVIDER ---
 final cardsForSetProvider = FutureProvider.family<List<ApiCard>, String>((ref, setId) async {
   final db = ref.read(databaseProvider);
-
-  // A) Basis-Daten holen
   final setInfo = await (db.select(db.cardSets)..where((tbl) => tbl.id.equals(setId))).getSingleOrNull();
-  final dbCards = await (db.select(db.cards)..where((tbl) => tbl.setId.equals(setId))).get();
+  
+  final dbCards = await (db.select(db.cards)
+      ..where((tbl) => tbl.setId.equals(setId))
+      ..orderBy([(t) => OrderingTerm(expression: t.sortNumber)]) 
+    ).get();
 
   if (dbCards.isEmpty) return [];
 
-  // Alle IDs sammeln
   final cardIds = dbCards.map((c) => c.id).toList();
-
-  // B) BULK FETCH: Inventar (Alles auf einmal holen)
   final ownedSet = await _fetchOwnedIds(db, cardIds);
 
-  // C) BULK FETCH: Preise (Alles auf einmal holen!)
   final allCmPrices = await (db.select(db.cardMarketPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
   final allTcgPrices = await (db.select(db.tcgPlayerPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
 
-  // Maps erstellen für schnellen Zugriff: ID -> Preis
   final cmPriceMap = _getLatestCmPrices(allCmPrices);
   final tcgPriceMap = _getLatestTcgPrices(allTcgPrices);
 
-  // D) Liste zusammenbauen
   return dbCards.map((dbCard) {
     return _mapToApiCard(
       dbCard,
       setInfo?.printedTotal ?? 0,
-      ownedSet.contains(dbCard.id), // Blitzschneller Check
-      cmPriceMap[dbCard.id],        // Blitzschneller Zugriff
-      tcgPriceMap[dbCard.id],       // Blitzschneller Zugriff
+      ownedSet.contains(dbCard.id),
+      cmPriceMap[dbCard.id],
+      tcgPriceMap[dbCard.id],
     );
   }).toList();
 });
 
+// --- SET BY ID PROVIDER ---
 final setByIdProvider = FutureProvider.family<ApiSet?, String>((ref, setId) async {
   final sets = await ref.watch(allSetsProvider.future);
   try {
@@ -143,87 +141,98 @@ final setByIdProvider = FutureProvider.family<ApiSet?, String>((ref, setId) asyn
   }
 });
 
-// --- NEU & WICHTIG: setStatsProvider HIERHIN VERSCHIEBEN ---
-// Damit wir ihn von überall (auch aus dem BottomSheet) neu laden können.
+// --- STATS PROVIDER ---
 final setStatsProvider = FutureProvider.family<int, String>((ref, setId) async {
   final db = ref.read(databaseProvider);
-  
-  // 1. Alle Karten-IDs des Sets holen
   final setCardsQuery = db.select(db.cards)..where((tbl) => tbl.setId.equals(setId));
   final setCardIds = (await setCardsQuery.get()).map((c) => c.id).toList();
-  
   if (setCardIds.isEmpty) return 0;
-
-  // 2. Prüfen, welche davon im Inventar sind (Unique Count)
-  final result = await (db.select(db.userCards)
-    ..where((tbl) => tbl.cardId.isIn(setCardIds))
-  ).get();
-  
-  // Wir zählen unique cardIds im Inventar
-  final uniqueOwned = result.map((e) => e.cardId).toSet().length;
-  
-  return uniqueOwned;
+  final result = await (db.select(db.userCards)..where((tbl) => tbl.cardId.isIn(setCardIds))).get();
+  return result.map((e) => e.cardId).toSet().length;
 });
 
-// --- HILFSFUNKTIONEN (Private) ---
+// --- HELPER ---
 
-// Holt alle IDs, die der User besitzt, als Set (für schnellen .contains Check)
 Future<Set<String>> _fetchOwnedIds(AppDatabase db, List<String> cardIds) async {
   if (cardIds.isEmpty) return {};
-  
-  final ownedEntries = await (db.select(db.userCards)
-    ..where((tbl) => tbl.cardId.isIn(cardIds))
-  ).get();
-
+  final ownedEntries = await (db.select(db.userCards)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
   return ownedEntries.map((e) => e.cardId).toSet();
 }
 
-// Wandelt DB-Objekt in API-Objekt um
 ApiCard _mapToApiCard(
-  Card dbCard,  // <-- Hier wird 'Card' aus app_database.dart benötigt
+  Card dbCard, 
   int printedTotal, 
   bool isOwned, 
-  CardMarketPrice? cmPrice, // <-- Hier wird 'CardMarketPrice' aus app_database.dart benötigt
-  TcgPlayerPrice? tcgPrice  // <-- Hier wird 'TcgPlayerPrice' aus app_database.dart benötigt
+  CardMarketPrice? cmPrice, 
+  TcgPlayerPrice? tcgPrice
 ) {
-  List<String> parseList(String? value) => (value ?? '').split(', ').where((e) => e.isNotEmpty).toList();
-
   return ApiCard(
     id: dbCard.id,
     name: dbCard.name,
     nameDe: dbCard.nameDe,
-    supertype: dbCard.supertype ?? '',
-    subtypes: parseList(dbCard.subtypes),
-    types: parseList(dbCard.types),
+    supertype: '', 
+    subtypes: [],
+    types: [],
     setId: dbCard.setId,
     number: dbCard.number,
     setPrintedTotal: printedTotal.toString(),
     artist: dbCard.artist ?? '',
-    rarity: dbCard.rarity ?? 'Unbekannt',
+    rarity: dbCard.rarity ?? '',
     flavorText: dbCard.flavorText,
     flavorTextDe: dbCard.flavorTextDe,
-    smallImageUrl: dbCard.imageUrlSmall,
-    largeImageUrl: dbCard.imageUrlLarge,
+    smallImageUrl: dbCard.imageUrl, 
+    largeImageUrl: dbCard.imageUrl,
+    imageUrlDe: dbCard.imageUrlDe,
+    
+    hasNormal: dbCard.hasNormal,
+    hasHolo: dbCard.hasHolo,
+    hasReverse: dbCard.hasReverse,
+    hasWPromo: dbCard.hasWPromo,
+    hasFirstEdition: dbCard.hasFirstEdition,
+    
     isOwned: isOwned,
     
     cardmarket: cmPrice != null 
         ? ApiCardMarket(
             url: cmPrice.url ?? '',
-            updatedAt: cmPrice.updatedAt,
-            trendPrice: cmPrice.trendPrice,
+            updatedAt: cmPrice.fetchedAt.toIso8601String(),
+            trendPrice: cmPrice.trend,
             avg30: cmPrice.avg30,
-            lowPrice: cmPrice.lowPrice,
-            reverseHoloTrend: cmPrice.reverseHoloTrend,
+            avg7: cmPrice.avg7,
+            avg1: cmPrice.avg1,
+            lowPrice: cmPrice.low,
+            trendHolo: cmPrice.trendHolo,
+            avg30Holo: cmPrice.avg30Holo,
+            avg7Holo: cmPrice.avg7Holo,
+            avg1Holo: cmPrice.avg1Holo,
+            lowHolo: cmPrice.lowHolo,
+            reverseHoloTrend: cmPrice.trendReverse,
           )
         : null,
     
     tcgplayer: tcgPrice != null 
         ? ApiTcgPlayer(
             url: tcgPrice.url ?? '',
-            updatedAt: tcgPrice.updatedAt,
+            updatedAt: tcgPrice.fetchedAt.toIso8601String(),
             prices: ApiTcgPlayerPrices(
-              normal: ApiPriceType(market: tcgPrice.normalMarket, low: tcgPrice.normalLow),
-              reverseHolofoil: ApiPriceType(market: tcgPrice.reverseHoloMarket, low: tcgPrice.reverseHoloLow),
+              normal: ApiPriceType(
+                market: tcgPrice.normalMarket, 
+                low: tcgPrice.normalLow,
+                mid: tcgPrice.normalMid,
+                directLow: tcgPrice.normalDirectLow,
+              ),
+              holofoil: ApiPriceType(
+                market: tcgPrice.holoMarket,
+                low: tcgPrice.holoLow,
+                mid: tcgPrice.holoMid,
+                directLow: tcgPrice.holoDirectLow,
+              ),
+              reverseHolofoil: ApiPriceType(
+                market: tcgPrice.reverseMarket, 
+                low: tcgPrice.reverseLow,
+                mid: tcgPrice.reverseMid,
+                directLow: tcgPrice.reverseDirectLow,
+              ),
             ),
           )
         : null, 
@@ -250,10 +259,13 @@ Map<String, TcgPlayerPrice> _getLatestTcgPrices(List<TcgPlayerPrice> allPrices) 
   return map;
 }
 
-// 1. Hilfsklasse: Verbindet Karte + User-Daten + SET-Daten
+// -----------------------------------------------------------------------------
+// INVENTORY PROVIDER
+// -----------------------------------------------------------------------------
+
 class InventoryItem {
   final ApiCard card;
-  final ApiSet set; // <--- NEU: Das Set-Objekt für Logos/Namen
+  final ApiSet set;
   final int quantity;
   final String variant;
   final double totalValue;
@@ -267,30 +279,22 @@ class InventoryItem {
   });
 }
 
-// 2. Sortier-Optionen
-enum InventorySort { value, name, rarity, type, number }
-
-// 3. Filter-Status Provider
+enum InventorySort { value, name, rarity }
 final inventorySortProvider = StateProvider<InventorySort>((ref) => InventorySort.value);
-final inventoryGroupBySetProvider = StateProvider<bool>((ref) => false);
 
-// 4. DER HAUPT-PROVIDER (JETZT ALS STREAM!)
-// StreamProvider sorgt für automatische Updates, wenn sich die DB ändert.
 final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
   final db = ref.read(databaseProvider);
 
-  // A) Query bauen (Join UserCards -> Cards -> Sets)
   final query = db.select(db.userCards).join([
     innerJoin(db.cards, db.cards.id.equalsExp(db.userCards.cardId)),
     innerJoin(db.cardSets, db.cardSets.id.equalsExp(db.cards.setId)),
   ]);
 
-  // B) .watch() nutzen statt .get() -> Das macht es LIVE!
   return query.watch().asyncMap((rows) async {
-    // Diese Funktion wird jedes Mal ausgeführt, wenn sich UserCards ändert.
-    
-    // Preise holen (Bulk)
+    if (rows.isEmpty) return [];
+
     final cardIds = rows.map((r) => r.readTable(db.userCards).cardId).toList();
+    
     final allCmPrices = await (db.select(db.cardMarketPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
     final allTcgPrices = await (db.select(db.tcgPlayerPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
     
@@ -302,38 +306,37 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
     for (final row in rows) {
       final userCard = row.readTable(db.userCards);
       final dbCard = row.readTable(db.cards);
-      final dbSet = row.readTable(db.cardSets); // Das Set aus der DB
+      final dbSet = row.readTable(db.cardSets);
 
-      // ApiCard bauen
       final apiCard = _mapToApiCard(
         dbCard, 
-        dbSet.printedTotal, 
+        dbSet.printedTotal ?? 0, 
         true, 
         cmPriceMap[dbCard.id], 
         tcgPriceMap[dbCard.id]
       );
 
-      // ApiSet bauen (für das UI)
       final apiSet = ApiSet(
         id: dbSet.id,
         name: dbSet.name,
         nameDe: dbSet.nameDe,
         series: dbSet.series,
-        printedTotal: dbSet.printedTotal,
-        total: dbSet.total,
-        releaseDate: dbSet.releaseDate,
+        printedTotal: dbSet.printedTotal ?? 0,
+        total: dbSet.total ?? 0,
+        releaseDate: dbSet.releaseDate ?? '',
         updatedAt: dbSet.updatedAt,
         logoUrl: dbSet.logoUrl,
+        logoUrlDe: dbSet.logoUrlDe,
         symbolUrl: dbSet.symbolUrl,
       );
 
-      // Preis berechnen
       double singlePrice = 0.0;
       if (userCard.variant == 'Reverse Holo') {
         singlePrice = apiCard.tcgplayer?.prices?.reverseHolofoil?.market 
                    ?? apiCard.cardmarket?.reverseHoloTrend ?? 0.0;
       } else if (userCard.variant == 'Holo') {
-         singlePrice = apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
+         singlePrice = apiCard.cardmarket?.trendHolo
+                    ?? apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
          if (singlePrice == 0) singlePrice = apiCard.cardmarket?.trendPrice ?? 0.0;
       } else {
         singlePrice = apiCard.cardmarket?.trendPrice 
@@ -342,7 +345,7 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
 
       items.add(InventoryItem(
         card: apiCard,
-        set: apiSet, // <--- Hier übergeben wir das Set
+        set: apiSet,
         quantity: userCard.quantity,
         variant: userCard.variant,
         totalValue: singlePrice * userCard.quantity,
@@ -353,17 +356,11 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
   });
 });
 
-// 2. NEU: Provider für die Top 10 teuersten Karten
 final top10CardsProvider = Provider<List<InventoryItem>>((ref) {
-  // Wir nutzen den existierenden Stream!
   final allItemsAsync = ref.watch(inventoryProvider);
-  
   return allItemsAsync.when(
     data: (items) {
-      // Kopie erstellen und sortieren
       final sorted = List<InventoryItem>.from(items);
-      // Teuerste zuerst (nach Gesamtpreis des Items, oder Einzelpreis? Meist Einzelpreis für Top 10)
-      // Wir nehmen hier den *Gesamtwert* des Stacks (z.B. 2x Glurak = 200€ > 1x Lugia = 150€)
       sorted.sort((a, b) => b.totalValue.compareTo(a.totalValue));
       return sorted.take(10).toList();
     },
@@ -372,38 +369,27 @@ final top10CardsProvider = Provider<List<InventoryItem>>((ref) {
   );
 });
 
-// 3. NEU: Provider für die Historie (Diagramm-Daten)
 final portfolioHistoryProvider = StreamProvider<List<PortfolioHistoryData>>((ref) {
   final db = ref.read(databaseProvider);
-  // Sortiert nach Datum aufsteigend
   return (db.select(db.portfolioHistory)..orderBy([(t) => OrderingTerm(expression: t.date)])).watch();
 });
 
-// 4. NEU: Funktion zum Erstellen eines Snapshots (ruft man beim App-Start auf)
 Future<void> createPortfolioSnapshot(WidgetRef ref) async {
   final db = ref.read(databaseProvider);
-  
-  // 1. Aktuellen Wert berechnen
   final items = await ref.read(inventoryProvider.future);
   final double currentTotal = items.fold(0.0, (sum, item) => sum + item.totalValue);
-
-  // WICHTIG: Die Zeile "if (currentTotal == 0) return;" HABE ICH ENTFERNT.
-  // Wir wollen auch speichern, wenn man bei 0 startet oder alles verkauft hat.
 
   final today = DateTime.now();
   final todayDate = DateTime(today.year, today.month, today.day);
 
-  // 2. Prüfen ob Eintrag für heute existiert
   final existingEntry = await (db.select(db.portfolioHistory)
     ..where((t) => t.date.equals(todayDate))
   ).getSingleOrNull();
 
   if (existingEntry != null) {
-    // Update: Wenn wir uns heute schon eingeloggt haben, aktualisieren wir den Wert auf "jetzt"
     await (db.update(db.portfolioHistory)..where((t) => t.id.equals(existingEntry.id)))
       .write(PortfolioHistoryCompanion(totalValue: Value(currentTotal)));
   } else {
-    // Insert: Neuer Tag, neuer Eintrag
     await db.into(db.portfolioHistory).insert(
       PortfolioHistoryCompanion.insert(
         date: todayDate,

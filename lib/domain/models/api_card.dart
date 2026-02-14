@@ -3,98 +3,143 @@ class ApiCard {
   final String name;
   final String? nameDe;
   final String supertype;
-  final List<String> subtypes; // Jetzt als Liste!
-  final List<String> types;    // Jetzt als Liste!
-  final String setId;          // Wir holen uns nur die ID aus dem Set-Objekt
+  final List<String> subtypes;
+  final List<String> types;
+  final String setId;
   final String number;
+  final String setPrintedTotal;
   final String artist;
   final String rarity;
   final String? flavorText;
   final String? flavorTextDe;
   
-  
   // Bilder
   final String smallImageUrl;
-  final String largeImageUrl;
+  final String? largeImageUrl;
+  final String? imageUrlDe; // <--- NEU: Deutsches Bild
 
-  // Preise (Verschachtelte Objekte)
+  // Varianten Flags (NEU) - Default: Normal=true, Rest=false
+  final bool hasNormal;
+  final bool hasHolo;
+  final bool hasReverse;
+  final bool hasWPromo;
+  final bool hasFirstEdition;
+
+  final bool isOwned;
+  
   final ApiCardMarket? cardmarket;
   final ApiTcgPlayer? tcgplayer;
-  final String? setPrintedTotal; // <--- Das brauchst du für die Anzeige "25/185"
-
-  final bool isOwned; // NEU: Zeigt an, ob die Karte in deiner Sammlung ist
 
   ApiCard({
     required this.id,
     required this.name,
-    required this.nameDe,
+    this.nameDe,
     required this.supertype,
     required this.subtypes,
     required this.types,
     required this.setId,
     required this.number,
+    required this.setPrintedTotal,
     required this.artist,
     required this.rarity,
     this.flavorText,
-    required this.flavorTextDe,
+    this.flavorTextDe,
+    
     required this.smallImageUrl,
-    required this.largeImageUrl,
+    this.largeImageUrl,
+    this.imageUrlDe, // <---
+    
+    // Default-Werte für Sicherheit
+    this.hasNormal = true,
+    this.hasHolo = false,
+    this.hasReverse = false,
+    this.hasWPromo = false,
+    this.hasFirstEdition = false,
+
+    this.isOwned = false,
     this.cardmarket,
     this.tcgplayer,
-    this.setPrintedTotal,
-    this.isOwned = false,
   });
+  
+  // Alte Getter für Abwärtskompatibilität (optional)
+  double? get priceEur => cardmarket?.trendPrice;
+  double? get priceUsd => tcgplayer?.prices?.normal?.market;
 
-  factory ApiCard.fromJson(Map<String, dynamic> json) {
-    // Hilfsfunktion, um Listen sicher zu parsen (falls mal null kommt)
-    List<String> parseList(dynamic list) {
-      if (list is List) {
-        return list.map((e) => e.toString()).toList();
-      }
-      return [];
-    }
+  // --- Factory für die ALTE API (PokemonTCG.io) ---
+  factory ApiCard.fromOldApiJson(Map<String, dynamic> json) {
+    // Helper für Listen
+    List<String> parseList(dynamic list) => (list is List) ? list.map((e) => e.toString()).toList() : [];
 
     return ApiCard(
       id: json['id'] ?? '',
       name: json['name'] ?? 'Unbekannt',
-      nameDe: json['nameDe'],
+      nameDe: null, // Alte API hat keine DE Namen
+      
       supertype: json['supertype'] ?? '',
       subtypes: parseList(json['subtypes']),
       types: parseList(json['types']),
-      // WICHTIG: Die API gibt "set": { "id": "swsh4", ... } zurück.
-      // Wir greifen direkt auf die ID zu.
-      setId: json['set']?['id'] ?? '', 
+      
+      setId: json['set']?['id'] ?? '',
       number: json['number'] ?? '',
+      setPrintedTotal: json['set']?['printedTotal']?.toString() ?? '',
+      
       artist: json['artist'] ?? '',
       rarity: json['rarity'] ?? '',
       flavorText: json['flavorText'],
-      flavorTextDe: json['flavorTextDe'],
-      smallImageUrl: json['images']?['small'] ?? '',
-      largeImageUrl: json['images']?['large'] ?? '',
+      flavorTextDe: null,
       
-      // Hier erstellen wir die Unter-Objekte für die Preise
-      cardmarket: json['cardmarket'] != null 
-          ? ApiCardMarket.fromJson(json['cardmarket']) 
-          : null,
-      tcgplayer: json['tcgplayer'] != null 
-          ? ApiTcgPlayer.fromJson(json['tcgplayer']) 
-          : null,
-      setPrintedTotal: json['set']?['printedTotal']?.toString(),
+      // Bilder Mapping
+      smallImageUrl: json['images']?['small'] ?? '',
+      largeImageUrl: json['images']?['large'],
+      imageUrlDe: null, // Alte API hat keine DE Bilder
+      
+      // Flags (Alte API liefert das nicht direkt so sauber wie TCGdex)
+      hasNormal: true, 
+      hasHolo: false,
+      hasReverse: false,
+      hasWPromo: false,
+      hasFirstEdition: false,
+
+      // Preise (Alte API Struktur -> Neue Struktur mappen)
+      cardmarket: json['cardmarket'] != null ? ApiCardMarket(
+          url: json['cardmarket']['url'] ?? '',
+          updatedAt: json['cardmarket']['updatedAt'] ?? '',
+          trendPrice: (json['cardmarket']['prices']?['trendPrice'] as num?)?.toDouble(),
+      ) : null,
+      
+      tcgplayer: json['tcgplayer'] != null ? ApiTcgPlayer(
+          url: json['tcgplayer']['url'] ?? '',
+          updatedAt: json['tcgplayer']['updatedAt'] ?? '',
+          prices: ApiTcgPlayerPrices(
+             normal: ApiPriceType(market: (json['tcgplayer']['prices']?['normal']?['market'] as num?)?.toDouble()),
+             holofoil: ApiPriceType(market: (json['tcgplayer']['prices']?['holofoil']?['market'] as num?)?.toDouble()),
+             reverseHolofoil: ApiPriceType(market: (json['tcgplayer']['prices']?['reverseHolofoil']?['market'] as num?)?.toDouble()),
+          )
+      ) : null,
     );
   }
-  
-  // Getter für "Alte" Logik (falls du irgendwo noch schnell einen Preis brauchst)
-  double? get priceEur => cardmarket?.trendPrice;
-  double? get priceUsd => tcgplayer?.prices?.normal?.market ?? tcgplayer?.prices?.reverseHolofoil?.market;
 }
 
-// --- HILFSKLASSE FÜR CARDMARKET (EUROPA) ---
+// --- CARDMARKET (EUROPA) ---
 class ApiCardMarket {
   final String url;
   final String updatedAt;
+  
+  // Normal Prices
   final double? trendPrice;
   final double? avg30;
+  final double? avg7;  // <--- NEU
+  final double? avg1;
   final double? lowPrice;
+  
+  // Holo Prices (NEU)
+  final double? trendHolo;
+  final double? avg30Holo;
+  final double? avg7Holo;
+  final double? avg1Holo;
+  final double? lowHolo;
+
+  // Reverse Holo
   final double? reverseHoloTrend;
 
   ApiCardMarket({
@@ -102,68 +147,57 @@ class ApiCardMarket {
     required this.updatedAt,
     this.trendPrice,
     this.avg30,
+    this.avg7,
+    this.avg1,
     this.lowPrice,
+    this.trendHolo,
+    this.avg30Holo,
+    this.avg7Holo,
+    this.avg1Holo,
+    this.lowHolo,
     this.reverseHoloTrend,
   });
-
-  factory ApiCardMarket.fromJson(Map<String, dynamic> json) {
-    final prices = json['prices'] as Map<String, dynamic>? ?? {};
-    
-    return ApiCardMarket(
-      url: json['url'] ?? '',
-      updatedAt: json['updatedAt'] ?? '',
-      // Wir holen die Werte direkt aus dem "prices" Unter-Objekt
-      trendPrice: (prices['trendPrice'] as num?)?.toDouble(),
-      avg30: (prices['avg30'] as num?)?.toDouble(),
-      lowPrice: (prices['lowPrice'] as num?)?.toDouble(),
-      reverseHoloTrend: (prices['reverseHoloTrend'] as num?)?.toDouble(),
-    );
-  }
 }
 
-// --- HILFSKLASSE FÜR TCGPLAYER (USA) ---
+// --- TCGPLAYER (USA) ---
 class ApiTcgPlayer {
   final String url;
-  final String? updatedAt;
+  final String updatedAt;
   final ApiTcgPlayerPrices? prices;
 
-  ApiTcgPlayer({required this.url, this.updatedAt, this.prices});
-
-  factory ApiTcgPlayer.fromJson(Map<String, dynamic> json) {
-    return ApiTcgPlayer(
-      url: json['url'],
-      updatedAt: json['updatedAt'],
-      prices: json['prices'] != null ? ApiTcgPlayerPrices.fromJson(json['prices']) : null,
-    );
-  }
+  ApiTcgPlayer({
+    required this.url,
+    required this.updatedAt,
+    this.prices,
+  });
 }
 
 class ApiTcgPlayerPrices {
   final ApiPriceType? normal;
-  final ApiPriceType? holofoil;
+  final ApiPriceType? holofoil; // <--- NEU
   final ApiPriceType? reverseHolofoil;
+  final ApiPriceType? firstEdition; 
 
-  ApiTcgPlayerPrices({this.normal, this.holofoil, this.reverseHolofoil});
-
-  factory ApiTcgPlayerPrices.fromJson(Map<String, dynamic> json) {
-    return ApiTcgPlayerPrices(
-      normal: json['normal'] != null ? ApiPriceType.fromJson(json['normal']) : null,
-      holofoil: json['holofoil'] != null ? ApiPriceType.fromJson(json['holofoil']) : null,
-      reverseHolofoil: json['reverseHolofoil'] != null ? ApiPriceType.fromJson(json['reverseHolofoil']) : null,
-    );
-  }
+  ApiTcgPlayerPrices({
+    this.normal,
+    this.holofoil,
+    this.reverseHolofoil,
+    this.firstEdition,
+  });
 }
 
 class ApiPriceType {
   final double? low;
+  final double? mid;       // <--- NEU
+  final double? high;
   final double? market;
+  final double? directLow; // <--- NEU
 
-  ApiPriceType({this.low, this.market});
-
-  factory ApiPriceType.fromJson(Map<String, dynamic> json) {
-    return ApiPriceType(
-      low: (json['low'] as num?)?.toDouble(),
-      market: (json['market'] as num?)?.toDouble(),
-    );
-  }
+  ApiPriceType({
+    this.low,
+    this.mid,
+    this.high,
+    this.market,
+    this.directLow,
+  });
 }

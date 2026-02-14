@@ -2,19 +2,15 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// Importiere den search_provider, wo jetzt setStatsProvider definiert ist
 import '../../data/api/search_provider.dart'; 
-import '../../data/api/tcg_api_client.dart';
 import '../../data/api/tcgdex_api_client.dart';
 import '../../data/database/database_provider.dart';
 import '../../data/sync/set_importer.dart';
 import '../../domain/models/api_set.dart';
 import 'set_detail_screen.dart';
 
-// Der Suchtext Provider bleibt hier (ist nur UI State)
+// Provider für den UI Such-State innerhalb der Set-Liste
 final setListSearchProvider = StateProvider<String>((ref) => '');
-
-// HINWEIS: setStatsProvider wurde hier ENTFERNT, da er jetzt aus search_provider.dart importiert wird!
 
 class SetListScreen extends ConsumerWidget {
   const SetListScreen({super.key});
@@ -22,7 +18,7 @@ class SetListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final setsAsync = ref.watch(allSetsProvider);
-    final searchQuery = ref.watch(setListSearchProvider); // Den Suchtext beobachten
+    final searchQuery = ref.watch(setListSearchProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -30,21 +26,20 @@ class SetListScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.sync),
-            tooltip: "Alles aktualisieren",
-            onPressed: () => _startFullSync(context, ref),
+            tooltip: "Set-Liste & Daten aktualisieren",
+            onPressed: () => _startSetSync(context, ref),
           ),
         ],
       ),
       body: Column(
         children: [
-          // 2. DIE SUCHLEISTE (Fest oben verankert)
+          // 1. SUCHLEISTE
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: TextField(
               decoration: InputDecoration(
                 hintText: 'Suche Set (z.B. 151, Evolving Skies)...',
                 prefixIcon: const Icon(Icons.search),
-                // Kleiner "Löschen" Button, wenn Text da ist
                 suffixIcon: searchQuery.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear),
@@ -53,30 +48,32 @@ class SetListScreen extends ConsumerWidget {
                         },
                       )
                     : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                 filled: true,
                 fillColor: Colors.grey[100],
               ),
-              // Aktualisiert den State bei jedem Tastendruck
               onChanged: (value) {
                 ref.read(setListSearchProvider.notifier).state = value;
               },
             ),
           ),
 
-          // 3. DIE LISTE (Gefiltert)
+          // 2. GRID DER SETS
           Expanded(
             child: setsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (err, stack) => Center(child: Text('Fehler: $err')),
               data: (allSets) {
-                // FILTER LOGIK:
+                // Filterlogik für Name (DE/EN) und Serie
                 final filteredSets = allSets.where((set) {
-                  return set.name.toLowerCase().contains(searchQuery.toLowerCase()) || 
-                         set.series.toLowerCase().contains(searchQuery.toLowerCase());
+                  final nameEn = set.name.toLowerCase();
+                  final nameDe = set.nameDe?.toLowerCase() ?? '';
+                  final query = searchQuery.toLowerCase();
+                  
+                  return nameEn.contains(query) || 
+                         nameDe.contains(query) || 
+                         set.series.toLowerCase().contains(query);
                 }).toList();
 
                 if (filteredSets.isEmpty) {
@@ -105,8 +102,7 @@ class SetListScreen extends ConsumerWidget {
                   ),
                   itemCount: filteredSets.length,
                   itemBuilder: (context, index) {
-                    final set = filteredSets[index];
-                    return _SetTile(set: set); // Wir nutzen ein eigenes Widget für bessere Performance
+                    return _SetTile(set: filteredSets[index]);
                   },
                 );
               },
@@ -117,16 +113,15 @@ class SetListScreen extends ConsumerWidget {
     );
   }
 
-  void _startFullSync(BuildContext context, WidgetRef ref) async {
-    // Sicherheitsfrage
+  // Sync-Logik (Kompletter Daten-Sync)
+  void _startSetSync(BuildContext context, WidgetRef ref) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Vollständiges Update?"),
         content: const Text(
-          "Das lädt ALLE Karten aller Sets herunter.\n"
-          "Das kann je nach Internetverbindung 10-30 Minuten dauern.\n\n"
-          "Dank der neuen Logik bricht es aber nicht ab!"
+          "Das lädt ALLE Sets inklusive Release-Daten und Karten herunter.\n"
+          "Dieser Vorgang kann eine Weile dauern.",
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Abbrechen")),
@@ -138,47 +133,29 @@ class SetListScreen extends ConsumerWidget {
     if (confirm != true) return;
 
     final db = ref.read(databaseProvider);
-    final api = ref.read(apiClientProvider);
     final dexApi = ref.read(tcgDexApiClientProvider);
-    final importer = SetImporter(api, dexApi, db);
+    final importer = SetImporter(dexApi, db);
 
     if (!context.mounted) return;
-    
+
+    // Ladeanzeige öffnen
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) {
-        return const Center(
-          child: Card(
-            child: Padding(
-              padding: EdgeInsets.all(20.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 20),
-                  Text("Update läuft... Bitte warten."),
-                  Text("Schau in die Konsole für Details.", style: TextStyle(fontSize: 10)),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+      builder: (ctx) => const Center(child: CircularProgressIndicator()),
     );
 
     try {
+      // Nutzt die neue Logik im Importer (inkl. Datum & Karten)
       await importer.syncAllData(
-        onProgress: (status) {
-          print('SYNC STATUS: $status');
-        }
+        onProgress: (status) => print('SYNC: $status'),
       );
 
       if (context.mounted) {
-        Navigator.pop(context);
-        ref.refresh(allSetsProvider);
+        Navigator.pop(context); // Ladeanzeige schließen
+        ref.refresh(allSetsProvider); // Liste neu laden
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Alles erledigt!')),
+          const SnackBar(content: Text('✅ Alles erfolgreich aktualisiert!')),
         );
       }
     } catch (e) {
@@ -192,15 +169,16 @@ class SetListScreen extends ConsumerWidget {
   }
 }
 
-// --- EIGENES WIDGET FÜR DAS SET-TILE (Für bessere Performance mit Riverpod) ---
 class _SetTile extends ConsumerWidget {
   final ApiSet set;
   const _SetTile({required this.set});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Hier beobachten wir den Stats-Provider NUR für dieses eine Set
     final statsAsync = ref.watch(setStatsProvider(set.id));
+    
+    // Bild Logik: Nutze deutsches Logo wenn verfügbar, sonst Englisch
+    final logoUrl = set.logoUrlDe ?? set.logoUrl;
 
     return Card(
       elevation: 3,
@@ -213,7 +191,7 @@ class _SetTile extends ConsumerWidget {
               builder: (context) => SetDetailScreen(set: set),
             ),
           ).then((_) {
-             // Wenn wir zurückkommen, aktualisieren wir die Stats für dieses Set
+             // Statistiken beim Zurückkehren refreshen
              ref.refresh(setStatsProvider(set.id));
           });
         },
@@ -222,21 +200,23 @@ class _SetTile extends ConsumerWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. LOGO
+                // LOGO BEREICH
                 Expanded(
                   flex: 3,
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
-                    child: CachedNetworkImage(
-                      imageUrl: set.logoUrl,
-                      fit: BoxFit.contain,
-                      placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                      errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
-                    ),
+                    child: logoUrl != null 
+                        ? CachedNetworkImage(
+                            imageUrl: logoUrl,
+                            fit: BoxFit.contain,
+                            placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                            errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
+                          )
+                        : const Icon(Icons.image_not_supported, color: Colors.grey),
                   ),
                 ),
                 
-                // 2. INFO & PROGRESS
+                // INFO BEREICH
                 Expanded(
                   flex: 2,
                   child: Container(
@@ -246,24 +226,30 @@ class _SetTile extends ConsumerWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          set.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          set.nameDe ?? set.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          maxLines: 1, 
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        Text(
-                          set.releaseDate,
-                          style: TextStyle(color: Colors.grey[600], fontSize: 10),
-                        ),
+                        // DATUM ANZEIGEN (wenn vorhanden)
+                        if (set.releaseDate.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2.0),
+                            child: Text(
+                              set.releaseDate,
+                              style: TextStyle(color: Colors.grey[600], fontSize: 10),
+                            ),
+                          ),
                         
                         const Spacer(),
 
-                        // STATISTIK ANZEIGE (Wird geladen)
+                        // FORTSCHRITTS-ANZEIGE
                         statsAsync.when(
                           data: (ownedCount) {
+                            // Wir nutzen total (Master-Set) für den Fortschritt
                             final int totalCount = set.total; 
                             final double progress = totalCount > 0 ? (ownedCount / totalCount) : 0.0;
                             final double displayProgress = progress > 1.0 ? 1.0 : progress; 
-                            final String percentage = (progress * 100).toStringAsFixed(1);
 
                             return Column(
                               children: [
@@ -271,23 +257,23 @@ class _SetTile extends ConsumerWidget {
                                   borderRadius: BorderRadius.circular(4),
                                   child: LinearProgressIndicator(
                                     value: displayProgress,
-                                    minHeight: 6,
+                                    minHeight: 5,
                                     backgroundColor: Colors.grey[300],
                                     valueColor: const AlwaysStoppedAnimation<Color>(Colors.blueAccent),
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 2),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text("$ownedCount / $totalCount", style: TextStyle(fontSize: 10, color: Colors.grey[800], fontWeight: FontWeight.w500)),
-                                    Text("$percentage%", style: const TextStyle(fontSize: 10, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                                    Text("$ownedCount/$totalCount", style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w500)),
+                                    Text("${(progress * 100).toStringAsFixed(0)}%", style: const TextStyle(fontSize: 9, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
                                   ],
                                 ),
                               ],
                             );
                           },
-                          loading: () => const LinearProgressIndicator(minHeight: 6),
+                          loading: () => const LinearProgressIndicator(minHeight: 5),
                           error: (_,__) => const SizedBox(), 
                         ),
                       ],
@@ -297,16 +283,16 @@ class _SetTile extends ConsumerWidget {
               ],
             ),
             
-            // Reload Button
+            // DOWNLOAD BUTTON (Karten dieses Sets laden)
             Positioned(
               top: 0, right: 0,
               child: Material(
                 color: Colors.transparent,
                 child: IconButton(
                   icon: const Icon(Icons.download_for_offline, color: Colors.grey),
-                  tooltip: "Set erneut laden",
+                  tooltip: "Karten für dieses Set laden",
                   iconSize: 20,
-                  onPressed: () => _reloadSet(context, ref, set),
+                  onPressed: () => _importCards(context, ref, set),
                 ),
               ),
             ),
@@ -316,30 +302,32 @@ class _SetTile extends ConsumerWidget {
     );
   }
 
-  void _reloadSet(BuildContext context, WidgetRef ref, ApiSet set) async {
+  void _importCards(BuildContext context, WidgetRef ref, ApiSet set) async {
     final db = ref.read(databaseProvider);
-    final api = ref.read(apiClientProvider);
     final dexApi = ref.read(tcgDexApiClientProvider);
-    final importer = SetImporter(api, dexApi, db);
+    final importer = SetImporter(dexApi, db);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Aktualisiere ${set.name}...')),
+      SnackBar(content: Text('Lade Karten für ${set.nameDe ?? set.name}...')),
     );
 
     try {
-      await importer.importSet(set);
-      // Wenn wir das Set neu laden, müssen wir auch die Stats refreshen!
+      // Lädt alle Karten-Details und Preise von TCGdex herunter
+      await importer.importCardsForSet(set.id);
+      
+      // Cache der Provider zurücksetzen, damit die UI die neuen Karten zeigt
+      ref.invalidate(cardsForSetProvider(set.id));
       ref.invalidate(setStatsProvider(set.id));
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fertig!'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('✅ Karten erfolgreich geladen!'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Fehler beim Download: $e'), backgroundColor: Colors.red),
         );
       }
     }

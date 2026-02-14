@@ -1,121 +1,121 @@
 import 'package:drift/drift.dart';
 
-// --- TABELLE 1: SETS (Stammdaten) ---
+// --- TABELLE 1: SETS ---
 class CardSets extends Table {
-  // ID ist z.B. "swsh4"
-  TextColumn get id => text()(); 
+  TextColumn get id => text()(); // Wir nutzen jetzt TCGdex IDs (z.B. "me02.5")
   TextColumn get name => text()(); 
   TextColumn get series => text()(); 
-  IntColumn get printedTotal => integer()();
-  IntColumn get total => integer()();
-  TextColumn get releaseDate => text()();
-  TextColumn get updatedAt => text()(); // Wann hat die API das Set zuletzt aktualisiert?
-  TextColumn get logoUrl => text()();
-  TextColumn get symbolUrl => text()();
-
+  IntColumn get printedTotal => integer().nullable()();
+  IntColumn get total => integer().nullable()();
+  TextColumn get releaseDate => text().nullable()(); // Kommt von der ALTEN API
+  TextColumn get updatedAt => text()();
+  
+  // BILDER: Auch für Sets speichern wir beide!
+  TextColumn get logoUrl => text().nullable()();   // Englisch
+  TextColumn get symbolUrl => text().nullable()();
   TextColumn get nameDe => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
 }
 
-// --- TABELLE 2: KARTEN (Stammdaten - ohne Preise!) ---
+// --- TABELLE 2: KARTEN ---
 class Cards extends Table {
-  // ID ist z.B. "swsh4-25"
   TextColumn get id => text()(); 
-  
-  // Verknüpfung zum Set (Foreign Key)
   TextColumn get setId => text().references(CardSets, #id)(); 
-  
   TextColumn get name => text()(); 
+  TextColumn get nameDe => text().nullable()(); 
   TextColumn get number => text()(); 
   
-  // Bilder
-  TextColumn get imageUrlSmall => text()(); 
-  TextColumn get imageUrlLarge => text()(); 
+  // BILDER: Beide Sprachen
+  TextColumn get imageUrl => text()();    // Englisch
   
-  // Metadaten
-  TextColumn get supertype => text().nullable()(); // "Pokémon"
-  TextColumn get subtypes => text().nullable()(); // JSON-String: ["Stage 2"]
-  TextColumn get types => text().nullable()();    // JSON-String: ["Fire"]
   TextColumn get artist => text().nullable()();
   TextColumn get rarity => text().nullable()();
   TextColumn get flavorText => text().nullable()();
+  TextColumn get flavorTextDe => text().nullable()();
 
-  TextColumn get nameDe => text().nullable()();
-  TextColumn get flavorTextDe => text().nullable()(); 
+  // VARIANTEN FLAGS
+  BoolColumn get hasFirstEdition => boolean().withDefault(const Constant(false))();
+  BoolColumn get hasNormal => boolean().withDefault(const Constant(true))();
+  BoolColumn get hasHolo => boolean().withDefault(const Constant(false))();
+  BoolColumn get hasReverse => boolean().withDefault(const Constant(false))();
+  BoolColumn get hasWPromo => boolean().withDefault(const Constant(false))();
 
-  // WICHTIG: Keine Preise mehr hier! Die sind jetzt ausgelagert.
+  // Sortier-Hilfe
+  IntColumn get sortNumber => integer().withDefault(const Constant(0))(); 
 
   @override
   Set<Column> get primaryKey => {id};
 }
 
-// --- TABELLE 3: CARDMARKET PREISE (Historie - Europa) ---
+// --- TABELLE 3: CARDMARKET PREISE (EUR) ---
 class CardMarketPrices extends Table {
-  IntColumn get id => integer().autoIncrement()(); // Laufende Nummer
-  
-  // Welche Karte?
+  IntColumn get id => integer().autoIncrement()();
   TextColumn get cardId => text().references(Cards, #id)(); 
-  
-  // Wann haben WIR den Preis gespeichert? (Für den Graphen x-Achse)
   DateTimeColumn get fetchedAt => dateTime()(); 
   
-  // Wann wurde der Preis bei Cardmarket aktualisiert? (Aus API)
-  // Wir nutzen das, um zu prüfen, ob wir eine neue Zeile brauchen.
-  TextColumn get updatedAt => text()(); 
+  // Normal
+  RealColumn get average => real().nullable()();
+  RealColumn get low => real().nullable()();
+  RealColumn get trend => real().nullable()();
+  RealColumn get avg1 => real().nullable()();
+  RealColumn get avg7 => real().nullable()();
+  RealColumn get avg30 => real().nullable()();
+  
+  // Holo
+  RealColumn get avgHolo => real().nullable()();
+  RealColumn get lowHolo => real().nullable()();
+  RealColumn get trendHolo => real().nullable()();
+  RealColumn get avg1Holo => real().nullable()();
+  RealColumn get avg7Holo => real().nullable()();
+  RealColumn get avg30Holo => real().nullable()();
+  
+  // Reverse Holo
+  RealColumn get trendReverse => real().nullable()();
 
-  // Die Preise (in Euro)
-  RealColumn get trendPrice => real().nullable()();
-  RealColumn get avg1 => real().nullable()();     // Durchschnitt 1 Tag
-  RealColumn get avg30 => real().nullable()();    // Durchschnitt 30 Tage
-  RealColumn get lowPrice => real().nullable()();
-  RealColumn get reverseHoloTrend => real().nullable()(); // Für Reverse Holo Graphen
-
-  // URL zum Shop (falls man kaufen will)
   TextColumn get url => text().nullable()();
 }
 
-// --- TABELLE 4: TCGPLAYER PREISE (Historie - USA) ---
+// --- TABELLE 4: TCGPLAYER PREISE (USD) ---
 class TcgPlayerPrices extends Table {
   IntColumn get id => integer().autoIncrement()();
-  
   TextColumn get cardId => text().references(Cards, #id)(); 
   DateTimeColumn get fetchedAt => dateTime()(); 
-  TextColumn get updatedAt => text()(); 
-
-  // Preise (in Dollar) - Wir trennen Normal und Holo
+  
+  // --- Normal ---
   RealColumn get normalMarket => real().nullable()();
   RealColumn get normalLow => real().nullable()();
+  RealColumn get normalMid => real().nullable()();
+  RealColumn get normalDirectLow => real().nullable()();
   
-  RealColumn get reverseHoloMarket => real().nullable()();
-  RealColumn get reverseHoloLow => real().nullable()();
-
+  // --- Holo ---
+  RealColumn get holoMarket => real().nullable()();
+  RealColumn get holoLow => real().nullable()();
+  RealColumn get holoMid => real().nullable()();
+  RealColumn get holoDirectLow => real().nullable()();
+  
+  // --- Reverse Holo ---
+  RealColumn get reverseMarket => real().nullable()();
+  RealColumn get reverseLow => real().nullable()();
+  RealColumn get reverseMid => real().nullable()();
+  RealColumn get reverseDirectLow => real().nullable()();
+  
   TextColumn get url => text().nullable()();
 }
 
+// --- TABELLE 5: USER CARDS ---
 class UserCards extends Table {
   IntColumn get id => integer().autoIncrement()();
-  
-  // Welche Karte ist es?
   TextColumn get cardId => text().references(Cards, #id)();
-  
-  // Wieviele hast du davon?
   IntColumn get quantity => integer().withDefault(const Constant(1))();
-  
-  // Zustand (Near Mint, Excellent, Good, Played, Poor)
   TextColumn get condition => text().withDefault(const Constant('NM'))();
-  
-  // Sprache (Deutsch, Englisch, Japanisch)
   TextColumn get language => text().withDefault(const Constant('Deutsch'))();
-  
-  // WICHTIG: Die Variante (Normal, Reverse Holo, Holo, First Edition)
-  TextColumn get variant => text().withDefault(const Constant('Normal'))();
-  
-  // Wann hinzugefügt?
+  TextColumn get variant => text().withDefault(const Constant('Normal'))(); 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
+// --- TABELLE 6: PORTFOLIO HISTORIE ---
 class PortfolioHistory extends Table {
   IntColumn get id => integer().autoIncrement()();
   DateTimeColumn get date => dateTime()();
