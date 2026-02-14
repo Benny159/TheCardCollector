@@ -115,6 +115,19 @@ class TcgApiClient {
     }
   }
 
+  Future<List<ApiCard>> fetchCardsForSet(String setId) async {
+    List<ApiCard> allCards = [];
+    
+    await fetchAllCardsForSet(
+      setId,
+      onBatchLoaded: (batch) async {
+        allCards.addAll(batch);
+      },
+    );
+    
+    return allCards;
+  }
+
   Future<List<ApiSet>> fetchAllSets() async {
     print('Lade alle Sets...');
     try {
