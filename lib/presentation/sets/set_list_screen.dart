@@ -12,12 +12,37 @@ import 'set_detail_screen.dart';
 // Provider für den UI Such-State innerhalb der Set-Liste
 final setListSearchProvider = StateProvider<String>((ref) => '');
 
-class SetListScreen extends ConsumerWidget {
+// ÄNDERUNG: Jetzt ConsumerStatefulWidget, um den Controller zu halten
+class SetListScreen extends ConsumerStatefulWidget {
   const SetListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SetListScreen> createState() => _SetListScreenState();
+}
+
+class _SetListScreenState extends ConsumerState<SetListScreen> {
+  late TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    // Controller mit dem aktuellen Wert aus dem Provider initialisieren
+    // (falls man vom Detail-Screen zurückkommt und die Suche noch da sein soll)
+    _searchController = TextEditingController(
+      text: ref.read(setListSearchProvider)
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final setsAsync = ref.watch(allSetsProvider);
+    // Wir beobachten den Provider, um das "X" Icon ein/auszublenden
     final searchQuery = ref.watch(setListSearchProvider);
 
     return Scaffold(
@@ -37,6 +62,7 @@ class SetListScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: TextField(
+              controller: _searchController, // WICHTIG: Controller verbinden
               decoration: InputDecoration(
                 hintText: 'Suche Set (z.B. 151, Evolving Skies)...',
                 prefixIcon: const Icon(Icons.search),
@@ -44,7 +70,9 @@ class SetListScreen extends ConsumerWidget {
                     ? IconButton(
                         icon: const Icon(Icons.clear),
                         onPressed: () {
-                          ref.read(setListSearchProvider.notifier).state = '';
+                          // WICHTIG: Beides zurücksetzen!
+                          _searchController.clear(); // 1. Textfeld leeren
+                          ref.read(setListSearchProvider.notifier).state = ''; // 2. Such-State leeren
                         },
                       )
                     : null,
@@ -152,18 +180,22 @@ class SetListScreen extends ConsumerWidget {
       );
 
       if (context.mounted) {
-        Navigator.pop(context); // Ladeanzeige schließen
-        ref.refresh(allSetsProvider); // Liste neu laden
+        // Erfolgsmeldung
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('✅ Alles erfolgreich aktualisiert!')),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
         );
+      }
+    } finally {
+      // WICHTIG: Dialog IMMER schließen, auch bei Fehler!
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ref.refresh(allSetsProvider); // Liste neu laden
       }
     }
   }

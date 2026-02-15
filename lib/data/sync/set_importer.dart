@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import '../api/tcgdex_api_client.dart';
 import '../database/app_database.dart';
 
+// Helper Klasse um Daten zwischenzuspeichern
 class _CardImportData {
   final CardsCompanion card;
   final CardMarketPricesCompanion? cmPrice;
@@ -20,7 +21,7 @@ class SetImporter {
   Future<void> syncAllData({Function(String status)? onProgress}) async {
     onProgress?.call('Lade Set-Liste von TCGdex...');
     
-    // 1. Alle Sets laden (Basis-Liste)
+    // 1. Alle Sets laden
     final dexSetsEn = await dexClient.fetchAllSets(lang: 'en');
     final dexSetsDe = await dexClient.fetchAllSets(lang: 'de');
     final deMap = { for (var s in dexSetsDe) s['id']: s };
@@ -29,37 +30,39 @@ class SetImporter {
     int skipped = 0;
 
     for (var listSet in dexSetsEn) {
-      await Future.delayed(const Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 10)); // UI atmen lassen
+
       final setId = listSet['id'] as String;
+      
+      // --- POCKET FILTER (Vorab-Check) ---
+      final serieData = listSet['serie'];
+      final String serieId = (serieData is Map) ? serieData['id'] ?? '' : '';
+
+      if (serieId == 'jumbo' || setId == 'wp' || setId == 'xya' || setId == 'sp') {
+        skipped++;
+        print('⏩ Überspringe Pocket-Set: ${listSet['name']} ($setId)');
+        continue; 
+      }
+      // ---------------------
 
       current++;
       final setName = listSet['name'] as String;
       
-      onProgress?.call('Set $current/${dexSetsEn.length - skipped}: $setName - Lade Details & Datum...');
+      onProgress?.call('Set $current/${dexSetsEn.length - skipped}: $setName...');
       
-      // --- NEU: DETAILS LADEN (FÜR RELEASE DATE) ---
-      // Wir holen das volle Set-Objekt, da das Listen-Objekt oft kein Datum hat.
+      // 2. Details laden (für Release Date & korrekten Serie-Check)
       final fullSetData = await dexClient.fetchSet(setId);
       
       if (fullSetData != null) {
-        // --- POCKET FILTER ---
-        final serieData = fullSetData['serie'];
-        final String serieId = (serieData is Map) ? serieData['id'] ?? '' : '';
-
-        if (serieId == 'tcgp') {
-          skipped++;
-          current--; // Zähler korrigieren, da wir es doch nicht nehmen
-          print('⏩ Überspringe Pocket-Set (Serie-Check): $setName ($setId)');
-          continue; // ABBRUCH FÜR DIESES SET!
+        final detailSerie = fullSetData['serie'];
+        final detailSerieId = (detailSerie is Map) ? detailSerie['id'] ?? '' : '';
+        if (detailSerieId == 'tcgp') {
+           skipped++; current--; continue;
         }
-        // ---------------------------
+
         final setDe = deMap[setId];
-        
-        // Metadaten speichern (inklusive Datum!)
         await _saveSetMetadata(fullSetData, setDe);
 
-        // Karten laden
-        onProgress?.call('Set $current: $setName - Lade Karten & Preise...');
         try {
           await importCardsForSet(setId);
         } catch (e) {
@@ -68,71 +71,64 @@ class SetImporter {
       }
     }
     
-    onProgress?.call('✅ Sync fertig! $current Sets geladen ($skipped Pocket-Sets ignoriert).');
+    onProgress?.call('✅ Sync fertig! $current Sets geladen.');
   }
 
   Future<void> _saveSetMetadata(dynamic en, dynamic de) async {
     final setId = en['id'];
     
-    // BILDER
     final logoEn = en['logo'] != null ? '${en["logo"]}.png' : null;
     final logoDe = de?['logo'] != null ? '${de["logo"]}.png' : null;
     final symbol = en['symbol'] != null ? '${en["symbol"]}.png' : null;
-
-    // DATUM (Hier ist es!)
     final String? rDate = en['releaseDate'];
 
+    // LOGIC: Value.absent() schützt manuelle DB-Einträge, falls API null liefert
     await database.into(database.cardSets).insertOnConflictUpdate(
       CardSetsCompanion(
         id: Value(setId),
         name: Value(en['name']),
-        nameDe: Value(de?['name']),
+        nameDe: Value(de?['name']), // Name DE wird meist aus API Liste genommen
         series: Value(en['serie'] is Map ? en['serie']['name'] : 'Series'),
         printedTotal: Value(en['cardCount']?['official'] ?? 0),
         total: Value(en['cardCount']?['total'] ?? 0),
-        // JETZT MIT DATUM:
         releaseDate: rDate != null ? Value(rDate) : const Value.absent(),
         updatedAt: Value(DateTime.now().toIso8601String()),
-        logoUrl: Value(logoEn),
-        logoUrlDe: Value(logoDe),
-        symbolUrl: Value(symbol),
+        
+        // Bilder schützen: Nur überschreiben wenn API was liefert
+        logoUrl: logoEn != null ? Value(logoEn) : const Value.absent(),
+        logoUrlDe: logoDe != null ? Value(logoDe) : const Value.absent(),
+        symbolUrl: symbol != null ? Value(symbol) : const Value.absent(),
       )
     );
   }
 
-  // --- KARTEN IMPORTIEREN ---
+  // --- KARTEN IMPORT (BATCHING) ---
   Future<void> importCardsForSet(String setId) async {
-    // Hier nutzen wir fetchCardsOfSet, das (laut meiner Ergänzung im Client)
-    // direkt die Kartenliste zurückgibt.
     final enList = await dexClient.fetchCardsOfSet(setId, lang: 'en');
     final deList = await dexClient.fetchCardsOfSet(setId, lang: 'de');
     final deMap = { for (var c in deList) c['id']: c };
 
-    // Batch Processing
     int chunkSize = 20;
+    
     for (var i = 0; i < enList.length; i += chunkSize) {
       await Future.delayed(Duration.zero);
+
       final end = (i + chunkSize < enList.length) ? i + chunkSize : enList.length;
       final chunk = enList.sublist(i, end);
-      // 1. Parallel Daten laden (Netzwerk)
+      
       final List<_CardImportData?> results = await Future.wait(
         chunk.map((c) => _prepareCardData(c, deMap[c['id']]))
       );
 
-      // Null-Werte (Fehler) filtern
       final validData = results.whereType<_CardImportData>().toList();
       if (validData.isEmpty) continue;
 
-      // 2. Alles in EINER Transaktion speichern (Datenbank)
-      // Das ist der Performance-Boost! Statt 20x Insert machen wir 1x Batch.
       await database.batch((batch) {
-        // Karten einfügen/updaten
         batch.insertAllOnConflictUpdate(
           database.cards, 
           validData.map((d) => d.card).toList()
         );
 
-        // Preise einfügen (nur neue Zeilen)
         final cmList = validData.map((d) => d.cmPrice).whereType<CardMarketPricesCompanion>().toList();
         if (cmList.isNotEmpty) {
           batch.insertAll(database.cardMarketPrices, cmList);
@@ -149,16 +145,18 @@ class SetImporter {
   Future<_CardImportData?> _prepareCardData(dynamic summaryEn, dynamic summaryDe) async {
     final cardId = summaryEn['id'];
     
+    // Wir laden EN Details, weil dort Preise & Co stehen
     final data = await dexClient.fetchCardDetails(cardId, lang: 'en');
     if (data == null) return null;
 
     final nameEn = data['name'] ?? 'Unknown';
-    final nameDe = summaryDe?['name']; 
+    // Deutscher Name (kann null sein in der API)
+    final String? nameDeApi = summaryDe?['name']; 
 
+    // Bilder aus API
     String imageEn = data['image'] ?? summaryEn['image'] ?? '';
     if (imageEn.isNotEmpty && !imageEn.endsWith('.png')) imageEn += '/high.png';
 
-    // Bild-Logik Fix (damit Null auch Null bleibt)
     String? imageDe = summaryDe?['image'];
     if (imageDe != null && imageDe.isNotEmpty) {
        if (!imageDe.endsWith('.png')) imageDe += '/high.png';
@@ -166,21 +164,29 @@ class SetImporter {
        imageDe = null; 
     }
 
+    // Künstler aus API
+    final String? artistApi = data['illustrator'];
+
     final v = data['variants'] ?? {};
     final number = data['localId'] ?? '0';
     int sortNum = int.tryParse(number) ?? 0;
 
-    // Karte vorbereiten
     final cardCompanion = CardsCompanion(
         id: Value(cardId),
         setId: Value(data['set']['id']),
         name: Value(nameEn),
-        nameDe: Value(nameDe),
         number: Value(number),
         sortNumber: Value(sortNum),
-        imageUrl: Value(imageEn),
-        imageUrlDe: Value(imageDe),
-        artist: Value(data['illustrator']),
+        
+        // --- MANUELLE DATEN SCHÜTZEN ---
+        // Wenn API null/leer liefert, nutzen wir Value.absent(), damit der alte DB-Wert bleibt
+        nameDe: (nameDeApi != null && nameDeApi.isNotEmpty) ? Value(nameDeApi) : const Value.absent(),
+        artist: (artistApi != null && artistApi.isNotEmpty) ? Value(artistApi) : const Value.absent(),
+        
+        // Bilder schützen
+        imageUrl: imageEn.isNotEmpty ? Value(imageEn) : const Value.absent(),
+        imageUrlDe: imageDe != null ? Value(imageDe) : const Value.absent(),
+        
         rarity: Value(data['rarity']),
         hasFirstEdition: Value(v['firstEdition'] == true),
         hasNormal: Value(v['normal'] == true),
@@ -189,7 +195,6 @@ class SetImporter {
         hasWPromo: Value(v['wPromo'] == true),
     );
 
-    // Preise vorbereiten
     CardMarketPricesCompanion? cmCompanion;
     TcgPlayerPricesCompanion? tcgCompanion;
     
@@ -243,106 +248,5 @@ class SetImporter {
     }
 
     return _CardImportData(cardCompanion, cmCompanion, tcgCompanion);
-  }
-
-  Future<void> _fetchAndSaveCard(dynamic summaryEn, dynamic summaryDe) async {
-    final cardId = summaryEn['id'];
-    final data = await dexClient.fetchCardDetails(cardId, lang: 'en');
-    if (data == null) return;
-
-    final nameEn = data['name'] ?? 'Unknown';
-    final nameDe = summaryDe?['name']; 
-
-    String imageEn = data['image'] ?? summaryEn['image'] ?? '';
-    if (imageEn.isNotEmpty && !imageEn.endsWith('.png')) imageEn += '/high.png';
-
-    String imageDe = summaryDe?['image'] ?? '';
-    if (imageDe.isNotEmpty && !imageDe.endsWith('.png')) imageDe += '/high.png';
-
-    final v = data['variants'] ?? {};
-    final number = data['localId'] ?? '0';
-    int sortNum = int.tryParse(number) ?? 0;
-
-    await database.into(database.cards).insertOnConflictUpdate(
-      CardsCompanion(
-        id: Value(cardId),
-        setId: Value(data['set']['id']),
-        name: Value(nameEn),
-        nameDe: Value(nameDe),
-        number: Value(number),
-        sortNumber: Value(sortNum),
-        imageUrl: Value(imageEn),
-        imageUrlDe: Value(imageDe),
-        artist: Value(data['illustrator']),
-        rarity: Value(data['rarity']),
-        hasFirstEdition: Value(v['firstEdition'] == true),
-        hasNormal: Value(v['normal'] == true),
-        hasHolo: Value(v['holo'] == true),
-        hasReverse: Value(v['reverse'] == true),
-        hasWPromo: Value(v['wPromo'] == true),
-      )
-    );
-
-    if (data['pricing'] != null) {
-      await _savePrices(cardId, data['pricing']);
-    }
-  }
-
-  Future<void> _savePrices(String cardId, dynamic pricing) async {
-    final now = DateTime.now();
-
-    // 1. Cardmarket (EUR)
-    if (pricing['cardmarket'] != null) {
-      final cm = pricing['cardmarket'];
-      await database.into(database.cardMarketPrices).insert(
-        CardMarketPricesCompanion.insert(
-          cardId: cardId,
-          fetchedAt: now,
-          average: Value((cm['avg'] as num?)?.toDouble()),
-          low: Value((cm['low'] as num?)?.toDouble()),
-          trend: Value((cm['trend'] as num?)?.toDouble()),
-          avg1: Value((cm['avg1'] as num?)?.toDouble()),
-          avg7: Value((cm['avg7'] as num?)?.toDouble()),
-          avg30: Value((cm['avg30'] as num?)?.toDouble()),
-          
-          avgHolo: Value((cm['avg-holo'] as num?)?.toDouble()),
-          lowHolo: Value((cm['low-holo'] as num?)?.toDouble()),
-          trendHolo: Value((cm['trend-holo'] as num?)?.toDouble()),
-          avg1Holo: Value((cm['avg1-holo'] as num?)?.toDouble()),
-          avg7Holo: Value((cm['avg7-holo'] as num?)?.toDouble()),
-          avg30Holo: Value((cm['avg30-holo'] as num?)?.toDouble()),
-        )
-      );
-    }
-
-    // 2. TCGPlayer (USD)
-    if (pricing['tcgplayer'] != null) {
-      final tcg = pricing['tcgplayer'];
-      final norm = tcg['normal'];
-      final holo = tcg['holofoil'];
-      final rev = tcg['reverse-holofoil'];
-
-      await database.into(database.tcgPlayerPrices).insert(
-        TcgPlayerPricesCompanion.insert(
-          cardId: cardId,
-          fetchedAt: now,
-          
-          normalMarket: Value((norm?['marketPrice'] as num?)?.toDouble()),
-          normalLow: Value((norm?['lowPrice'] as num?)?.toDouble()),
-          normalMid: Value((norm?['midPrice'] as num?)?.toDouble()),
-          normalDirectLow: Value((norm?['directLowPrice'] as num?)?.toDouble()),
-          
-          holoMarket: Value((holo?['marketPrice'] as num?)?.toDouble()),
-          holoLow: Value((holo?['lowPrice'] as num?)?.toDouble()),
-          holoMid: Value((holo?['midPrice'] as num?)?.toDouble()),
-          holoDirectLow: Value((holo?['directLowPrice'] as num?)?.toDouble()),
-          
-          reverseMarket: Value((rev?['marketPrice'] as num?)?.toDouble()),
-          reverseLow: Value((rev?['lowPrice'] as num?)?.toDouble()),
-          reverseMid: Value((rev?['midPrice'] as num?)?.toDouble()),
-          reverseDirectLow: Value((rev?['directLowPrice'] as num?)?.toDouble()),
-        )
-      );
-    }
   }
 }

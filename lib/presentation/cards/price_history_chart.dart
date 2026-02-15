@@ -188,39 +188,62 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
         ? DateTime(2000) 
         : now.subtract(Duration(days: _monthsFilter * 30));
 
+    // Listen kopieren & sortieren
     final cmList = List.of(widget.cmHistory)..sort((a,b) => a.fetchedAt.compareTo(b.fetchedAt));
     final tcgList = List.of(widget.tcgHistory)..sort((a,b) => a.fetchedAt.compareTo(b.fetchedAt));
 
+    // --- HELPER: NUR EINEN WERT PRO TAG ---
+    // Diese Map speichert nur den *letzten* Wert für einen Tag (Key: "2026-02-15")
+    final Map<String, double> dailyValues = {};
+
+    void addValue(DateTime date, double? val) {
+      if (val == null || val <= 0) return;
+      if (date.isBefore(cutoffDate)) return;
+      
+      // Datum ohne Uhrzeit als Key (z.B. "2024-10-30")
+      final dateKey = "${date.year}-${date.month}-${date.day}";
+      // Überschreibt vorherige Werte desselben Tages -> Nur der letzte bleibt!
+      dailyValues[dateKey] = val; 
+    }
+    // --------------------------------------
+
     if (_selectedType.name.startsWith('cm')) {
       for (var p in cmList) {
-        if (p.fetchedAt.isBefore(cutoffDate)) continue;
         double? val;
-        
-        // KORREKTUR: Kein Reverse hier
-        if (_selectedType == PriceType.cmTrend) val = p.trend;
-        else if (_selectedType == PriceType.cmTrendHolo) val = p.trendHolo;
-        
-        if (val != null && val > 0) {
-          rawSpots.add(FlSpot(p.fetchedAt.millisecondsSinceEpoch.toDouble(), val));
+        switch (_selectedType) {
+          case PriceType.cmTrend: val = p.trend; break;
+          case PriceType.cmTrendHolo: val = p.trendHolo; break;
+          // case PriceType.cmReverse: val = p.reverseHoloTrend; break; // Falls DB erweitert wird
+          default: break;
         }
+        addValue(p.fetchedAt, val);
       }
     } else {
       for (var p in tcgList) {
-        if (p.fetchedAt.isBefore(cutoffDate)) continue;
         double? val;
-
         switch (_selectedType) {
           case PriceType.tcgMarket: val = p.normalMarket; break;
           case PriceType.tcgMarketHolo: val = p.holoMarket; break;
           case PriceType.tcgMarketReverse: val = p.reverseMarket; break;
           default: break;
         }
-
-        if (val != null && val > 0) {
-          rawSpots.add(FlSpot(p.fetchedAt.millisecondsSinceEpoch.toDouble(), val));
-        }
+        addValue(p.fetchedAt, val);
       }
     }
+
+    // Map in Spots umwandeln und sortieren
+    // Wir müssen das Datum aus dem String key rekonstruieren oder wir speichern es besser separat.
+    // Einfacher: Wir iterieren über die Keys, parsen das Datum und bauen den Spot.
+    
+    final sortedKeys = dailyValues.keys.toList()..sort(); // Datum-Strings sortieren (YYYY-MM-DD sortiert sich korrekt lexikalisch)
+
+    for (var key in sortedKeys) {
+      final parts = key.split('-');
+      final date = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+      final val = dailyValues[key]!;
+      rawSpots.add(FlSpot(date.millisecondsSinceEpoch.toDouble(), val));
+    }
+
     return rawSpots;
   }
 
