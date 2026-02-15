@@ -376,20 +376,28 @@ final portfolioHistoryProvider = StreamProvider<List<PortfolioHistoryData>>((ref
 
 Future<void> createPortfolioSnapshot(WidgetRef ref) async {
   final db = ref.read(databaseProvider);
-  final items = await ref.read(inventoryProvider.future);
+  
+  // WICHTIG: Wir nutzen refresh statt read, um sicherzustellen, dass wir FRISCHE Daten bekommen.
+  // Das zwingt den Provider, die Datenbank neu abzufragen.
+  final items = await ref.refresh(inventoryProvider.future);
+  
   final double currentTotal = items.fold(0.0, (sum, item) => sum + item.totalValue);
 
   final today = DateTime.now();
   final todayDate = DateTime(today.year, today.month, today.day);
 
+  // Prüfen, ob für HEUTE schon ein Eintrag existiert
   final existingEntry = await (db.select(db.portfolioHistory)
     ..where((t) => t.date.equals(todayDate))
   ).getSingleOrNull();
 
   if (existingEntry != null) {
+    // Update: Wenn wir heute schon was gespeichert haben, überschreiben wir es mit dem neuen Wert.
+    // Das passiert z.B., wenn man 5 Karten nacheinander löscht/hinzufügt.
     await (db.update(db.portfolioHistory)..where((t) => t.id.equals(existingEntry.id)))
       .write(PortfolioHistoryCompanion(totalValue: Value(currentTotal)));
   } else {
+    // Insert: Der erste Snapshot des Tages
     await db.into(db.portfolioHistory).insert(
       PortfolioHistoryCompanion.insert(
         date: todayDate,
@@ -397,4 +405,29 @@ Future<void> createPortfolioSnapshot(WidgetRef ref) async {
       ),
     );
   }
+  
+  // UI für den Graphen aktualisieren
+  ref.invalidate(portfolioHistoryProvider);
 }
+
+// Holt die Preishistorie für eine Karte (Cardmarket & TCGPlayer)
+final cardPriceHistoryProvider = FutureProvider.family<Map<String, List<dynamic>>, String>((ref, cardId) async {
+  final db = ref.read(databaseProvider);
+  
+  // Cardmarket laden
+  final cmHistory = await (db.select(db.cardMarketPrices)
+    ..where((t) => t.cardId.equals(cardId))
+    ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt)]) // Älteste zuerst
+  ).get();
+
+  // TCGPlayer laden
+  final tcgHistory = await (db.select(db.tcgPlayerPrices)
+    ..where((t) => t.cardId.equals(cardId))
+    ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt)])
+  ).get();
+
+  return {
+    'cm': cmHistory,
+    'tcg': tcgHistory,
+  };
+});

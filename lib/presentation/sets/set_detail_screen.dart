@@ -29,6 +29,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Wir beobachten den Provider. Riverpod cacht das Ergebnis, also ist das okay.
     final cardsAsync = ref.watch(cardsForSetProvider(widget.set.id));
 
     return Scaffold(
@@ -42,17 +43,16 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         data: (rawCards) {
           if (rawCards.isEmpty) return const Center(child: Text("Keine Karten gefunden."));
 
-          // 1. SORTIEREN (nach SortNumber, was wir in der DB haben, oder Number String fallback)
-          final List<ApiCard> allSortedCards = List.from(rawCards);
+          // Wir berechnen die gefilterte Liste.
+          // HINWEIS: Bei sehr großen Sets (>1000 Items) könnte man das in einen 
+          // separaten Provider ("filteredCardsProvider") auslagern, 
+          // aber für <500 Karten ist das meist okay.
           
-          // Die DB liefert sie eigentlich schon sortiert (siehe search_provider), aber sicher ist sicher:
-          // Falls sortNumber nicht verfügbar (alte Logik), nutzen wir den String-Vergleich
-          // allSortedCards.sort((a, b) => _compareCardNumbers(a.number, b.number)); 
+          final List<ApiCard> allCards = rawCards; // Sind schon sortiert vom Provider
 
-          // 2. FILTERN
-          List<ApiCard> visibleCards = allSortedCards;
+          // 1. FILTERN
+          List<ApiCard> visibleCards = allCards;
 
-          // A) Standard vs Master Set
           if (_showStandardSetOnly) {
             visibleCards = visibleCards.where((c) {
               final num = int.tryParse(c.number);
@@ -60,7 +60,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
             }).toList();
           }
 
-          // B) Raritäten
           if (_selectedRarities.isNotEmpty) {
             visibleCards = visibleCards.where((c) {
               final r = c.rarity.isEmpty ? 'Others' : c.rarity;
@@ -68,19 +67,18 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
             }).toList();
           }
 
-          // C) Besitz-Filter
           if (_ownershipFilter == OwnershipFilter.owned) {
             visibleCards = visibleCards.where((c) => c.isOwned).toList();
           } else if (_ownershipFilter == OwnershipFilter.missing) {
             visibleCards = visibleCards.where((c) => !c.isOwned).toList();
           }
 
-          // 3. WERTE BERECHNEN (Auf Basis ALLER Karten im Set, ungefiltert)
+          // 2. WERTE BERECHNEN (Summen)
+          // Das ist O(N), bei 500 Karten vernachlässigbar schnell (<1ms)
           double totalSetVal = 0.0;
           double userOwnedVal = 0.0;
 
-          for (var card in allSortedCards) {
-            // Einheitliche Preislogik
+          for (var card in allCards) {
             double price = card.cardmarket?.trendPrice ?? 
                            card.tcgplayer?.prices?.normal?.market ??
                            card.tcgplayer?.prices?.holofoil?.market ??
@@ -92,13 +90,17 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
           return Column(
             children: [
-              _buildHeader(context, allSortedCards, totalSetVal, userOwnedVal),
+              // Header ist fix, scrollt nicht mit (optional: in CustomScrollView packen)
+              _buildHeader(context, allCards, totalSetVal, userOwnedVal),
               const Divider(height: 1),
+              
               Expanded(
                 child: visibleCards.isEmpty 
                   ? const Center(child: Text("Keine Karten für diesen Filter."))
                   : GridView.builder(
                     padding: const EdgeInsets.all(8),
+                    // Optimierung: cacheExtent erhöht, damit Bilder früher geladen werden beim Scrollen
+                    cacheExtent: 500, 
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 3,
                       childAspectRatio: 0.70,
@@ -107,8 +109,9 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     ),
                     itemCount: visibleCards.length,
                     itemBuilder: (context, index) {
-                      final card = visibleCards[index];
-                      return _buildCardItem(card, card.isOwned);
+                      // Hier wird direkt das Widget gebaut. 
+                      // Das ist effizient, da es nur für sichtbare Items passiert.
+                      return _buildCardItem(visibleCards[index], visibleCards[index].isOwned);
                     },
                   ),
               ),
@@ -122,6 +125,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
   // --- UI KOMPONENTEN ---
 
   Widget _buildHeader(BuildContext context, List<ApiCard> allCards, double totalValue, double ownedValue) {
+    // Statistik berechnen
     final int userOwnedMaster = allCards.where((c) => c.isOwned).length;
     final int totalCards = allCards.length;
     final double progress = totalCards > 0 ? (userOwnedMaster / totalCards) : 0.0;
@@ -129,9 +133,11 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     final int standardTotal = widget.set.printedTotal;
     final int userOwnedStandard = allCards.where((c) {
       final num = int.tryParse(c.number);
+      // Sicherheit: Number kann auch "TG01" sein, dann ist int.tryParse null
       return c.isOwned && num != null && num <= standardTotal;
     }).length;
 
+    // Raritäten Zähler
     final Map<String, int> totalRarityCounts = {};
     final Map<String, int> ownedRarityCounts = {};
 
@@ -142,13 +148,14 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         ownedRarityCounts[r] = (ownedRarityCounts[r] ?? 0) + 1;
       }
     }
+    
+    // Sortieren der Raritäten (fest definiert)
     final sortedRarities = totalRarityCounts.keys.toList()
       ..sort((a, b) => _getRarityWeight(a).compareTo(_getRarityWeight(b)));
 
     final bool isMasterActive = !_showStandardSetOnly && _selectedRarities.isEmpty;
     final bool isStandardActive = _showStandardSetOnly;
 
-    // Logo Logik: Deutsch bevorzugen
     final logoUrl = widget.set.logoUrlDe ?? widget.set.logoUrl;
 
     return Container(
@@ -162,7 +169,12 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
               if (logoUrl != null)
                 SizedBox(
                   height: 45, width: 80,
-                  child: CachedNetworkImage(imageUrl: logoUrl, fit: BoxFit.contain),
+                  child: CachedNetworkImage(
+                    imageUrl: logoUrl, 
+                    fit: BoxFit.contain,
+                    placeholder: (_,__) => const SizedBox(), // Kein Loader im Header, flackert sonst
+                    errorWidget: (_,__,___) => const SizedBox(),
+                  ),
                 ),
               const SizedBox(width: 16),
               Expanded(
@@ -206,7 +218,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
           const SizedBox(height: 12),
           
-          // 3. SET FILTER (Master vs Standard)
+          // 3. SET FILTER
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -361,18 +373,18 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
   }
 
   Widget _buildCardItem(ApiCard card, bool isOwned) {
-    // 1. Cardmarket Trend
+    // Preis-Logik (wie gehabt)
     double? displayPrice = card.cardmarket?.trendPrice;
-    
-    // 2. Fallback: TCGPlayer
     if (displayPrice == null || displayPrice == 0) {
       displayPrice = card.tcgplayer?.prices?.normal?.market ?? 
                      card.tcgplayer?.prices?.holofoil?.market ?? 
                      card.tcgplayer?.prices?.reverseHolofoil?.market;
     }
 
-    // Bild (Deutsch bevorzugt)
-    final imageUrl = card.imageUrlDe ?? card.smallImageUrl;
+    // BILD LOGIK: Nutze den neuen Getter
+    final String imageUrl = card.displayImage;
+    // Prüfen, ob wir wirklich eine URL haben
+    final bool hasImage = imageUrl.isNotEmpty;
 
     return InkWell(
       onTap: () {
@@ -386,7 +398,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
           builder: (_) => InventoryBottomSheet(card: card)
         );
         ref.invalidate(cardsForSetProvider(widget.set.id));
-        ref.invalidate(setStatsProvider(widget.set.id)); // Auch Set-Liste updaten
+        ref.invalidate(setStatsProvider(widget.set.id));
       },
       child: Card(
         elevation: 2,
@@ -394,46 +406,61 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Graufilter Animation
-            TweenAnimationBuilder<double>(
-              duration: const Duration(milliseconds: 300),
-              tween: Tween<double>(begin: 0, end: isOwned ? 1.0 : 0.0),
-              builder: (context, saturation, child) {
-                return ColorFiltered(
-                  colorFilter: ColorFilter.matrix(<double>[
-                    0.2126 + 0.7874 * saturation, 0.7152 - 0.7152 * saturation, 0.0722 - 0.0722 * saturation, 0, 0,
-                    0.2126 - 0.2126 * saturation, 0.7152 + 0.2848 * saturation, 0.0722 - 0.0722 * saturation, 0, 0,
-                    0.2126 - 0.2126 * saturation, 0.7152 - 0.7152 * saturation, 0.0722 + 0.9278 * saturation, 0, 0,
-                    0, 0, 0, 1, 0,
-                  ]),
-                  child: Opacity(opacity: isOwned ? 1.0 : 0.5, child: child),
-                );
-              },
-              child: CachedNetworkImage(
-                imageUrl: imageUrl, 
-                width: 160, 
-                placeholder: (context, url) => Container(color: Colors.grey[200]), 
-                errorWidget: (context, url, error) => const Icon(Icons.broken_image),
-                fit: BoxFit.cover, // Wichtig für füllende Bilder
+            // BILD ANZEIGE (Mit Sicherheits-Check)
+            if (hasImage)
+              // Wenn Bild da ist: Zeigen (mit Graufilter Logik)
+              TweenAnimationBuilder<double>(
+                duration: const Duration(milliseconds: 300),
+                tween: Tween<double>(begin: 0, end: isOwned ? 1.0 : 0.0),
+                builder: (context, saturation, child) {
+                  return ColorFiltered(
+                    colorFilter: ColorFilter.matrix(<double>[
+                      0.2126 + 0.7874 * saturation, 0.7152 - 0.7152 * saturation, 0.0722 - 0.0722 * saturation, 0, 0,
+                      0.2126 - 0.2126 * saturation, 0.7152 + 0.2848 * saturation, 0.0722 - 0.0722 * saturation, 0, 0,
+                      0.2126 - 0.2126 * saturation, 0.7152 - 0.7152 * saturation, 0.0722 + 0.9278 * saturation, 0, 0,
+                      0, 0, 0, 1, 0,
+                    ]),
+                    child: Opacity(opacity: isOwned ? 1.0 : 0.6, child: child),
+                  );
+                },
+                child: CachedNetworkImage(
+                  imageUrl: imageUrl, 
+                  width: 160, 
+                  // Platzhalter während des Ladens
+                  placeholder: (context, url) => Container(color: Colors.grey[200]), 
+                  // Fehler-Icon, falls URL kaputt ist
+                  errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                ),
+              )
+            else
+              // Wenn KEIN Bild da ist: Platzhalter anzeigen
+              Container(
+                color: Colors.grey[300],
+                child: const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.image_not_supported_outlined, color: Colors.grey),
+                      SizedBox(height: 4),
+                      Text("Kein Bild", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                    ],
+                  ),
+                ),
               ),
-            ),
             
             // Info Leiste unten
             Positioned(
               bottom: 0, left: 0, right: 0,
-              child: Opacity(
-                opacity: isOwned ? 1.0 : 0.7,
-                child: Container(
-                  color: Colors.black.withOpacity(0.7),
-                  padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(card.number, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                      if (displayPrice != null && displayPrice > 0)
-                        Text('${displayPrice.toStringAsFixed(2)}€', style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
+              child: Container(
+                color: Colors.black.withOpacity(0.7),
+                padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(card.number, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    if (displayPrice != null && displayPrice > 0)
+                      Text('${displayPrice.toStringAsFixed(2)}€', style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ],
                 ),
               ),
             ),
@@ -445,14 +472,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     );
   }
 
-  // Fallback Sortierung (eigentlich macht das die DB jetzt)
-  int _compareCardNumbers(String a, String b) {
-    final intA = int.tryParse(a);
-    final intB = int.tryParse(b);
-    if (intA != null && intB != null) return intA.compareTo(intB);
-    return a.compareTo(b);
-  }
-
+  // --- Helper (lokal) ---
   int _getRarityWeight(String rarity) {
     final r = rarity.toLowerCase();
     if (r == 'common') return 1;

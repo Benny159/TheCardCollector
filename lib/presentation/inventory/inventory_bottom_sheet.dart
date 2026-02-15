@@ -233,7 +233,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
     final db = ref.read(databaseProvider);
     
     try {
-      // 1. Prüfen: Gibt es diesen Eintrag schon? (Gleiche ID, Variante, Zustand, Sprache)
+      // 1. DB Operationen (INSERT / UPDATE)
       final existingEntry = await (db.select(db.userCards)
         ..where((tbl) => tbl.cardId.equals(widget.card.id))
         ..where((tbl) => tbl.variant.equals(_variant))
@@ -242,13 +242,11 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
       ).getSingleOrNull();
 
       if (existingEntry != null) {
-        // A) JA: Anzahl erhöhen (UPDATE)
         final newQuantity = existingEntry.quantity + _quantity;
         await (db.update(db.userCards)..where((tbl) => tbl.id.equals(existingEntry.id))).write(
           UserCardsCompanion(quantity: drift.Value(newQuantity)),
         );
       } else {
-        // B) NEIN: Neuen Eintrag erstellen (INSERT)
         await db.into(db.userCards).insert(
           UserCardsCompanion.insert(
             cardId: widget.card.id,
@@ -260,9 +258,15 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
         );
       }
 
+      // --- WICHTIG: ERST INVALIDIEREN, DANN SNAPSHOT ---
+      
+      // 2. Provider Cache leeren, damit der Snapshot frische Daten bekommt
+      ref.invalidate(inventoryProvider); 
+      
+      // 3. Jetzt den Snapshot erstellen (berechnet sich neu aus der DB)
       await createPortfolioSnapshot(ref);
 
-      // 2. UI Aktualisieren
+      // 4. Restliche UI aktualisieren (Liste, Stats, etc.)
       _refreshProviders();
       
       if (mounted) {

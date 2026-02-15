@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../data/database/app_database.dart' as db; 
 import '../../data/api/search_provider.dart'; 
-import '../../domain/models/api_card.dart'; // Wichtig für ApiCard Klasse
+// Wichtig für ApiCard Klasse
 import '../cards/card_detail_screen.dart';
 import '../inventory/inventory_bottom_sheet.dart';
 
@@ -287,7 +287,7 @@ class _DashboardView extends ConsumerWidget {
         itemBuilder: (context, index) {
           final item = items[index];
           // Bild-Logik: Deutsch wenn verfügbar
-          final imageUrl = item.card.imageUrlDe ?? item.card.smallImageUrl;
+          final displayImage = item.card.displayImage;
           
           return Container(
             width: 160, 
@@ -310,8 +310,7 @@ class _DashboardView extends ConsumerWidget {
                           Hero(
                             tag: "top10_${item.card.id}",
                             child: CachedNetworkImage(
-                              imageUrl: imageUrl,
-                              fit: BoxFit.cover,
+                              imageUrl: displayImage,
                               placeholder: (_,__) => Container(color: Colors.grey[200]),
                             ),
                           ),
@@ -368,112 +367,177 @@ class _PortfolioChart extends ConsumerWidget {
     final filter = ref.watch(chartFilterProvider);
     final now = DateTime.now();
     
+    // 1. Daten kopieren und sortieren
     List<db.PortfolioHistoryData> chartData = List.from(history);
+    chartData.sort((a, b) => a.date.compareTo(b.date)); // Sicherstellen, dass Sortierung stimmt
 
+    // 2. Heutigen DB-Wert durch Live-Wert ersetzen (falls vorhanden)
     if (chartData.isNotEmpty && _isSameDay(chartData.last.date, now)) {
       chartData.removeLast(); 
     }
+    // Live-Wert hinzufügen
     chartData.add(db.PortfolioHistoryData(id: -1, date: now, totalValue: currentTotal));
 
+    // --- LOGIK FÜR START BEI NULL ---
+    // Wir holen uns das Datum des allerersten Eintrags
     if (chartData.isNotEmpty) {
-      final firstPoint = chartData.first;
-      if (firstPoint.totalValue > 0) {
-        chartData.insert(0, db.PortfolioHistoryData(
-          id: -2, 
-          date: firstPoint.date.subtract(const Duration(days: 1)), 
-          totalValue: 0.0
-        ));
+      final firstDate = chartData.first.date;
+      final firstValue = chartData.first.totalValue;
+
+      // Wenn der erste Wert größer als 0 ist, fügen wir EINEN TAG DAVOR eine 0 ein.
+      // Das erzeugt den schönen Anstieg von der Basislinie.
+      if (firstValue > 0) {
+         chartData.insert(0, db.PortfolioHistoryData(
+           id: -2, // Fake ID
+           date: firstDate.subtract(const Duration(days: 1)), 
+           totalValue: 0.0 
+         ));
       }
     }
 
-    if (chartData.isNotEmpty) {
+    // 3. Zeitraum filtern
+    // Wichtig: Das Filtern passiert NACH dem Hinzufügen der 0.
+    // Wenn "1 Woche" gewählt ist, fliegt die 0 raus, wenn der User schon länger sammelt.
+    // Das ist korrekt so (die Kurve soll bei alten Nutzern nicht plötzlich auf 0 fallen).
+    if (chartData.length > 1) {
       DateTime start = now;
       switch (filter) {
         case ChartFilter.week: start = now.subtract(const Duration(days: 7)); break;
         case ChartFilter.month: start = now.subtract(const Duration(days: 30)); break;
         case ChartFilter.year: start = now.subtract(const Duration(days: 365)); break;
-        case ChartFilter.all: start = DateTime(2000); break;
+        case ChartFilter.all: start = DateTime(2020); break;
       }
       chartData = chartData.where((d) => d.date.isAfter(start) || d.date.isAtSameMomentAs(start)).toList();
     }
 
-    if (chartData.length < 2) {
-       return const Center(child: Text("Sammle Daten... (Füge eine Karte hinzu)"));
-    }
+    if (chartData.isEmpty) return const Center(child: Text("Warte auf Daten..."));
 
+    // 4. Spots für FL Chart erstellen
     final spots = chartData.map((e) {
       return FlSpot(e.date.millisecondsSinceEpoch.toDouble(), e.totalValue);
     }).toList();
 
+    // Min/Max Berechnung für schöne Skalierung
     double minY = spots.map((e) => e.y).reduce((a, b) => a < b ? a : b);
     double maxY = spots.map((e) => e.y).reduce((a, b) => a > b ? a : b);
-    if (maxY == 0) maxY = 100; 
-    maxY = maxY * 1.1; 
+    
+    // Wenn Linie flach ist oder leer
+    if (minY == maxY) { 
+        if (minY == 0) { maxY = 100; } 
+        else { minY = minY * 0.5; maxY = maxY * 1.5; }
+    }
+    
+    // Puffer hinzufügen (Y-Achse)
+    final double yBuffer = (maxY - minY) * 0.1; // 10% Puffer
+    minY -= yBuffer;
+    if (minY < 0) minY = 0; // Nicht unter 0 gehen
+    maxY += yBuffer;
 
-    return LineChart(
-      LineChartData(
-        gridData: const FlGridData(show: false),
-        titlesData: FlTitlesData(
-          show: true,
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)), 
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                if (value == spots.first.x || value == spots.last.x) {
-                   final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
-                   return Padding(
-                     padding: const EdgeInsets.only(top: 8.0),
-                     child: Text(DateFormat('dd.MM.').format(date), style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                   );
-                }
-                return const SizedBox();
-              },
-              interval: (spots.last.x - spots.first.x) > 0 ? (spots.last.x - spots.first.x) : 1.0, 
+    return Padding(
+      // Padding rechts erhöht, damit die letzte Datums-Label nicht abgeschnitten wird
+      padding: const EdgeInsets.only(right: 24.0, left: 6, top: 24, bottom: 10),
+      child: LineChart(
+        LineChartData(
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            // Horizontale Linien sehr dezent
+            getDrawingHorizontalLine: (value) => FlLine(
+              color: Colors.grey.withOpacity(0.15),
+              strokeWidth: 1,
             ),
           ),
-        ),
-        borderData: FlBorderData(show: false),
-        minX: spots.first.x,
-        maxX: spots.last.x,
-        minY: minY,
-        maxY: maxY,
-        lineBarsData: [
-          LineChartBarData(
-            spots: spots,
-            isCurved: true,
-            curveSmoothness: 0.2,
-            color: Colors.blueAccent,
-            barWidth: 3,
-            isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: true,
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.blueAccent.withOpacity(0.3),
-                  Colors.blueAccent.withOpacity(0.0),
-                ],
+          titlesData: FlTitlesData(
+            show: true,
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            
+            // --- Y-ACHSE (LINKS) MIT PREISEN ---
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true, // Hier auf TRUE setzen!
+                reservedSize: 40, // Platz für Text reservieren
+                interval: (maxY - minY) / 4, // Ca. 4 Labels
+                getTitlesWidget: (value, meta) {
+                  if (value < 0) return const SizedBox();
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Text(
+                      "${value.toInt()}€",
+                      style: TextStyle(color: Colors.grey[500], fontSize: 10, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.right,
+                    ),
+                  );
+                },
+              ),
+            ),
+            
+            // --- X-ACHSE (UNTEN) MIT DATUM ---
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 30,
+                // Dynamisches Intervall für bessere Lesbarkeit
+                interval: (spots.last.x - spots.first.x) / 4, 
+                getTitlesWidget: (value, meta) {
+                  final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      DateFormat('dd.MM.').format(date), 
+                      style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                    ),
+                  );
+                },
               ),
             ),
           ),
-        ],
-        lineTouchData: LineTouchData(
-          touchTooltipData: LineTouchTooltipData(
-            getTooltipItems: (touchedSpots) {
-              return touchedSpots.map((spot) {
-                final date = DateTime.fromMillisecondsSinceEpoch(spot.x.toInt());
-                final dateStr = DateFormat('dd.MM.').format(date);
-                return LineTooltipItem(
-                  "$dateStr\n${spot.y.toStringAsFixed(2)}€",
-                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                );
-              }).toList();
-            },
+          borderData: FlBorderData(show: false),
+          minX: spots.first.x,
+          maxX: spots.last.x,
+          minY: minY,
+          maxY: maxY,
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isCurved: true,
+              curveSmoothness: 0.25, // Kurven-Stärke
+              color: Colors.blueAccent,
+              barWidth: 3,
+              isStrokeCapRound: true,
+              dotData: FlDotData(show: false), // Punkte im Normalzustand aus
+              belowBarData: BarAreaData(
+                show: true,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.blueAccent.withOpacity(0.3),
+                    Colors.blueAccent.withOpacity(0.0),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          lineTouchData: LineTouchData(
+            handleBuiltInTouches: true,
+            touchTooltipData: LineTouchTooltipData(
+              tooltipBgColor: Colors.blueGrey.shade800,
+              getTooltipItems: (touchedSpots) {
+                return touchedSpots.map((spot) {
+                  final date = DateTime.fromMillisecondsSinceEpoch(spot.x.toInt());
+                  final dateStr = DateFormat('dd.MM.yyyy').format(date);
+                  return LineTooltipItem(
+                    "$dateStr\n${spot.y.toStringAsFixed(2)} €",
+                    const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  );
+                }).toList();
+              },
+              tooltipRoundedRadius: 8,
+              tooltipPadding: const EdgeInsets.all(8),
+              fitInsideHorizontally: true, 
+              fitInsideVertically: true,
+            ),
           ),
         ),
       ),
@@ -532,7 +596,7 @@ class _SearchResultsView extends ConsumerWidget {
             }
             
             // Bild (Deutsch bevorzugt)
-            final imageUrl = card.imageUrlDe ?? card.smallImageUrl;
+            final displayImage = card.displayImage;
 
             return InkWell(
               onTap: () {
@@ -555,10 +619,9 @@ class _SearchResultsView extends ConsumerWidget {
                     Hero(
                       tag: card.id,
                       child: CachedNetworkImage(
-                        imageUrl: imageUrl,
+                        imageUrl: displayImage,
                         placeholder: (context, url) => Container(color: Colors.grey[200]),
                         errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
-                        fit: BoxFit.cover,
                       ),
                     ),
                     Positioned(

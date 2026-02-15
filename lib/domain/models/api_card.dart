@@ -30,6 +30,23 @@ class ApiCard {
   final ApiCardMarket? cardmarket;
   final ApiTcgPlayer? tcgplayer;
 
+  String get displayImage {
+    // Prüft, ob ein DE Bild da ist UND ob es nicht einfach nur leerer Text ist
+    if (imageUrlDe != null && imageUrlDe!.isNotEmpty) {
+      return imageUrlDe!;
+    }
+    // Fallback auf Englisch (Large wenn da, sonst Small)
+    else if (largeImageUrl != null && largeImageUrl!.isNotEmpty) {
+      return largeImageUrl!;
+    }
+
+    if (smallImageUrl.isNotEmpty) {
+      return smallImageUrl;
+    }
+    
+    return '';
+  }
+
   ApiCard({
     required this.id,
     required this.name,

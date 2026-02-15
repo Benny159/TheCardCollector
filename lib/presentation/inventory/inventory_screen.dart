@@ -5,7 +5,7 @@ import 'package:collection/collection.dart';
 import 'dart:math' as math; // Wichtig für PI
 
 import '../../data/api/search_provider.dart';
-import '../../domain/models/api_card.dart'; // Falls InventoryItem hier definiert ist, sonst anpassen
+// Falls InventoryItem hier definiert ist, sonst anpassen
 import '../cards/card_detail_screen.dart';
 import 'inventory_bottom_sheet.dart';
 
@@ -278,7 +278,7 @@ class _InventoryCardTile extends ConsumerWidget {
     final bool showEffect = isReverseHolo || isHolo;
 
     // Bild-URL (bevorzugt Deutsch)
-    final imageUrl = item.card.imageUrlDe ?? item.card.smallImageUrl;
+    final displayImage = item.card.displayImage;
 
     return InkWell(
       onTap: () {
@@ -302,10 +302,9 @@ class _InventoryCardTile extends ConsumerWidget {
               builder: (context) {
                 // Basis-Bild
                 Widget imageWidget = CachedNetworkImage(
-                  imageUrl: imageUrl,
+                  imageUrl: displayImage,
                   placeholder: (context, url) => Container(color: Colors.grey[200]),
                   errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
-                  fit: BoxFit.cover,
                 );
 
                 // Holo Overlay

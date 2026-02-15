@@ -14,6 +14,7 @@ import '../../domain/models/api_set.dart';
 import '../inventory/inventory_bottom_sheet.dart'; 
 import '../search/card_search_screen.dart';
 import '../sets/set_detail_screen.dart';
+import 'price_history_chart.dart'; // Importiert dein Chart Widget
 
 // Live-Provider für das Inventar dieser Karte
 final cardInventoryProvider = StreamProvider.family<List<UserCard>, String>((ref, cardId) {
@@ -34,8 +35,11 @@ class CardDetailScreen extends ConsumerWidget {
     // Inventar-Daten laden
     final inventoryAsync = ref.watch(cardInventoryProvider(card.id));
 
-    // Bild-Logik: Deutsches Bild bevorzugen, sonst Englisch
-    final displayImage = card.imageUrlDe ?? card.smallImageUrl;
+    // Historie laden für den Chart
+    final historyAsync = ref.watch(cardPriceHistoryProvider(card.id));
+
+    // Bild-Logik: Deutsches Bild bevorzugen, sonst Englisch (nutzt den neuen Getter)
+    final displayImage = card.displayImage;
 
     return Scaffold(
       appBar: AppBar(
@@ -55,9 +59,12 @@ class CardDetailScreen extends ConsumerWidget {
             isScrollControlled: true,
             builder: (context) => InventoryBottomSheet(card: card),
           ).then((_) {
+            // Nach dem Schließen alles refreshen
             ref.invalidate(searchResultsProvider);
             ref.invalidate(cardsForSetProvider(card.setId));
             ref.invalidate(setStatsProvider(card.setId));
+            // Snapshot sicherstellen
+            ref.invalidate(inventoryProvider);
             createPortfolioSnapshot(ref);
           });
         },
@@ -84,7 +91,7 @@ class CardDetailScreen extends ConsumerWidget {
               child: Hero(
                 tag: card.id,
                 child: Container(
-                  height: 400,
+                  height: 350, // Etwas kleiner, damit Platz für Chart bleibt
                   decoration: BoxDecoration(
                     boxShadow: [
                       BoxShadow(
@@ -98,7 +105,7 @@ class CardDetailScreen extends ConsumerWidget {
                   child: CachedNetworkImage(
                     imageUrl: displayImage,
                     placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                    errorWidget: (context, url, error) => const Icon(Icons.broken_image, size: 100),
+                    errorWidget: (context, url, error) => const Icon(Icons.broken_image, size: 100, color: Colors.grey),
                     fit: BoxFit.contain,
                   ),
                 ),
@@ -116,7 +123,7 @@ class CardDetailScreen extends ConsumerWidget {
 
             const SizedBox(height: 20),
 
-            // 4. EXTERNE LINKS
+            // 4. EXTERNE LINKS BUTTONS
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Row(
@@ -145,15 +152,43 @@ class CardDetailScreen extends ConsumerWidget {
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 30),
 
-            // 5. PREIS ANALYSE
+            // 5. PREISVERLAUF GRAPH (NEU!)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Preisverlauf", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  const SizedBox(height: 4),
+                  const Text("Historische Preisentwicklung (Quelle: TCGdex)", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  const SizedBox(height: 16),
+                  
+                  SizedBox(
+                    height: 320, // Genug Platz für Chart + Filter
+                    child: historyAsync.when(
+                      data: (data) => PriceHistoryChart(
+                        cmHistory: (data['cm'] as List).cast<CardMarketPrice>(),
+                        tcgHistory: (data['tcg'] as List).cast<TcgPlayerPrice>(),
+                      ),
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (e, s) => Center(child: Text("Konnte Verlauf nicht laden: $e")),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 30),
+
+            // 6. AKTUELLE PREIS ANALYSE (Tabelle)
             if (card.cardmarket != null) _buildCardmarketSection(context, card.cardmarket!),
             if (card.tcgplayer != null) _buildTcgPlayerSection(context, card.tcgplayer!),
 
             const SizedBox(height: 20),
 
-            // 6. DETAILS
+            // 7. KARTEN DETAILS
             _buildInfoSection(context, ref),
             
             const SizedBox(height: 80), 
@@ -163,7 +198,7 @@ class CardDetailScreen extends ConsumerWidget {
     );
   }
 
-  // --- PREIS SEKTIONEN ---
+  // --- PREIS SEKTIONEN (TABELLE) ---
 
   Widget _buildCardmarketSection(BuildContext context, ApiCardMarket cm) {
     return _buildPriceSectionContainer(
@@ -172,13 +207,13 @@ class CardDetailScreen extends ConsumerWidget {
       color: Colors.blue[800]!,
       lastUpdate: cm.updatedAt,
       children: [
-        if (cm.trendPrice != null) _priceRow("Trend (Normal)", cm.trendPrice!),
-        if (cm.trendHolo != null) _priceRow("Trend (Holo)", cm.trendHolo!),
-        if (cm.reverseHoloTrend != null) _priceRow("Trend (Reverse)", cm.reverseHoloTrend!),
+        if (cm.trendPrice != null && cm.trendPrice! > 0) _priceRow("Trend (Normal)", cm.trendPrice!),
+        if (cm.trendHolo != null && cm.trendHolo! > 0) _priceRow("Trend (Holo)", cm.trendHolo!),
+        if (cm.reverseHoloTrend != null && cm.reverseHoloTrend! > 0) _priceRow("Trend (Reverse)", cm.reverseHoloTrend!),
         const Divider(),
-        if (cm.avg30 != null) _priceRow("Ø 30 Tage", cm.avg30!),
-        if (cm.avg7 != null) _priceRow("Ø 7 Tage", cm.avg7!),
-        if (cm.lowPrice != null) _priceRow("Ab (Low)", cm.lowPrice!, isLow: true),
+        if (cm.avg30 != null && cm.avg30! > 0) _priceRow("Ø 30 Tage", cm.avg30!),
+        if (cm.avg7 != null && cm.avg7! > 0) _priceRow("Ø 7 Tage", cm.avg7!),
+        if (cm.lowPrice != null && cm.lowPrice! > 0) _priceRow("Ab (Low)", cm.lowPrice!, isLow: true),
       ],
     );
   }
@@ -190,12 +225,17 @@ class CardDetailScreen extends ConsumerWidget {
       color: Colors.teal[700]!,
       lastUpdate: tcg.updatedAt,
       children: [
-        if (tcg.prices?.normal?.market != null) _priceRow("Market (Normal)", tcg.prices!.normal!.market!),
-        if (tcg.prices?.holofoil?.market != null) _priceRow("Market (Holo)", tcg.prices!.holofoil!.market!),
-        if (tcg.prices?.reverseHolofoil?.market != null) _priceRow("Market (Reverse)", tcg.prices!.reverseHolofoil!.market!),
+        if (tcg.prices?.normal?.market != null && tcg.prices!.normal!.market! > 0) 
+           _priceRow("Market (Normal)", tcg.prices!.normal!.market!),
+        if (tcg.prices?.holofoil?.market != null && tcg.prices!.holofoil!.market! > 0) 
+           _priceRow("Market (Holo)", tcg.prices!.holofoil!.market!),
+        if (tcg.prices?.reverseHolofoil?.market != null && tcg.prices!.reverseHolofoil!.market! > 0) 
+           _priceRow("Market (Reverse)", tcg.prices!.reverseHolofoil!.market!),
         const Divider(),
-        if (tcg.prices?.normal?.mid != null) _priceRow("Mid Price", tcg.prices!.normal!.mid!),
-        if (tcg.prices?.normal?.directLow != null) _priceRow("Direct Low", tcg.prices!.normal!.directLow!, isLow: true),
+        if (tcg.prices?.normal?.mid != null && tcg.prices!.normal!.mid! > 0) 
+           _priceRow("Mid Price", tcg.prices!.normal!.mid!),
+        if (tcg.prices?.normal?.directLow != null && tcg.prices!.normal!.directLow! > 0) 
+           _priceRow("Direct Low", tcg.prices!.normal!.directLow!, isLow: true),
       ],
     );
   }
@@ -209,6 +249,7 @@ class CardDetailScreen extends ConsumerWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.grey.withOpacity(0.2)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))],
         ),
         child: Column(
           children: [
@@ -285,16 +326,17 @@ class CardDetailScreen extends ConsumerWidget {
   Future<void> _updateCardData(BuildContext context, WidgetRef ref) async {
     final db = ref.read(databaseProvider);
     final dexApi = ref.read(tcgDexApiClientProvider);
-    final importer = SetImporter(dexApi, db); // Keine alte API mehr
+    final importer = SetImporter(dexApi, db);
 
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aktualisiere Daten...')));
 
     try {
-      // Wir laden das Set der Karte neu
       await importer.importCardsForSet(card.setId);
 
       ref.invalidate(searchResultsProvider);
       ref.invalidate(cardsForSetProvider(card.setId));
+      // Auch History neu laden!
+      ref.invalidate(cardPriceHistoryProvider(card.id));
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Aktualisiert!'), backgroundColor: Colors.green));
@@ -395,8 +437,15 @@ class CardDetailScreen extends ConsumerWidget {
 
   Future<void> _decreaseOrDeleteItem(BuildContext context, WidgetRef ref, UserCard item) async {
     final db = ref.read(databaseProvider);
+    bool dataChanged = false; 
+
     if (item.quantity > 1) {
-      await (db.update(db.userCards)..where((t) => t.id.equals(item.id))).write(UserCardsCompanion(quantity: drift.Value(item.quantity - 1)));
+      await (db.update(db.userCards)..where((t) => t.id.equals(item.id)))
+          .write(UserCardsCompanion(quantity: drift.Value(item.quantity - 1)));
+      
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("-1"), duration: Duration(milliseconds: 500)));
+      dataChanged = true;
+
     } else {
       final confirm = await showDialog<bool>(
         context: context,
@@ -409,13 +458,21 @@ class CardDetailScreen extends ConsumerWidget {
           ],
         ),
       );
+
       if (confirm == true) {
         await (db.delete(db.userCards)..where((t) => t.id.equals(item.id))).go();
-        ref.invalidate(searchResultsProvider);
-        ref.invalidate(cardsForSetProvider(card.setId));
-        ref.invalidate(setStatsProvider(card.setId));
-        createPortfolioSnapshot(ref);
+        dataChanged = true;
       }
+    }
+
+    if (dataChanged) {
+      ref.invalidate(searchResultsProvider);
+      ref.invalidate(cardsForSetProvider(card.setId));
+      ref.invalidate(setStatsProvider(card.setId));
+      
+      // Snapshot aktualisieren
+      ref.invalidate(inventoryProvider); 
+      await createPortfolioSnapshot(ref);
     }
   }
 }
