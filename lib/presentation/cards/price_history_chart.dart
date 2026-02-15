@@ -71,7 +71,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
             ? const Center(child: Text("Keine Datenpunkte > 0€", style: TextStyle(fontSize: 10, color: Colors.grey)))
             : LineChart(
               LineChartData(
-                gridData: FlGridData(show: true, drawVerticalLine: false),
+                gridData: const FlGridData(show: true, drawVerticalLine: false),
                 titlesData: FlTitlesData(
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -90,7 +90,9 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 22,
-                      interval: (spots.last.x - spots.first.x) / 3, 
+                      interval: (spots.last.x - spots.first.x) / 3 > 0 
+                                ? (spots.last.x - spots.first.x) / 3 
+                                : 1.0, 
                       getTitlesWidget: (value, meta) {
                         final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
                         return Padding(

@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'sets/set_list_screen.dart';        // Dein Set-Screen Import
 import 'search/card_search_screen.dart';   // Dein Such-Screen Import
-import 'inventory/inventory_screen.dart';  // <--- NEU: Dein Inventar-Screen Import
+import 'inventory/inventory_screen.dart';  // Dein Inventar-Screen Import
+import 'binders/binder_list_screen.dart';  // <--- NEU: Dein Binder-Screen Import
+import '../../data/sync/pokedex_importer.dart';
+import '../../data/database/database_provider.dart';
 
 // Wir brauchen Keys, um den Status der Navigatoren zu speichern
 final _searchNavigatorKey = GlobalKey<NavigatorState>();
 final _setsNavigatorKey = GlobalKey<NavigatorState>();
-final _inventoryNavigatorKey = GlobalKey<NavigatorState>(); // <--- NEU: Key für Inventar
+final _inventoryNavigatorKey = GlobalKey<NavigatorState>();
+final _binderNavigatorKey = GlobalKey<NavigatorState>(); // <--- NEU: Key für Binder
 
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
@@ -19,7 +23,20 @@ class MainScreen extends ConsumerStatefulWidget {
 class _MainScreenState extends ConsumerState<MainScreen> {
   int _currentIndex = 0;
 
-  // Hier definieren wir unsere drei Tabs
+  @override
+  void initState() {
+    super.initState();
+    // Startet den Import im Hintergrund (blockiert die UI nicht)
+    _initPokedex();
+  }
+
+  Future<void> _initPokedex() async {
+    final db = ref.read(databaseProvider);
+    final importer = PokedexImporter(db);
+    await importer.syncPokedex();
+  }
+
+  // Hier definieren wir unsere vier Tabs
   late final List<Widget> _tabs = [
     // TAB 0: SUCHE
     _buildTabNavigator(
@@ -33,10 +50,16 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       const SetListScreen(),
     ),
 
-    // TAB 2: INVENTAR (NEU)
+    // TAB 2: INVENTAR
     _buildTabNavigator(
       _inventoryNavigatorKey, 
       const InventoryScreen(),
+    ),
+
+    // TAB 3: BINDER (NEU)
+    _buildTabNavigator(
+      _binderNavigatorKey, 
+      const BinderListScreen(),
     ),
   ];
 
@@ -46,7 +69,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     // erst im Tab zurückgeht, bevor er die App schließt.
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, result) async { // Korrekte Signatur für neues Flutter
         if (didPop) return;
 
         // Welcher Navigator ist gerade aktiv?
@@ -55,9 +78,11 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           currentNavigator = _searchNavigatorKey.currentState;
         } else if (_currentIndex == 1) {
           currentNavigator = _setsNavigatorKey.currentState;
-        } else {
-          // Index 2 ist Inventar
+        } else if (_currentIndex == 2) {
           currentNavigator = _inventoryNavigatorKey.currentState;
+        } else {
+          // Index 3 ist Binder
+          currentNavigator = _binderNavigatorKey.currentState;
         }
 
         if (currentNavigator != null && currentNavigator.canPop()) {
@@ -77,11 +102,12 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           selectedIndex: _currentIndex,
           onDestinationSelected: (index) {
             // Wenn man auf den Tab klickt, in dem man schon ist,
-            // gehen wir zurück zum Anfang (wie bei Instagram/Spotify)
+            // gehen wir zurück zum Anfang
             if (_currentIndex == index) {
               final nav = index == 0 ? _searchNavigatorKey.currentState 
                         : index == 1 ? _setsNavigatorKey.currentState 
-                        : _inventoryNavigatorKey.currentState; // <--- NEU
+                        : index == 2 ? _inventoryNavigatorKey.currentState
+                        : _binderNavigatorKey.currentState; // <--- NEU
               nav?.popUntil((route) => route.isFirst);
             } else {
               setState(() {
@@ -98,10 +124,14 @@ class _MainScreenState extends ConsumerState<MainScreen> {
               icon: Icon(Icons.collections_bookmark),
               label: 'Sets',
             ),
-            // <--- NEU: Der dritte Tab
             NavigationDestination(
               icon: Icon(Icons.inventory_2), 
               label: 'Inventar',
+            ),
+            // <--- NEU: Der vierte Tab
+            NavigationDestination(
+              icon: Icon(Icons.book), 
+              label: 'Binder',
             ),
           ],
         ),

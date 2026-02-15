@@ -478,7 +478,9 @@ class _PortfolioChart extends ConsumerWidget {
                 showTitles: true,
                 reservedSize: 30,
                 // Dynamisches Intervall für bessere Lesbarkeit
-                interval: (spots.last.x - spots.first.x) / 4, 
+                interval: (spots.last.x - spots.first.x) > 0 
+                      ? (spots.last.x - spots.first.x) / 4 
+                      : 1.0, 
                 getTitlesWidget: (value, meta) {
                   final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
                   return Padding(
@@ -505,7 +507,7 @@ class _PortfolioChart extends ConsumerWidget {
               color: Colors.blueAccent,
               barWidth: 3,
               isStrokeCapRound: true,
-              dotData: FlDotData(show: false), // Punkte im Normalzustand aus
+              dotData: const FlDotData(show: false), // Punkte im Normalzustand aus
               belowBarData: BarAreaData(
                 show: true,
                 gradient: LinearGradient(

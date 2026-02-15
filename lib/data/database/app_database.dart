@@ -9,36 +9,39 @@ import 'tables.dart';
 
 part 'app_database.g.dart';
 
-@DriftDatabase(tables: [Cards, CardSets, CardMarketPrices, TcgPlayerPrices, UserCards, PortfolioHistory])
+@DriftDatabase(tables: [
+  Cards, 
+  CardSets, 
+  UserCards, 
+  CardMarketPrices, 
+  TcgPlayerPrices, 
+  PortfolioHistory,
+  // NEU:
+  Binders,
+  BinderCards,
+  Pokedex
+])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   // Wir springen auf Version 20 für den "Hard Reset"
   @override
-  int get schemaVersion => 23; 
+  int get schemaVersion => 30; 
 
-  @override
-  MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (Migrator m) async {
-      await m.createAll();
-    },
-    onUpgrade: (Migrator m, int from, int to) async {
-       print('--- HARD RESET: Datenbank wird neu aufgebaut (v$from -> v$to) ---');
-       
-       // RADIKALE METHODE: Alles löschen!
-       // Das garantiert, dass wir keine Konflikte mit alten Spalten haben.
-       for (final table in allTables) {
-         await m.deleteTable(table.actualTableName);
-       }
-       
-       // Alles neu erstellen
-       await m.createAll();
-       print('--- HARD RESET ERFOLGREICH ---');
-    },
-    beforeOpen: (details) async {
-      await customStatement('PRAGMA foreign_keys = ON');
-    },
-  );
+@override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onCreate: (Migrator m) async {
+        await m.createAll();
+      },
+      onUpgrade: (Migrator m, int from, int to) async {
+        if (from < 24) {
+          // Tabellen erstellen bei Update
+          await m.createTable(pokedex);
+        }
+      },
+    );
+  }
 }
 
 LazyDatabase _openConnection() {
