@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../data/database/app_database.dart';
 
-enum PriceType { cmTrend, cmTrendHolo, cmReverse, tcgMarket, tcgMarketHolo }
+// KORREKTUR: cmReverse entfernt, da nicht in der DB
+enum PriceType { 
+  cmTrend, cmTrendHolo, 
+  tcgMarket, tcgMarketHolo, tcgMarketReverse 
+}
 
 class PriceHistoryChart extends StatefulWidget {
   final List<CardMarketPrice> cmHistory;
@@ -16,124 +20,165 @@ class PriceHistoryChart extends StatefulWidget {
 }
 
 class _PriceHistoryChartState extends State<PriceHistoryChart> {
-  PriceType _selectedType = PriceType.cmTrend;
-  int _monthsFilter = 3; // Standard: 3 Monate
+  late PriceType _selectedType;
+  int _monthsFilter = 3; 
 
   @override
   void initState() {
     super.initState();
-    // Intelligenten Standard wählen: Wenn Holo Trend existiert, nimm den, sonst Normal
-    if (widget.cmHistory.isNotEmpty && widget.cmHistory.last.trendHolo != null) {
-      _selectedType = PriceType.cmTrendHolo;
+    _determineBestInitialType();
+  }
+
+  void _determineBestInitialType() {
+    for (var type in PriceType.values) {
+      if (_hasData(type)) {
+        _selectedType = type;
+        return;
+      }
+    }
+    _selectedType = PriceType.cmTrend; // Fallback
+  }
+
+  bool _hasData(PriceType type) {
+    switch (type) {
+      case PriceType.cmTrend:
+        return widget.cmHistory.any((p) => (p.trend ?? 0) > 0);
+      case PriceType.cmTrendHolo:
+        return widget.cmHistory.any((p) => (p.trendHolo ?? 0) > 0);
+      
+      // cmReverse ENTFERNT
+      
+      case PriceType.tcgMarket:
+        return widget.tcgHistory.any((p) => (p.normalMarket ?? 0) > 0);
+      case PriceType.tcgMarketHolo:
+        return widget.tcgHistory.any((p) => (p.holoMarket ?? 0) > 0);
+      case PriceType.tcgMarketReverse:
+        return widget.tcgHistory.any((p) => (p.reverseMarket ?? 0) > 0);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Datenpunkte extrahieren
     final spots = _getSpots();
 
-    if (spots.isEmpty) {
-      return Container(
-        height: 200,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12)),
-        child: const Text("Keine Preisdaten verfügbar", style: TextStyle(color: Colors.grey)),
-      );
-    }
-
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 1. Filter (Typ & Zeit)
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildTypeChip("CM Trend", PriceType.cmTrend),
-              const SizedBox(width: 8),
-              _buildTypeChip("CM Holo", PriceType.cmTrendHolo),
-              const SizedBox(width: 8),
-              _buildTypeChip("TCG Market", PriceType.tcgMarket),
-              const SizedBox(width: 16),
-              // Zeit Filter
-              _buildTimeChip("1M", 1),
-              const SizedBox(width: 4),
-              _buildTimeChip("3M", 3),
-              const SizedBox(width: 4),
-              _buildTimeChip("1J", 12),
-              const SizedBox(width: 4),
-              _buildTimeChip("Alle", 999),
-            ],
-          ),
-        ),
-        
-        const SizedBox(height: 16),
-
-        // 2. Chart
+        // CHART
         SizedBox(
-          height: 220,
-          child: LineChart(
-            LineChartData(
-              gridData: FlGridData(show: true, drawVerticalLine: false),
-              titlesData: FlTitlesData(
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 40,
-                    getTitlesWidget: (value, meta) => Text("${value.toInt()}€", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+          height: 180, 
+          child: spots.isEmpty 
+            ? const Center(child: Text("Keine Datenpunkte > 0€", style: TextStyle(fontSize: 10, color: Colors.grey)))
+            : LineChart(
+              LineChartData(
+                gridData: FlGridData(show: true, drawVerticalLine: false),
+                titlesData: FlTitlesData(
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 35,
+                      getTitlesWidget: (value, meta) => Text(
+                        "${value.toInt()}€", 
+                        style: const TextStyle(fontSize: 9, color: Colors.grey),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 22,
+                      interval: (spots.last.x - spots.first.x) / 3, 
+                      getTitlesWidget: (value, meta) {
+                        final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text(DateFormat('dd.MM').format(date), style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                        );
+                      },
+                    ),
                   ),
                 ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 22,
-                    interval: (spots.last.x - spots.first.x) / 4,
-                    getTitlesWidget: (value, meta) {
-                      final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
-                      return Text(DateFormat('dd.MM.').format(date), style: const TextStyle(fontSize: 10, color: Colors.grey));
+                borderData: FlBorderData(show: false),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    color: _getColorForType(_selectedType),
+                    barWidth: 2,
+                    dotData: FlDotData(show: spots.length < 10),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          _getColorForType(_selectedType).withOpacity(0.2), 
+                          Colors.transparent
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    tooltipBgColor: Colors.blueGrey.shade800,
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((spot) {
+                        final date = DateTime.fromMillisecondsSinceEpoch(spot.x.toInt());
+                        return LineTooltipItem(
+                          "${DateFormat('dd.MM').format(date)}\n${spot.y.toStringAsFixed(2)} €",
+                          const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        );
+                      }).toList();
                     },
                   ),
                 ),
               ),
-              borderData: FlBorderData(show: false),
-              lineBarsData: [
-                LineChartBarData(
-                  spots: spots,
-                  isCurved: true,
-                  color: Colors.blueAccent,
-                  barWidth: 3,
-                  dotData: const FlDotData(show: false),
-                  belowBarData: BarAreaData(
-                    show: true,
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.blueAccent.withOpacity(0.3), Colors.transparent],
-                    ),
-                  ),
-                ),
-              ],
-              lineTouchData: LineTouchData(
-                touchTooltipData: LineTouchTooltipData(
-                  tooltipBgColor: Colors.blueGrey.shade800,
-                  getTooltipItems: (touchedSpots) {
-                    return touchedSpots.map((spot) {
-                      final date = DateTime.fromMillisecondsSinceEpoch(spot.x.toInt());
-                      return LineTooltipItem(
-                        "${DateFormat('dd.MM.yy').format(date)}\n${spot.y.toStringAsFixed(2)} €",
-                        const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                      );
-                    }).toList();
-                  },
-                ),
-              ),
             ),
+        ),
+        
+        const SizedBox(height: 8),
+
+        // FILTER CHIPS
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              // Cardmarket
+              if (_hasData(PriceType.cmTrend)) _buildTypeChip("CM Trend", PriceType.cmTrend),
+              if (_hasData(PriceType.cmTrendHolo)) _buildTypeChip("CM Holo", PriceType.cmTrendHolo),
+              
+              // Trenner
+              if (_hasAnyCmData() && _hasAnyTcgData())
+                Container(width: 1, height: 16, color: Colors.grey[300], margin: const EdgeInsets.symmetric(horizontal: 4)),
+
+              // TCGPlayer
+              if (_hasData(PriceType.tcgMarket)) _buildTypeChip("TCG", PriceType.tcgMarket),
+              if (_hasData(PriceType.tcgMarketHolo)) _buildTypeChip("TCG Holo", PriceType.tcgMarketHolo),
+              if (_hasData(PriceType.tcgMarketReverse)) _buildTypeChip("TCG Rev.", PriceType.tcgMarketReverse),
+
+              const SizedBox(width: 12),
+              
+              // Zeitfilter
+              _buildTimeChip("1M", 1),
+              const SizedBox(width: 4),
+              _buildTimeChip("All", 999),
+            ],
           ),
         ),
       ],
     );
+  }
+
+  bool _hasAnyCmData() {
+    return _hasData(PriceType.cmTrend) || _hasData(PriceType.cmTrendHolo);
+  }
+
+  bool _hasAnyTcgData() {
+    return _hasData(PriceType.tcgMarket) || _hasData(PriceType.tcgMarketHolo) || _hasData(PriceType.tcgMarketReverse);
   }
 
   List<FlSpot> _getSpots() {
@@ -143,23 +188,33 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
         ? DateTime(2000) 
         : now.subtract(Duration(days: _monthsFilter * 30));
 
-    if (_selectedType == PriceType.cmTrend || _selectedType == PriceType.cmTrendHolo) {
-      for (var p in widget.cmHistory) {
+    final cmList = List.of(widget.cmHistory)..sort((a,b) => a.fetchedAt.compareTo(b.fetchedAt));
+    final tcgList = List.of(widget.tcgHistory)..sort((a,b) => a.fetchedAt.compareTo(b.fetchedAt));
+
+    if (_selectedType.name.startsWith('cm')) {
+      for (var p in cmList) {
         if (p.fetchedAt.isBefore(cutoffDate)) continue;
         double? val;
+        
+        // KORREKTUR: Kein Reverse hier
         if (_selectedType == PriceType.cmTrend) val = p.trend;
-        else if (_selectedType == PriceType.cmTrendHolo) val = p.trendHolo ?? p.trend; // Fallback
+        else if (_selectedType == PriceType.cmTrendHolo) val = p.trendHolo;
         
         if (val != null && val > 0) {
           rawSpots.add(FlSpot(p.fetchedAt.millisecondsSinceEpoch.toDouble(), val));
         }
       }
     } else {
-      for (var p in widget.tcgHistory) {
+      for (var p in tcgList) {
         if (p.fetchedAt.isBefore(cutoffDate)) continue;
         double? val;
-        if (_selectedType == PriceType.tcgMarket) val = p.normalMarket;
-        else val = p.holoMarket;
+
+        switch (_selectedType) {
+          case PriceType.tcgMarket: val = p.normalMarket; break;
+          case PriceType.tcgMarketHolo: val = p.holoMarket; break;
+          case PriceType.tcgMarketReverse: val = p.reverseMarket; break;
+          default: break;
+        }
 
         if (val != null && val > 0) {
           rawSpots.add(FlSpot(p.fetchedAt.millisecondsSinceEpoch.toDouble(), val));
@@ -169,15 +224,30 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
     return rawSpots;
   }
 
+  Color _getColorForType(PriceType type) {
+    if (type.name.startsWith('cm')) return Colors.blue[700]!;
+    return Colors.teal[700]!;
+  }
+
   Widget _buildTypeChip(String label, PriceType type) {
     final selected = _selectedType == type;
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (val) { if (val) setState(() => _selectedType = type); },
-      visualDensity: VisualDensity.compact,
-      labelStyle: TextStyle(fontSize: 12, color: selected ? Colors.white : Colors.black),
-      selectedColor: Colors.blue[700],
+    final color = _getColorForType(type);
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 4.0),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (val) { if (val) setState(() => _selectedType = type); },
+        visualDensity: VisualDensity.compact,
+        labelStyle: TextStyle(fontSize: 10, color: selected ? Colors.white : Colors.black),
+        selectedColor: color,
+        backgroundColor: Colors.grey[100],
+        padding: EdgeInsets.zero,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+        side: BorderSide(color: selected ? Colors.transparent : Colors.grey[300]!),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
     );
   }
 
@@ -189,9 +259,10 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: selected ? Colors.grey[800] : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey[300]!)
         ),
-        child: Text(label, style: TextStyle(color: selected ? Colors.white : Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+        child: Text(label, style: TextStyle(color: selected ? Colors.white : Colors.grey, fontSize: 10)),
       ),
     );
   }

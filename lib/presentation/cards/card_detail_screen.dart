@@ -14,7 +14,7 @@ import '../../domain/models/api_set.dart';
 import '../inventory/inventory_bottom_sheet.dart'; 
 import '../search/card_search_screen.dart';
 import '../sets/set_detail_screen.dart';
-import 'price_history_chart.dart'; // Importiert dein Chart Widget
+import 'price_history_chart.dart'; // Dein Chart Widget
 
 // Live-Provider für das Inventar dieser Karte
 final cardInventoryProvider = StreamProvider.family<List<UserCard>, String>((ref, cardId) {
@@ -38,7 +38,7 @@ class CardDetailScreen extends ConsumerWidget {
     // Historie laden für den Chart
     final historyAsync = ref.watch(cardPriceHistoryProvider(card.id));
 
-    // Bild-Logik: Deutsches Bild bevorzugen, sonst Englisch (nutzt den neuen Getter)
+    // Bild-Logik
     final displayImage = card.displayImage;
 
     return Scaffold(
@@ -63,7 +63,6 @@ class CardDetailScreen extends ConsumerWidget {
             ref.invalidate(searchResultsProvider);
             ref.invalidate(cardsForSetProvider(card.setId));
             ref.invalidate(setStatsProvider(card.setId));
-            // Snapshot sicherstellen
             ref.invalidate(inventoryProvider);
             createPortfolioSnapshot(ref);
           });
@@ -85,13 +84,13 @@ class CardDetailScreen extends ConsumerWidget {
 
             const SizedBox(height: 10),
 
-            // 2. DAS BILD
+            // 2. DAS BILD (Groß)
             GestureDetector(
               onTap: () => _openFullscreenImage(context, displayImage),
               child: Hero(
                 tag: card.id,
                 child: Container(
-                  height: 350, // Etwas kleiner, damit Platz für Chart bleibt
+                  height: 350, 
                   decoration: BoxDecoration(
                     boxShadow: [
                       BoxShadow(
@@ -105,7 +104,8 @@ class CardDetailScreen extends ConsumerWidget {
                   child: CachedNetworkImage(
                     imageUrl: displayImage,
                     placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                    errorWidget: (context, url, error) => const Icon(Icons.broken_image, size: 100, color: Colors.grey),
+                    // FIX: Explizite Typen für errorWidget
+                    errorWidget: (context, url, dynamic error) => const Icon(Icons.broken_image, size: 100, color: Colors.grey),
                     fit: BoxFit.contain,
                   ),
                 ),
@@ -123,7 +123,7 @@ class CardDetailScreen extends ConsumerWidget {
 
             const SizedBox(height: 20),
 
-            // 4. EXTERNE LINKS BUTTONS
+            // 4. EXTERNE LINKS
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Row(
@@ -154,7 +154,7 @@ class CardDetailScreen extends ConsumerWidget {
 
             const SizedBox(height: 30),
 
-            // 5. PREISVERLAUF GRAPH (NEU!)
+            // 5. PREISVERLAUF GRAPH
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Column(
@@ -166,7 +166,7 @@ class CardDetailScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                   
                   SizedBox(
-                    height: 320, // Genug Platz für Chart + Filter
+                    height: 320, 
                     child: historyAsync.when(
                       data: (data) => PriceHistoryChart(
                         cmHistory: (data['cm'] as List).cast<CardMarketPrice>(),
@@ -182,13 +182,13 @@ class CardDetailScreen extends ConsumerWidget {
 
             const SizedBox(height: 30),
 
-            // 6. AKTUELLE PREIS ANALYSE (Tabelle)
+            // 6. PREIS TABELLEN
             if (card.cardmarket != null) _buildCardmarketSection(context, card.cardmarket!),
             if (card.tcgplayer != null) _buildTcgPlayerSection(context, card.tcgplayer!),
 
             const SizedBox(height: 20),
 
-            // 7. KARTEN DETAILS
+            // 7. DETAILS
             _buildInfoSection(context, ref),
             
             const SizedBox(height: 80), 
@@ -198,7 +198,7 @@ class CardDetailScreen extends ConsumerWidget {
     );
   }
 
-  // --- PREIS SEKTIONEN (TABELLE) ---
+  // --- HELPER METHODEN ---
 
   Widget _buildCardmarketSection(BuildContext context, ApiCardMarket cm) {
     return _buildPriceSectionContainer(
@@ -249,7 +249,6 @@ class CardDetailScreen extends ConsumerWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.grey.withOpacity(0.2)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))],
         ),
         child: Column(
           children: [
@@ -286,8 +285,6 @@ class CardDetailScreen extends ConsumerWidget {
     );
   }
 
-  // --- INVENTAR SECTION ---
-
   Widget _buildInventorySection(BuildContext context, WidgetRef ref, List<UserCard> items) {
     if (items.isEmpty) {
       return Container(
@@ -321,8 +318,6 @@ class CardDetailScreen extends ConsumerWidget {
     );
   }
 
-  // --- UPDATE LOGIK ---
-
   Future<void> _updateCardData(BuildContext context, WidgetRef ref) async {
     final db = ref.read(databaseProvider);
     final dexApi = ref.read(tcgDexApiClientProvider);
@@ -332,11 +327,9 @@ class CardDetailScreen extends ConsumerWidget {
 
     try {
       await importer.importCardsForSet(card.setId);
-
       ref.invalidate(searchResultsProvider);
       ref.invalidate(cardsForSetProvider(card.setId));
-      // Auch History neu laden!
-      ref.invalidate(cardPriceHistoryProvider(card.id));
+      ref.invalidate(cardPriceHistoryProvider(card.id)); // History refreshen
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Aktualisiert!'), backgroundColor: Colors.green));
@@ -348,8 +341,6 @@ class CardDetailScreen extends ConsumerWidget {
     }
   }
 
-  // --- HELPER ---
-
   Widget _buildSetHeader(BuildContext context, ApiSet? set) {
     if (set == null) return const SizedBox.shrink();
     final logo = set.logoUrlDe ?? set.logoUrl;
@@ -360,7 +351,15 @@ class CardDetailScreen extends ConsumerWidget {
         color: Colors.grey[100],
         child: Row(
           children: [
-            if (logo != null) SizedBox(height: 40, width: 80, child: CachedNetworkImage(imageUrl: logo, fit: BoxFit.contain)),
+            if (logo != null) SizedBox(
+              height: 40, width: 80, 
+              child: CachedNetworkImage(
+                imageUrl: logo, 
+                fit: BoxFit.contain,
+                // Auch hier errorWidget sicherheitshalber
+                errorWidget: (context, url, dynamic error) => const Icon(Icons.broken_image, size: 20, color: Colors.grey),
+              )
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -426,7 +425,14 @@ class CardDetailScreen extends ConsumerWidget {
     Navigator.of(context).push(MaterialPageRoute(builder: (ctx) => Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(backgroundColor: Colors.black, iconTheme: const IconThemeData(color: Colors.white)),
-      body: Center(child: InteractiveViewer(child: CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.contain))),
+      body: Center(child: InteractiveViewer(
+        child: CachedNetworkImage(
+          imageUrl: imageUrl, 
+          fit: BoxFit.contain,
+          // FIX: Error Widget auch hier
+          errorWidget: (context, url, dynamic error) => const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+        )
+      )),
     )));
   }
 
@@ -442,10 +448,8 @@ class CardDetailScreen extends ConsumerWidget {
     if (item.quantity > 1) {
       await (db.update(db.userCards)..where((t) => t.id.equals(item.id)))
           .write(UserCardsCompanion(quantity: drift.Value(item.quantity - 1)));
-      
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("-1"), duration: Duration(milliseconds: 500)));
       dataChanged = true;
-
     } else {
       final confirm = await showDialog<bool>(
         context: context,
@@ -469,8 +473,6 @@ class CardDetailScreen extends ConsumerWidget {
       ref.invalidate(searchResultsProvider);
       ref.invalidate(cardsForSetProvider(card.setId));
       ref.invalidate(setStatsProvider(card.setId));
-      
-      // Snapshot aktualisieren
       ref.invalidate(inventoryProvider); 
       await createPortfolioSnapshot(ref);
     }
