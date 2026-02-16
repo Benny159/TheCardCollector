@@ -26,19 +26,13 @@ class AppDatabase extends _$AppDatabase {
 
   // Wir springen auf Version 20 für den "Hard Reset"
   @override
-  int get schemaVersion => 30; 
+  int get schemaVersion => 32; 
 
 @override
   MigrationStrategy get migration {
     return MigrationStrategy(
       onCreate: (Migrator m) async {
         await m.createAll();
-      },
-      onUpgrade: (Migrator m, int from, int to) async {
-        if (from < 24) {
-          // Tabellen erstellen bei Update
-          await m.createTable(pokedex);
-        }
       },
     );
   }

@@ -140,6 +140,8 @@ class Binders extends Table {
   // Typ / Thema
   // 'custom', 'nationalDex', 'set:sv1', 'pokemon:pikachu'
   TextColumn get type => text().withDefault(const Constant('custom'))(); 
+  // Wir speichern es als Text ('leftToRight' oder 'topToBottom')
+  TextColumn get sortOrder => text().withDefault(const Constant('leftToRight'))();
   
   // Metadaten
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'create_binder_dialog.dart';
+import 'binder_detail_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/database/database_provider.dart';
 import '../../data/database/app_database.dart';
@@ -173,8 +174,12 @@ class _BinderCard extends StatelessWidget {
     
     return GestureDetector(
       onTap: () {
-        // TODO: Navigation zum BinderDetailScreen (kommt im nächsten Schritt)
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Detailansicht kommt bald!")));
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => BinderDetailScreen(binder: binder),
+          ),
+        );
       },
       child: Container(
         decoration: BoxDecoration(

@@ -35,6 +35,8 @@ dependencies:
   pokemon_tcg: ^1.0.1
   device_preview: ^1.2.0
   url_launcher: ^6.3.2
+  page_flip_builder: ^0.1.4
+  page_flip: ^0.2.5+1
 
 dev_dependencies:
   flutter_test:

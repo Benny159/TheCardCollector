@@ -17,6 +17,7 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
   int _rows = 3;
   int _cols = 3;
   BinderType _selectedType = BinderType.custom;
+  BinderSortOrder _sortOrder = BinderSortOrder.leftToRight;
   bool _isLoading = false;
 
   @override
@@ -38,48 +39,48 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
               const Text("Vorlage:", style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               
-              DropdownButtonFormField<BinderType>(
+DropdownButtonFormField<BinderType>(
                 value: _selectedType,
-                isExpanded: true, // Wichtig damit Text Platz hat
+                isExpanded: true, // WICHTIG: Damit der Text den Platz nutzt
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
-                itemHeight: null, // Erlaubt variable Höhe im Menü
                 isDense: true,
                 
-                // --- FIX: selectedItemBuilder ---
-                // Das bestimmt, was angezeigt wird, wenn das Menü ZU ist.
-                // Wir zeigen hier NUR den Titel an, damit nichts überläuft.
+                // --- FIX 1: Anzeige wenn ZUGEKLAPPT ---
                 selectedItemBuilder: (BuildContext context) {
                   return availableTemplates.map<Widget>((t) {
                     return Text(
                       t.label, 
                       style: const TextStyle(fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis, // Falls Titel zu lang
+                      overflow: TextOverflow.ellipsis, // <--- WICHTIG: Pünktchen bei zu langem Text
+                      maxLines: 1,
                     );
                   }).toList();
                 },
                 
-                // Das bestimmt, was im AUFGEKLAPPTEN Menü angezeigt wird (Titel + Beschreibung)
+                // --- FIX 2: Anzeige wenn AUFGEKLAPPT ---
                 items: availableTemplates.map((t) {
                   return DropdownMenuItem(
                     value: t.type,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(t.label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                          Text(
-                            t.description, 
-                            style: const TextStyle(fontSize: 11, color: Colors.grey),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
+                    child: Column( // Column passt sich der Höhe an
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min, // Wichtig für Layout
+                      children: [
+                        Text(
+                          t.label, 
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          overflow: TextOverflow.ellipsis, // <--- Sicher ist sicher
+                        ),
+                        Text(
+                          t.description, 
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
                   );
                 }).toList(),
@@ -130,7 +131,7 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
                           color: c,
                           shape: BoxShape.circle,
                           border: _selectedColor == c ? Border.all(color: Colors.black, width: 3) : null,
-                          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2)],
+                          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2)],
                         ),
                         child: _selectedColor == c ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
                       ),
@@ -138,6 +139,32 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
                   }).toList(),
                 ),
               ),
+              const SizedBox(height: 16),
+
+              // 5. SORTIERUNG (NEU)
+              const Text("Sortierung:", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildSortOption(
+                      "Links → Rechts", 
+                      Icons.arrow_right_alt, 
+                      BinderSortOrder.leftToRight
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildSortOption(
+                      "Oben ↓ Unten", 
+                      Icons.arrow_downward, 
+                      BinderSortOrder.topToBottom
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 16),
 
               const SizedBox(height: 16),
 
@@ -207,6 +234,35 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
     );
   }
 
+  // Helper Widget für die Sortier-Buttons
+  Widget _buildSortOption(String label, IconData icon, BinderSortOrder order) {
+    final isSelected = _sortOrder == order;
+    return InkWell(
+      onTap: () => setState(() => _sortOrder = order),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blue[50] : Colors.white,
+          border: Border.all(color: isSelected ? Colors.blue : Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: isSelected ? Colors.blue : Colors.grey),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(
+              fontSize: 12, 
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              color: isSelected ? Colors.blue : Colors.black87
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _createBinder() async {
     if (_nameController.text.isEmpty) return;
 
@@ -222,6 +278,7 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
         rows: _rows,
         cols: _cols,
         type: _selectedType,
+        sortOrder: _sortOrder,
       );
 
       if (mounted) Navigator.pop(context);

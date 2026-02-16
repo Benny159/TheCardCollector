@@ -3581,6 +3581,14 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       defaultValue: const Constant('custom'));
+  static const VerificationMeta _sortOrderMeta =
+      const VerificationMeta('sortOrder');
+  @override
+  late final GeneratedColumn<String> sortOrder = GeneratedColumn<String>(
+      'sort_order', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('leftToRight'));
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -3604,6 +3612,7 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
         rowsPerPage,
         columnsPerPage,
         type,
+        sortOrder,
         createdAt,
         updatedAt
       ];
@@ -3652,6 +3661,10 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
       context.handle(
           _typeMeta, type.isAcceptableOrUnknown(data['type']!, _typeMeta));
     }
+    if (data.containsKey('sort_order')) {
+      context.handle(_sortOrderMeta,
+          sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -3683,6 +3696,8 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
           .read(DriftSqlType.int, data['${effectivePrefix}columns_per_page'])!,
       type: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}type'])!,
+      sortOrder: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}sort_order'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -3704,6 +3719,7 @@ class Binder extends DataClass implements Insertable<Binder> {
   final int rowsPerPage;
   final int columnsPerPage;
   final String type;
+  final String sortOrder;
   final DateTime createdAt;
   final DateTime? updatedAt;
   const Binder(
@@ -3714,6 +3730,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       required this.rowsPerPage,
       required this.columnsPerPage,
       required this.type,
+      required this.sortOrder,
       required this.createdAt,
       this.updatedAt});
   @override
@@ -3728,6 +3745,7 @@ class Binder extends DataClass implements Insertable<Binder> {
     map['rows_per_page'] = Variable<int>(rowsPerPage);
     map['columns_per_page'] = Variable<int>(columnsPerPage);
     map['type'] = Variable<String>(type);
+    map['sort_order'] = Variable<String>(sortOrder);
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || updatedAt != null) {
       map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -3744,6 +3762,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       rowsPerPage: Value(rowsPerPage),
       columnsPerPage: Value(columnsPerPage),
       type: Value(type),
+      sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
       updatedAt: updatedAt == null && nullToAbsent
           ? const Value.absent()
@@ -3762,6 +3781,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       rowsPerPage: serializer.fromJson<int>(json['rowsPerPage']),
       columnsPerPage: serializer.fromJson<int>(json['columnsPerPage']),
       type: serializer.fromJson<String>(json['type']),
+      sortOrder: serializer.fromJson<String>(json['sortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
     );
@@ -3777,6 +3797,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       'rowsPerPage': serializer.toJson<int>(rowsPerPage),
       'columnsPerPage': serializer.toJson<int>(columnsPerPage),
       'type': serializer.toJson<String>(type),
+      'sortOrder': serializer.toJson<String>(sortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
     };
@@ -3790,6 +3811,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           int? rowsPerPage,
           int? columnsPerPage,
           String? type,
+          String? sortOrder,
           DateTime? createdAt,
           Value<DateTime?> updatedAt = const Value.absent()}) =>
       Binder(
@@ -3800,6 +3822,7 @@ class Binder extends DataClass implements Insertable<Binder> {
         rowsPerPage: rowsPerPage ?? this.rowsPerPage,
         columnsPerPage: columnsPerPage ?? this.columnsPerPage,
         type: type ?? this.type,
+        sortOrder: sortOrder ?? this.sortOrder,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
       );
@@ -3815,6 +3838,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           ? data.columnsPerPage.value
           : this.columnsPerPage,
       type: data.type.present ? data.type.value : this.type,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -3830,6 +3854,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           ..write('rowsPerPage: $rowsPerPage, ')
           ..write('columnsPerPage: $columnsPerPage, ')
           ..write('type: $type, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -3838,7 +3863,7 @@ class Binder extends DataClass implements Insertable<Binder> {
 
   @override
   int get hashCode => Object.hash(id, name, color, icon, rowsPerPage,
-      columnsPerPage, type, createdAt, updatedAt);
+      columnsPerPage, type, sortOrder, createdAt, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3850,6 +3875,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           other.rowsPerPage == this.rowsPerPage &&
           other.columnsPerPage == this.columnsPerPage &&
           other.type == this.type &&
+          other.sortOrder == this.sortOrder &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -3862,6 +3888,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
   final Value<int> rowsPerPage;
   final Value<int> columnsPerPage;
   final Value<String> type;
+  final Value<String> sortOrder;
   final Value<DateTime> createdAt;
   final Value<DateTime?> updatedAt;
   const BindersCompanion({
@@ -3872,6 +3899,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     this.rowsPerPage = const Value.absent(),
     this.columnsPerPage = const Value.absent(),
     this.type = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -3883,6 +3911,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     this.rowsPerPage = const Value.absent(),
     this.columnsPerPage = const Value.absent(),
     this.type = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   })  : name = Value(name),
@@ -3895,6 +3924,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     Expression<int>? rowsPerPage,
     Expression<int>? columnsPerPage,
     Expression<String>? type,
+    Expression<String>? sortOrder,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -3906,6 +3936,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
       if (rowsPerPage != null) 'rows_per_page': rowsPerPage,
       if (columnsPerPage != null) 'columns_per_page': columnsPerPage,
       if (type != null) 'type': type,
+      if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -3919,6 +3950,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
       Value<int>? rowsPerPage,
       Value<int>? columnsPerPage,
       Value<String>? type,
+      Value<String>? sortOrder,
       Value<DateTime>? createdAt,
       Value<DateTime?>? updatedAt}) {
     return BindersCompanion(
@@ -3929,6 +3961,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
       rowsPerPage: rowsPerPage ?? this.rowsPerPage,
       columnsPerPage: columnsPerPage ?? this.columnsPerPage,
       type: type ?? this.type,
+      sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -3958,6 +3991,9 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     if (type.present) {
       map['type'] = Variable<String>(type.value);
     }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<String>(sortOrder.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3977,6 +4013,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
           ..write('rowsPerPage: $rowsPerPage, ')
           ..write('columnsPerPage: $columnsPerPage, ')
           ..write('type: $type, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -6126,6 +6163,7 @@ typedef $$BindersTableCreateCompanionBuilder = BindersCompanion Function({
   Value<int> rowsPerPage,
   Value<int> columnsPerPage,
   Value<String> type,
+  Value<String> sortOrder,
   Value<DateTime> createdAt,
   Value<DateTime?> updatedAt,
 });
@@ -6137,6 +6175,7 @@ typedef $$BindersTableUpdateCompanionBuilder = BindersCompanion Function({
   Value<int> rowsPerPage,
   Value<int> columnsPerPage,
   Value<String> type,
+  Value<String> sortOrder,
   Value<DateTime> createdAt,
   Value<DateTime?> updatedAt,
 });
@@ -6165,6 +6204,7 @@ class $$BindersTableTableManager extends RootTableManager<
             Value<int> rowsPerPage = const Value.absent(),
             Value<int> columnsPerPage = const Value.absent(),
             Value<String> type = const Value.absent(),
+            Value<String> sortOrder = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> updatedAt = const Value.absent(),
           }) =>
@@ -6176,6 +6216,7 @@ class $$BindersTableTableManager extends RootTableManager<
             rowsPerPage: rowsPerPage,
             columnsPerPage: columnsPerPage,
             type: type,
+            sortOrder: sortOrder,
             createdAt: createdAt,
             updatedAt: updatedAt,
           ),
@@ -6187,6 +6228,7 @@ class $$BindersTableTableManager extends RootTableManager<
             Value<int> rowsPerPage = const Value.absent(),
             Value<int> columnsPerPage = const Value.absent(),
             Value<String> type = const Value.absent(),
+            Value<String> sortOrder = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> updatedAt = const Value.absent(),
           }) =>
@@ -6198,6 +6240,7 @@ class $$BindersTableTableManager extends RootTableManager<
             rowsPerPage: rowsPerPage,
             columnsPerPage: columnsPerPage,
             type: type,
+            sortOrder: sortOrder,
             createdAt: createdAt,
             updatedAt: updatedAt,
           ),
@@ -6239,6 +6282,11 @@ class $$BindersTableFilterComposer
 
   ColumnFilters<String> get type => $state.composableBuilder(
       column: $state.table.type,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get sortOrder => $state.composableBuilder(
+      column: $state.table.sortOrder,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -6301,6 +6349,11 @@ class $$BindersTableOrderingComposer
 
   ColumnOrderings<String> get type => $state.composableBuilder(
       column: $state.table.type,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get sortOrder => $state.composableBuilder(
+      column: $state.table.sortOrder,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 

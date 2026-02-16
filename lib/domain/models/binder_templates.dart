@@ -12,6 +12,11 @@ enum BinderType {
   paldeaDex, // Gen 9
 }
 
+enum BinderSortOrder {
+  leftToRight, // Standard: Zeile für Zeile (1, 2, 3...)
+  topToBottom, // Spalte für Spalte (1, 4, 7...)
+}
+
 class BinderTemplateInfo {
   final BinderType type;
   final String label;

@@ -13,6 +13,7 @@ class BinderService {
     required int rows,
     required int cols,
     required BinderType type,
+    required BinderSortOrder sortOrder, // <--- NEU
   }) async {
     return db.transaction(() async {
       // 1. Binder erstellen
@@ -23,21 +24,28 @@ class BinderService {
           rowsPerPage: Value(rows),
           columnsPerPage: Value(cols),
           type: Value(type.name),
+          sortOrder: Value(sortOrder.name), // <--- Speichern
         ),
       );
 
-      // 2. Slots generieren (nur wenn nicht Custom)
+      // 2. Slots generieren
       if (type != BinderType.custom) {
-        await _generateSmartSlots(binderId, type, rows, cols);
+        await _generateSmartSlots(binderId, type, rows, cols, sortOrder);
       }
     });
   }
 
-  Future<void> _generateSmartSlots(int binderId, BinderType type, int rows, int cols) async {
+  Future<void> _generateSmartSlots(
+      int binderId, 
+      BinderType type, 
+      int rows, 
+      int cols, 
+      BinderSortOrder sortOrder // <--- NEU
+  ) async {
     int startId = 0;
     int endId = 0;
 
-    // --- A) ID-Bereiche definieren ---
+    // --- A) BEREICHE (Unverändert) ---
     switch (type) {
       case BinderType.kantoDex:   startId = 1; endId = 151; break;
       case BinderType.johtoDex:   startId = 152; endId = 251; break;
@@ -52,40 +60,58 @@ class BinderService {
       default: return; 
     }
 
-    // --- B) Pokedex-Daten laden (Englisch) ---
+    // --- B) DATEN LADEN (Unverändert) ---
     final List<PokedexData> speciesList = await (db.select(db.pokedex)
       ..where((tbl) => tbl.id.isBetweenValues(startId, endId))
       ..orderBy([(t) => OrderingTerm(expression: t.id)])
     ).get();
 
-    // Map für schnellen Zugriff: ID -> Englischer Name ("1" -> "Bulbasaur")
-    final Map<int, String> nameMap = {
-      for (var s in speciesList) s.id: s.name
-    };
+    final Map<int, String> nameMap = { for (var s in speciesList) s.id: s.name };
 
+    // --- C) SLOTS BERECHNEN (MIT SORTIERUNG) ---
     final int slotsPerPage = rows * cols;
     final List<BinderCardsCompanion> inserts = [];
     int indexCounter = 0; 
 
-    // --- C) Iteration durch alle Nummern ---
     for (int id = startId; id <= endId; id++) {
       final pokeNameEn = nameMap[id] ?? "???"; 
       
+      // 1. Auf welcher Seite sind wir?
       final pageIndex = (indexCounter / slotsPerPage).floor();
-      final slotIndex = indexCounter % slotsPerPage;
       
-      // --- KARTE SUCHEN ---
-      // Wir suchen in der Tabelle 'cards' im Feld 'name' (Englisch)
-      // Wir sortieren nach ID, um z.B. ältere Karten (Base Set) zu bevorzugen, falls möglich.
-      // (Die TCGdex ID ist oft sprechend, z.B. "base1-1")
+      // 2. Der wievielte Slot auf dieser Seite ist es (0 bis 8 bei 3x3)?
+      final localIndex = indexCounter % slotsPerPage;
+      
+      // 3. VISUELLEN SLOT BERECHNEN
+      int visualSlotIndex;
+
+      if (sortOrder == BinderSortOrder.leftToRight) {
+        // Standard: Einfach durchzählen (0, 1, 2, 3...)
+        visualSlotIndex = localIndex;
+      } else {
+        // Top-to-Bottom: Transponieren
+        // Beispiel 3x3:
+        // Index 0 -> Zeile 0, Spalte 0 -> Slot 0
+        // Index 1 -> Zeile 1, Spalte 0 -> Slot 3
+        // Index 2 -> Zeile 2, Spalte 0 -> Slot 6
+        // Index 3 -> Zeile 0, Spalte 1 -> Slot 1
+        
+        // Wir füllen erst die Spalte voll (rows), dann nächste Spalte.
+        final int targetRow = localIndex % rows;
+        final int targetCol = (localIndex / rows).floor();
+        
+        // Zurückrechnen auf visuellen Index (Zeile * Breite + Spalte)
+        visualSlotIndex = targetRow * cols + targetCol;
+      }
+
+      // --- KARTE SUCHEN (Unverändert) ---
       final matchingCard = await (db.select(db.cards)
         ..where((tbl) => tbl.name.equals(pokeNameEn)) 
         ..orderBy([(t) => OrderingTerm(expression: t.id)]) 
         ..limit(1)
       ).getSingleOrNull();
 
-      // Label bauen: Wir wollen den deutschen Namen anzeigen, wenn verfügbar!
-      String displayName = pokeNameEn; // Fallback: Englisch
+      String displayName = pokeNameEn;
       if (matchingCard != null && matchingCard.nameDe != null && matchingCard.nameDe!.isNotEmpty) {
         displayName = matchingCard.nameDe!;
       }
@@ -95,17 +121,15 @@ class BinderService {
       inserts.add(BinderCardsCompanion.insert(
         binderId: binderId,
         pageIndex: pageIndex,
-        slotIndex: slotIndex,
-        isPlaceholder: const Value(true), // Es ist ein Platzhalter
+        slotIndex: visualSlotIndex, // <-- Hier nutzen wir den berechneten Index
+        isPlaceholder: const Value(true),
         placeholderLabel: Value(label),
-        // Wenn Karte gefunden, ID speichern (für Bild-Anzeige)
         cardId: matchingCard != null ? Value(matchingCard.id) : const Value.absent(),
       ));
 
       indexCounter++;
     }
 
-    // --- D) Speichern ---
     if (inserts.isNotEmpty) {
       await db.batch((batch) {
         batch.insertAll(db.binderCards, inserts);
