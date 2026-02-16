@@ -1,12 +1,62 @@
 import 'package:flutter/material.dart';
-import 'create_binder_dialog.dart';
-import 'binder_detail_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/database/database_provider.dart';
-import '../../data/database/app_database.dart';
 import 'package:drift/drift.dart' as drift;
 
-// Provider um alle Binder zu laden
+import '../../data/database/database_provider.dart';
+import '../../data/database/app_database.dart';
+import 'create_binder_dialog.dart';
+import 'binder_detail_screen.dart';
+
+// --- 1. NEUER STATS PROVIDER ---
+// Berechnet Wert & Fortschritt für EINEN Binder
+class BinderStats {
+  final double value;
+  final int total;
+  final int filled;
+  double get progress => total == 0 ? 0 : filled / total;
+
+  BinderStats(this.value, this.filled, this.total);
+}
+
+final binderStatsProvider = FutureProvider.family<BinderStats, int>((ref, binderId) async {
+  final db = ref.read(databaseProvider);
+
+  // Gleicher Join wie im Detail Screen
+  final query = db.select(db.binderCards).join([
+    drift.leftOuterJoin(db.cards, db.cards.id.equalsExp(db.binderCards.cardId)),
+    drift.leftOuterJoin(db.cardMarketPrices, db.cardMarketPrices.cardId.equalsExp(db.cards.id)),
+  ]);
+
+  query.where(db.binderCards.binderId.equals(binderId));
+  
+  final rows = await query.get();
+
+  // Deduplizierung (Wichtig, falls mehrere Preise pro Karte existieren)
+  final Set<int> processedSlots = {};
+  double totalValue = 0;
+  int filled = 0;
+  int total = 0;
+
+  for (final row in rows) {
+    final bc = row.readTable(db.binderCards);
+    if (processedSlots.contains(bc.id)) continue;
+    processedSlots.add(bc.id);
+
+    total++;
+    
+    // Prüfen ob Slot gefüllt ist (kein Platzhalter + Karte verknüpft)
+    if (!bc.isPlaceholder && bc.cardId != null) {
+       filled++;
+       final price = row.readTableOrNull(db.cardMarketPrices)?.trend ?? 0.0;
+       totalValue += price;
+    }
+  }
+
+  return BinderStats(totalValue, filled, total);
+});
+
+
+// --- HAUPT SCREEN ---
 final allBindersProvider = StreamProvider<List<Binder>>((ref) {
   final db = ref.watch(databaseProvider);
   return (db.select(db.binders)
@@ -29,7 +79,6 @@ class BinderListScreen extends ConsumerWidget {
         onPressed: () {
           showDialog(
             context: context,
-            // Hier den neuen Dialog nutzen
             builder: (context) => const CreateBinderDialog(), 
           );
         },
@@ -58,8 +107,8 @@ class BinderListScreen extends ConsumerWidget {
           return GridView.builder(
             padding: const EdgeInsets.all(16),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, // 2 Spalten
-              childAspectRatio: 0.75, // Hochkant wie ein Buch
+              crossAxisCount: 2, 
+              childAspectRatio: 0.70, // Etwas höher für die Stats
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
             ),
@@ -72,106 +121,20 @@ class BinderListScreen extends ConsumerWidget {
       ),
     );
   }
-
-  void _showCreateBinderDialog(BuildContext context, WidgetRef ref) {
-    final nameController = TextEditingController();
-    Color selectedColor = Colors.blue;
-    int rows = 3;
-    int cols = 3;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder( // Stateful für Farb-Auswahl Update
-        builder: (context, setState) {
-          return AlertDialog(
-            title: const Text("Neuen Binder erstellen"),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(labelText: "Name (z.B. National Dex)", border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text("Farbe:", style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: [Colors.blue, Colors.red, Colors.green, Colors.black, Colors.purple, Colors.orange].map((c) {
-                      return GestureDetector(
-                        onTap: () => setState(() => selectedColor = c),
-                        child: Container(
-                          width: 32, height: 32,
-                          decoration: BoxDecoration(
-                            color: c,
-                            shape: BoxShape.circle,
-                            border: selectedColor == c ? Border.all(color: Colors.black, width: 3) : null,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text("Layout:", style: TextStyle(fontWeight: FontWeight.bold)),
-                  DropdownButton<String>(
-                    value: "$rows x $cols",
-                    items: const [
-                      DropdownMenuItem(value: "2 x 2", child: Text("2 x 2 (4 Karten/Seite)")),
-                      DropdownMenuItem(value: "3 x 3", child: Text("3 x 3 (9 Karten/Seite)")),
-                      DropdownMenuItem(value: "4 x 3", child: Text("4 x 3 (12 Karten/Seite)")),
-                      DropdownMenuItem(value: "4 x 4", child: Text("4 x 4 (16 Karten/Seite)")),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        final parts = val.split(' x ');
-                        setState(() {
-                          rows = int.parse(parts[0]);
-                          cols = int.parse(parts[1]);
-                        });
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Abbrechen")),
-              FilledButton(
-                onPressed: () async {
-                  if (nameController.text.isNotEmpty) {
-                    final db = ref.read(databaseProvider);
-                    await db.into(db.binders).insert(
-                      BindersCompanion.insert(
-                        name: nameController.text,
-                        color: selectedColor.value,
-                        rowsPerPage: drift.Value(rows),
-                        columnsPerPage: drift.Value(cols),
-                        type: const drift.Value('custom'), // Vorerst Custom
-                      )
-                    );
-                    if (context.mounted) Navigator.pop(ctx);
-                  }
-                },
-                child: const Text("Erstellen"),
-              ),
-            ],
-          );
-        }
-      ),
-    );
-  }
 }
 
-class _BinderCard extends StatelessWidget {
+// --- 2. UPDATE BINDER CARD (ConsumerWidget) ---
+class _BinderCard extends ConsumerWidget {
   final Binder binder;
   const _BinderCard({required this.binder});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final color = Color(binder.color);
     
+    // Hier laden wir die Statistik für DIESEN Binder
+    final statsAsync = ref.watch(binderStatsProvider(binder.id));
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -197,7 +160,7 @@ class _BinderCard extends StatelessWidget {
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
             colors: [
-              color.withOpacity(0.8), // Buchrücken Schatten
+              color.withOpacity(0.8),
               color,
               color,
             ],
@@ -214,33 +177,94 @@ class _BinderCard extends StatelessWidget {
             
             // Inhalt
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 12, 12),
+              padding: const EdgeInsets.fromLTRB(24, 12, 12, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Label
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(4),
-                      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2)]
-                    ),
-                    child: Text(
-                      binder.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
-                    ),
+                  // --- HEADER: Name & Wert ---
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Name
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            binder.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   
+                  const SizedBox(height: 8),
+
+                  // WERT ANZEIGE (Oben rechts oder mittig)
+                  statsAsync.when(
+                    data: (stats) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        "${stats.value.toStringAsFixed(2)} €",
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                    ),
+                    loading: () => const SizedBox(),
+                    error: (_,__) => const SizedBox(),
+                  ),
+
                   const Spacer(),
                   
-                  // Infos
-                  Icon(Icons.grid_4x4, size: 16, color: Colors.white.withOpacity(0.7)),
-                  Text(
-                    "${binder.rowsPerPage}x${binder.columnsPerPage}", 
-                    style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12)
+                  // --- FOOTER: Progress & Infos ---
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Grid Info
+                      Text(
+                        "${binder.rowsPerPage}x${binder.columnsPerPage} Grid", 
+                        style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10)
+                      ),
+                      const SizedBox(height: 4),
+
+                      // Progress Bar
+                      statsAsync.when(
+                        data: (stats) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: stats.progress,
+                                backgroundColor: Colors.black26,
+                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
+                                minHeight: 6,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                "${stats.filled} / ${stats.total}",
+                                style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 10),
+                              ),
+                            ),
+                          ],
+                        ),
+                        loading: () => const LinearProgressIndicator(minHeight: 6),
+                        error: (_,__) => Container(),
+                      ),
+                    ],
                   ),
                 ],
               ),

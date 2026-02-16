@@ -7,7 +7,10 @@ class BinderPageWidget extends StatelessWidget {
   final int rows;
   final int cols;
   final int pageNumber; 
+  final int totalPages;
   final Function(BinderSlotData) onSlotTap;
+  final VoidCallback onNextPage;
+  final VoidCallback onPrevPage;
 
   const BinderPageWidget({
     super.key,
@@ -15,7 +18,10 @@ class BinderPageWidget extends StatelessWidget {
     required this.rows,
     required this.cols,
     required this.pageNumber,
+    required this.totalPages,
     required this.onSlotTap,
+    required this.onNextPage,
+    required this.onPrevPage,
   });
 
   @override
@@ -69,11 +75,42 @@ class BinderPageWidget extends StatelessWidget {
           ),
           
           const SizedBox(height: 8),
-          
-          // Seitenzahl
-          Text(
-            "- ${pageNumber + 1} -", 
-            style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.bold, fontSize: 12)
+          // --- NEUE NAVIGATION ---
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Zurück Button (nur wenn nicht Seite 0)
+              if (pageNumber > 0)
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios, size: 16, color: Colors.grey),
+                  onPressed: onPrevPage,
+                  tooltip: "Vorherige Seite",
+                  constraints: const BoxConstraints(), // Kompakt
+                  padding: EdgeInsets.zero,
+                )
+              else
+                const SizedBox(width: 24), // Platzhalter damit die Zahl mittig bleibt
+
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  "- ${pageNumber + 1} -", 
+                  style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.bold, fontSize: 12)
+                ),
+              ),
+
+              // Vor Button (nur wenn nicht letzte Seite)
+              if (pageNumber < totalPages - 1)
+                IconButton(
+                  icon: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                  onPressed: onNextPage,
+                  tooltip: "Nächste Seite",
+                  constraints: const BoxConstraints(),
+                  padding: EdgeInsets.zero,
+                )
+              else
+                 const SizedBox(width: 24),
+            ],
           ),
         ],
       ),

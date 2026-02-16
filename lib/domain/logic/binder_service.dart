@@ -76,44 +76,40 @@ class BinderService {
     for (int id = startId; id <= endId; id++) {
       final pokeNameEn = nameMap[id] ?? "???"; 
       
-      // 1. Auf welcher Seite sind wir?
+      // 1. VISUELLEN INDEX BERECHNEN (Bleibt gleich)
       final pageIndex = (indexCounter / slotsPerPage).floor();
-      
-      // 2. Der wievielte Slot auf dieser Seite ist es (0 bis 8 bei 3x3)?
       final localIndex = indexCounter % slotsPerPage;
-      
-      // 3. VISUELLEN SLOT BERECHNEN
       int visualSlotIndex;
-
       if (sortOrder == BinderSortOrder.leftToRight) {
-        // Standard: Einfach durchzählen (0, 1, 2, 3...)
         visualSlotIndex = localIndex;
       } else {
-        // Top-to-Bottom: Transponieren
-        // Beispiel 3x3:
-        // Index 0 -> Zeile 0, Spalte 0 -> Slot 0
-        // Index 1 -> Zeile 1, Spalte 0 -> Slot 3
-        // Index 2 -> Zeile 2, Spalte 0 -> Slot 6
-        // Index 3 -> Zeile 0, Spalte 1 -> Slot 1
-        
-        // Wir füllen erst die Spalte voll (rows), dann nächste Spalte.
         final int targetRow = localIndex % rows;
         final int targetCol = (localIndex / rows).floor();
-        
-        // Zurückrechnen auf visuellen Index (Zeile * Breite + Spalte)
         visualSlotIndex = targetRow * cols + targetCol;
       }
 
-      // --- KARTE SUCHEN (Unverändert) ---
+      // 2. INTELLIGENTE NAMENSUCHE
+      // Wir generieren eine Liste möglicher Namen (z.B. ["Tapu-koko", "Tapu Koko", "Tapu Lele GX"])
+      final List<String> candidates = _generateCandidateNames(pokeNameEn);
+
+      // Wir suchen in der DB nach irgendeinem dieser Namen
+      // Wir sortieren so, dass normale Karten vor V/VMAX kommen, falls mehrere matchen.
       final matchingCard = await (db.select(db.cards)
-        ..where((tbl) => tbl.name.equals(pokeNameEn)) 
+        ..where((tbl) => tbl.name.isIn(candidates)) 
         ..orderBy([(t) => OrderingTerm(expression: t.id)]) 
         ..limit(1)
       ).getSingleOrNull();
 
-      String displayName = pokeNameEn;
+      // 3. LABEL BAUEN (Deutsch bevorzugt)
+      String displayName = pokeNameEn; // Fallback
+      
+      // Wenn wir eine Karte gefunden haben, nehmen wir deren deutschen Namen
       if (matchingCard != null && matchingCard.nameDe != null && matchingCard.nameDe!.isNotEmpty) {
         displayName = matchingCard.nameDe!;
+      } else {
+        // Wenn keine Karte gefunden, versuchen wir den API Namen wenigstens schön zu formatieren
+        // (z.B. "Tapu-koko" -> "Tapu Koko")
+        displayName = candidates.last; // Der letzte Kandidat ist meist der "sauberste" (ohne Bindestriche)
       }
 
       final label = "#${id.toString().padLeft(4, '0')} $displayName";
@@ -121,7 +117,7 @@ class BinderService {
       inserts.add(BinderCardsCompanion.insert(
         binderId: binderId,
         pageIndex: pageIndex,
-        slotIndex: visualSlotIndex, // <-- Hier nutzen wir den berechneten Index
+        slotIndex: visualSlotIndex,
         isPlaceholder: const Value(true),
         placeholderLabel: Value(label),
         cardId: matchingCard != null ? Value(matchingCard.id) : const Value.absent(),
@@ -136,4 +132,130 @@ class BinderService {
       });
     }
   }
+
+  // --- DIE NEUE "GEHIRN"-FUNKTION ---
+  List<String> _generateCandidateNames(String apiName) {
+    final Set<String> candidates = {};
+    final String cleanInput = apiName.toLowerCase();
+
+    // 1. Das Original (z.B. "Bulbasaur")
+    candidates.add(apiName);
+
+    // 2. Spezielle Mappings (Hardcoded Exceptions)
+    final Map<String, String> exceptions = {
+      'nidoran-f': 'Nidoran♀',
+      'nidoran-m': 'Nidoran♂',
+      'farfetchd': "Farfetch'd",
+      'sirfetchd': "Sirfetch'd",
+      'mr-mime': 'Mr. Mime',
+      'mr-rime': 'Mr. Rime',
+      'mime-jr': 'Mime Jr.',
+      'ho-oh': 'Ho-Oh',
+      'porygon-z': 'Porygon-Z',
+      'flabebe': 'Flabébé',
+      'type-null': 'Type: Null',
+      'jangmo-o': 'Jangmo-o',
+      'hakamo-o': 'Hakamo-o',
+      'kommo-o': 'Kommo-o',
+      'chingling': "Team Rocket's Chingling", 
+      'dudunsparce-two-segments': "Dudunsparce",
+      'wo-chien': "Wo-Chien",
+      'chien-pao': "Chien-Pao",
+      'ting-lu': "Ting-Lu",
+      'chi-yu': "Chi-Yu",
+      'Ogerpon': "Cornerstone Mask Ogerpon",
+    };
+
+    if (exceptions.containsKey(cleanInput)) {
+      candidates.add(exceptions[cleanInput]!);
+    }
+
+    // 3. Bindestriche zu Leerzeichen (Paradox, Tapus, Legends of Ruin)
+    // "tapu-koko" -> "Tapu Koko", "iron-moth" -> "Iron Moth"
+    if (cleanInput.contains('-')) {
+      final spaced = apiName.replaceAll('-', ' ');
+      candidates.add(_capitalizeWords(spaced));
+    }
+
+    // 4. Suffixe entfernen (Formen, die auf Karten oft nicht stehen)
+    // Liste der Suffixe, die wir einfach abschneiden
+    final List<String> suffixesToRemove = [
+      '-normal', '-average', '-standard', '-altered', '-land', '-plant', 
+      '-ordinary', '-aria', '-midday', '-solo', '-red-striped', '-red-meteor',
+      '-disguised', '-amped', '-ice', '-full-belly', '-male', '-female',
+      '-shield', '-50', '-baile', '-incarnate', '-zero', '-curly', 
+      '-family-of-four', '-green-plumage', '-two-segments'
+    ];
+
+    for (final suffix in suffixesToRemove) {
+      if (cleanInput.endsWith(suffix)) {
+        // Schneide Suffix ab und mache den Rest schön
+        final base = cleanInput.substring(0, cleanInput.length - suffix.length);
+        candidates.add(_capitalizeWords(base)); // z.B. "Deoxys"
+        break; // Nur ein Suffix entfernen
+      }
+    }
+
+    // 5. Regionalformen (Prefixe hinzufügen)
+    // Wenn die API "Obstagoon" liefert, die Karte aber "Galarian Obstagoon" heißt
+    final Map<String, String> regionalPrefixes = {
+      'obstagoon': 'Galarian',
+      'perrserker': 'Galarian',
+      'cursola': 'Galarian',
+      'sirfetchd': 'Galarian',
+      'mr-rime': 'Galarian',
+      'runerigus': 'Galarian',
+      'darmanitan': 'Galarian', // Oft Galarian
+      'basculegion': 'Hisuian',
+      'sneasler': 'Hisuian',
+      'overqwil': 'Hisuian',
+      'clodsire': 'Paldean',
+    };
+
+    // Wir prüfen den Basis-Namen (evtl. nach Suffix-Entfernung)
+    String checkRegional = cleanInput;
+    for (final suffix in suffixesToRemove) {
+      if (checkRegional.endsWith(suffix)) {
+        checkRegional = checkRegional.substring(0, checkRegional.length - suffix.length);
+      }
+    }
+
+    if (regionalPrefixes.containsKey(checkRegional)) {
+      final prefix = regionalPrefixes[checkRegional]!;
+      final base = _capitalizeWords(checkRegional);
+      candidates.add("$prefix $base"); // "Galarian Obstagoon"
+    }
+
+    // 6. Urshifu Sonderfall (Swap)
+    if (cleanInput.contains('urshifu')) {
+      if (cleanInput.contains('single-strike')) candidates.add('Single Strike Urshifu');
+      if (cleanInput.contains('rapid-strike')) candidates.add('Rapid Strike Urshifu');
+    }
+
+    // 7. Arceus & Co (Falls keine normale Karte existiert, V/VSTAR suchen)
+    // Das ist ein "weicher" Fallback.
+    if (cleanInput == 'arceus') {
+      candidates.add('Arceus V');
+      candidates.add('Arceus VSTAR');
+    }
+    if (cleanInput == 'giratina') { // Giratina ist oft V/VSTAR im modernen Kontext
+      candidates.add('Giratina V');
+    }
+
+    return candidates.toList();
+  }
+
+  // Hilfsfunktion: "tapu koko" -> "Tapu Koko"
+  String _capitalizeWords(String input) {
+    if (input.isEmpty) return input;
+    return input.split(' ').map((word) {
+      if (word.isEmpty) return '';
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
+  }
+
+  Future<void> deleteBinder(int binderId) async {
+    await (db.delete(db.binders)..where((t) => t.id.equals(binderId))).go();
+  }
 }
+

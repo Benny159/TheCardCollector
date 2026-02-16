@@ -4,6 +4,8 @@ import 'package:page_flip/page_flip.dart'; // <--- WICHTIG: Neues Import
 import '../../data/database/app_database.dart';
 import 'binder_detail_provider.dart';
 import 'widgets/binder_page_widget.dart';
+import '../../domain/logic/binder_service.dart';
+import '../../data/database/database_provider.dart';
 
 class BinderDetailScreen extends ConsumerStatefulWidget {
   final Binder binder;
@@ -58,8 +60,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
             final pageSlots = state.slots.sublist(start, end);
 
             pages.add(
-              // WICHTIG: Der Key muss an das ALLERERSTE Widget in der Liste!
-              // Vorher war er im Container darunter, das war das Problem.
               RepaintBoundary(
                 key: ValueKey('page_$i'), 
                 child: Container(
@@ -67,14 +67,25 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                   child: InteractiveViewer(
                     minScale: 1.0,
                     maxScale: 3.0,
-                    // Damit man beim Zoomen nicht aus Versehen blättert:
                     panEnabled: true, 
                     child: BinderPageWidget(
                       slots: pageSlots,
                       rows: widget.binder.rowsPerPage,
                       cols: widget.binder.columnsPerPage,
                       pageNumber: i,
+                      totalPages: totalPages, // <--- Übergeben
                       onSlotTap: (slot) => _handleSlotTap(slot),
+                      
+                      // --- NAVIGATION STEUERUNG ---
+                      onNextPage: () {
+                        // Tastatur weg, falls noch offen
+                        FocusScope.of(context).unfocus();
+                        _pageFlipKey.currentState?.nextPage();
+                      },
+                      onPrevPage: () {
+                        FocusScope.of(context).unfocus();
+                        _pageFlipKey.currentState?.previousPage();
+                      },
                     ),
                   ),
                 ),
@@ -124,19 +135,77 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text("Statistik", style: Theme.of(context).textTheme.titleLarge),
+            Text("Optionen & Statistik", style: Theme.of(context).textTheme.titleLarge),
             const Divider(),
+            
+            // Statistik
             ListTile(
+              leading: const Icon(Icons.euro, color: Colors.green),
               title: const Text("Gesamtwert"),
-              trailing: Text("${state.totalValue.toStringAsFixed(2)} €", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green)),
+              trailing: Text("${state.totalValue.toStringAsFixed(2)} €", 
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             ),
             ListTile(
-              title: const Text("Fortschritt"),
+              leading: const Icon(Icons.pie_chart, color: Colors.blue),
+              title: const Text("Vervollständigung"),
               trailing: Text("${state.filledSlots} / ${state.totalSlots}"),
-              subtitle: LinearProgressIndicator(value: state.filledSlots / (state.totalSlots == 0 ? 1 : state.totalSlots)),
+              subtitle: LinearProgressIndicator(
+                value: state.filledSlots / (state.totalSlots == 0 ? 1 : state.totalSlots)
+              ),
+            ),
+            
+            const Divider(),
+            
+            // --- LÖSCHEN BUTTON ---
+            ListTile(
+              leading: const Icon(Icons.delete_forever, color: Colors.red),
+              title: const Text("Binder löschen", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              onTap: () {
+                // Dialog schließen
+                Navigator.pop(ctx);
+                // Bestätigung anzeigen
+                _confirmDelete(context); 
+              },
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Binder löschen?"),
+        content: Text("Möchtest du '${widget.binder.name}' wirklich löschen? Alle Slots und Sortierungen gehen verloren. Deine Karten bleiben im Inventar."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx), 
+            child: const Text("Abbrechen")
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              // 1. Löschen
+              final db = ref.read(databaseProvider);
+              final service = BinderService(db);
+              await service.deleteBinder(widget.binder.id);
+              
+              if (ctx.mounted) {
+                // 2. Dialog schließen
+                Navigator.pop(ctx); 
+                // 3. Zurück zur Liste (Screen schließen)
+                Navigator.pop(context); 
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Binder gelöscht."))
+                );
+              }
+            }, 
+            child: const Text("Löschen"),
+          ),
+        ],
       ),
     );
   }
