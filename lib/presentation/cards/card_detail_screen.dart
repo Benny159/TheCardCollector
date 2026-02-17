@@ -19,47 +19,66 @@ import 'price_history_chart.dart';
 
 // --- PROVIDER ---
 
-// 1. Live-Provider für das Inventar dieser Karte
 final cardInventoryProvider = StreamProvider.family<List<UserCard>, String>((ref, cardId) {
   final db = ref.watch(databaseProvider);
   return (db.select(db.userCards)..where((tbl) => tbl.cardId.equals(cardId))).watch();
 });
 
-// 2. NEU: Provider für die Binder-Standorte (damit es sich automatisch aktualisiert!)
+// Wir nutzen FutureProvider in Kombination mit dem "Force Refresh" Key Trick
 final cardBindersProvider = FutureProvider.family<List<String>, String>((ref, cardId) async {
   final db = ref.watch(databaseProvider);
+  // Hole die Binder, in denen die Karte ECHT drin steckt (kein Platzhalter)
   return BinderService(db).getBindersForCard(cardId);
 });
 
-class CardDetailScreen extends ConsumerWidget {
-  final ApiCard card;
+// --- SCREEN (Jetzt Stateful für den Refresh-Trick) ---
 
+class CardDetailScreen extends ConsumerStatefulWidget {
+  final ApiCard card;
   const CardDetailScreen({super.key, required this.card});
 
-  // --- ZENTRALE REFRESH METHODE ---
-  void _refreshAllProviders(WidgetRef ref) {
+  @override
+  ConsumerState<CardDetailScreen> createState() => _CardDetailScreenState();
+}
+
+class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
+  // Der Trick aus dem Binder Screen: Ein Zähler, der das Neuladen erzwingt
+  int _refreshId = 0;
+
+  // --- DIE "HOLZHAMMER" REFRESH METHODE ---
+  Future<void> _forceRefresh() async {
+    // 1. Kurz warten (Datenbank Zeit geben)
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    // 2. Provider Cache leeren
+    ref.invalidate(cardBindersProvider(widget.card.id));
     ref.invalidate(searchResultsProvider);
-    ref.invalidate(cardsForSetProvider(card.setId));
-    ref.invalidate(setStatsProvider(card.setId));
-    ref.invalidate(inventoryProvider);
-    ref.invalidate(cardBindersProvider(card.id)); // WICHTIG: Binder Infos neu laden!
+    ref.invalidate(cardsForSetProvider(widget.card.setId));
+    ref.invalidate(setStatsProvider(widget.card.setId));
+    ref.invalidate(inventoryProvider); 
     createPortfolioSnapshot(ref);
+
+    // 3. UI neu bauen lassen (Binder Widget wird zerstört und neu erstellt)
+    if (mounted) {
+      setState(() {
+        _refreshId++; 
+      });
+    }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final setAsync = ref.watch(setByIdProvider(card.setId));
-    final inventoryAsync = ref.watch(cardInventoryProvider(card.id));
-    final historyAsync = ref.watch(cardPriceHistoryProvider(card.id));
-    final displayImage = card.displayImage;
+  Widget build(BuildContext context) {
+    final setAsync = ref.watch(setByIdProvider(widget.card.setId));
+    final inventoryAsync = ref.watch(cardInventoryProvider(widget.card.id));
+    final historyAsync = ref.watch(cardPriceHistoryProvider(widget.card.id));
+    final displayImage = widget.card.displayImage;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(card.nameDe ?? card.name, style: const TextStyle(fontSize: 16)),
+        title: Text(widget.card.nameDe ?? widget.card.name, style: const TextStyle(fontSize: 16)),
         actions: [
           IconButton(
             icon: const Icon(Icons.sync),
-            tooltip: "Daten & Preise aktualisieren",
             onPressed: () => _updateCardData(context, ref),
           ),
         ],
@@ -69,9 +88,9 @@ class CardDetailScreen extends ConsumerWidget {
           showModalBottomSheet(
             context: context,
             isScrollControlled: true,
-            builder: (context) => InventoryBottomSheet(card: card),
+            builder: (context) => InventoryBottomSheet(card: widget.card),
           ).then((_) {
-            _refreshAllProviders(ref);
+            _forceRefresh();
           });
         },
         icon: const Icon(Icons.add_card),
@@ -82,36 +101,27 @@ class CardDetailScreen extends ConsumerWidget {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 1. SET HEADER
             setAsync.when(
               data: (set) => _buildSetHeader(context, set),
               loading: () => const LinearProgressIndicator(minHeight: 2),
               error: (_, __) => const SizedBox.shrink(),
             ),
-
             const SizedBox(height: 10),
 
-            // 2. DAS BILD
+            // Bild
             GestureDetector(
               onTap: () => _openFullscreenImage(context, displayImage),
               child: Hero(
-                tag: card.id,
+                tag: widget.card.id,
                 child: Container(
                   height: 350, 
                   decoration: BoxDecoration(
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        blurRadius: 20,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 10),
-                      )
-                    ],
+                    boxShadow: [BoxShadow(color: Colors.black38, blurRadius: 20, offset: Offset(0, 10))],
                   ),
                   child: CachedNetworkImage(
                     imageUrl: displayImage,
-                    placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                    errorWidget: (context, url, dynamic error) => const Icon(Icons.broken_image, size: 100, color: Colors.grey),
+                    placeholder: (_, __) => const Center(child: CircularProgressIndicator()),
+                    errorWidget: (_, __, ___) => const Icon(Icons.broken_image, size: 100, color: Colors.grey),
                     fit: BoxFit.contain,
                   ),
                 ),
@@ -120,89 +130,32 @@ class CardDetailScreen extends ConsumerWidget {
             
             const SizedBox(height: 20),
 
-            // 3. INVENTAR
+            // Inventar
             inventoryAsync.when(
               data: (items) => _buildInventorySection(context, ref, items),
               loading: () => const SizedBox.shrink(),
               error: (err, stack) => Text("Fehler: $err"),
             ),
 
-            // 4. BINDER STANDORT (Jetzt Live-Aktualisiert!)
+            // --- BINDER STANDORT ---
+            // HIER IST DER TRICK: Der Key ändert sich bei jedem Refresh -> Widget lädt neu!
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: BinderLocationWidget(cardId: card.id),
-            ),
-
-            const SizedBox(height: 20),
-
-            // 5. EXTERNE LINKS
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                children: [
-                  if (card.cardmarket?.url.isNotEmpty == true)
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => _launchURL(card.cardmarket!.url),
-                        icon: const Icon(Icons.shopping_cart, size: 18),
-                        label: const Text("Cardmarket"),
-                        style: FilledButton.styleFrom(backgroundColor: Colors.blue[800]),
-                      ),
-                    ),
-                  if (card.cardmarket?.url.isNotEmpty == true && card.tcgplayer?.url.isNotEmpty == true)
-                    const SizedBox(width: 10),
-                  if (card.tcgplayer?.url.isNotEmpty == true)
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => _launchURL(card.tcgplayer!.url),
-                        icon: const Icon(Icons.open_in_new, size: 18),
-                        label: const Text("TCGPlayer"),
-                        style: FilledButton.styleFrom(backgroundColor: Colors.teal[700]),
-                      ),
-                    ),
-                ],
+              child: BinderLocationWidget(
+                key: ValueKey(_refreshId), // <--- DAS IST DIE MAGIE
+                cardId: widget.card.id
               ),
             ),
 
-            const SizedBox(height: 30),
-
-            // 6. PREISVERLAUF
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("Preisverlauf", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                  const SizedBox(height: 4),
-                  const Text("Historische Preisentwicklung (Quelle: TCGdex)", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  const SizedBox(height: 16),
-                  
-                  SizedBox(
-                    height: 320, 
-                    child: historyAsync.when(
-                      data: (data) => PriceHistoryChart(
-                        cmHistory: (data['cm'] as List).cast<CardMarketPrice>(),
-                        tcgHistory: (data['tcg'] as List).cast<TcgPlayerPrice>(),
-                      ),
-                      loading: () => const Center(child: CircularProgressIndicator()),
-                      error: (e, s) => Center(child: Text("Konnte Verlauf nicht laden: $e")),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 30),
-
-            // 7. PREIS TABELLEN
-            if (card.cardmarket != null) _buildCardmarketSection(context, card.cardmarket!),
-            if (card.tcgplayer != null) _buildTcgPlayerSection(context, card.tcgplayer!),
-
             const SizedBox(height: 20),
-
-            // 8. DETAILS
+            _buildLinksSection(),
+            const SizedBox(height: 30),
+            _buildChartSection(historyAsync),
+            const SizedBox(height: 30),
+            if (widget.card.cardmarket != null) _buildCardmarketSection(context, widget.card.cardmarket!),
+            if (widget.card.tcgplayer != null) _buildTcgPlayerSection(context, widget.card.tcgplayer!),
+            const SizedBox(height: 20),
             _buildInfoSection(context, ref),
-            
             const SizedBox(height: 80), 
           ],
         ),
@@ -210,7 +163,7 @@ class CardDetailScreen extends ConsumerWidget {
     );
   }
 
-  // --- LOGIK & HELPER ---
+  // --- LOGIK: LÖSCHEN & KONFLIKT ---
 
   Future<void> _decreaseOrDeleteItem(BuildContext context, WidgetRef ref, UserCard item) async {
     final db = ref.read(databaseProvider);
@@ -218,7 +171,6 @@ class CardDetailScreen extends ConsumerWidget {
     bool shouldDelete = false;
 
     try {
-      // A) Abfrage: Wirklich löschen?
       if (item.quantity == 1) {
         final confirm = await showDialog<bool>(
           context: context,
@@ -235,7 +187,9 @@ class CardDetailScreen extends ConsumerWidget {
         shouldDelete = true;
       }
 
-      // B) BINDER CHECK
+      // Warten damit Dialog sicher zu ist
+      await Future.delayed(const Duration(milliseconds: 150));
+
       final allEntries = await (db.select(db.userCards)..where((t) => t.cardId.equals(item.cardId))).get();
       final int totalOwned = allEntries.fold(0, (sum, e) => sum + e.quantity);
 
@@ -250,12 +204,10 @@ class CardDetailScreen extends ConsumerWidget {
         r.readTable(db.binders).name
       )).toList();
 
-      // Wenn wir weniger Karten haben als wir benutzen -> Konflikt
       if ((totalOwned - 1) < usedSlots.length) {
         int? slotToRemoveId;
 
         if (usedSlots.length == 1) {
-          // Automatisch entfernen, wenn nur in einem Binder
           slotToRemoveId = usedSlots.first.id;
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -264,10 +216,8 @@ class CardDetailScreen extends ConsumerWidget {
             ));
           }
         } else if (usedSlots.length > 1) {
-          // Dialog anzeigen
           if (context.mounted) {
             slotToRemoveId = await _showBinderSelectionDialog(context, usedSlots);
-            // Wenn User abbricht (null), brechen wir alles ab!
             if (slotToRemoveId == null) return; 
           }
         }
@@ -277,7 +227,6 @@ class CardDetailScreen extends ConsumerWidget {
         }
       }
 
-      // C) DATENBANK UPDATE
       if (shouldDelete) {
         await (db.delete(db.userCards)..where((t) => t.id.equals(item.id))).go();
       } else {
@@ -288,8 +237,8 @@ class CardDetailScreen extends ConsumerWidget {
         }
       }
 
-      // D) UI AKTUALISIEREN
-      _refreshAllProviders(ref);
+      // --- DER REFRESH AUFRUF ---
+      await _forceRefresh();
 
     } catch (e) {
       if (context.mounted) {
@@ -298,59 +247,108 @@ class CardDetailScreen extends ConsumerWidget {
     }
   }
 
+  // --- SICHERER DIALOG (Kein Absturz mehr) ---
   Future<int?> _showBinderSelectionDialog(BuildContext context, List<_BinderSlotInfo> slots) {
     return showDialog<int>(
       context: context,
       barrierDismissible: false, 
-      builder: (ctx) => SimpleDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text("Binder Konflikt"),
-        contentPadding: const EdgeInsets.all(20),
-        children: [
-          const Text("Du entfernst eine Karte, die in mehreren Bindern verwendet wird.\n\nBitte wähle, aus welchem Binder sie entfernt werden soll:"),
-          const SizedBox(height: 20),
-          
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            constraints: const BoxConstraints(maxHeight: 200),
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: slots.length,
-              separatorBuilder: (ctx, i) => const Divider(height: 1),
-              itemBuilder: (ctx, i) {
-                final slot = slots[i];
-                return SimpleDialogOption(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  onPressed: () => Navigator.pop(ctx, slot.id), 
-                  child: Row(
-                    children: [
-                      const Icon(Icons.book, color: Colors.blue),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(slot.binderName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Diese Karte ist mehrfach in Bindern. Wähle, wo sie entfernt werden soll:"),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true, // Wichtig!
+                  itemCount: slots.length,
+                  separatorBuilder: (ctx, i) => const Divider(height: 1),
+                  itemBuilder: (ctx, i) {
+                    final slot = slots[i];
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.book, color: Colors.blue),
+                      title: Text(slot.binderName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      onTap: () => Navigator.pop(ctx, slot.id),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-          
-          const SizedBox(height: 20),
-          
+        ),
+        actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, null), 
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text("Abbrechen (Karte behalten)"),
+            child: const Text("Abbrechen"),
           ),
         ],
       ),
     );
   }
 
-  // --- STANDARD WIDGETS (Unverändert) ---
+  // --- HELPER & WIDGETS ---
+
+  Widget _buildLinksSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Row(
+        children: [
+          if (widget.card.cardmarket?.url.isNotEmpty == true)
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () => _launchURL(widget.card.cardmarket!.url),
+                icon: const Icon(Icons.shopping_cart, size: 18),
+                label: const Text("Cardmarket"),
+                style: FilledButton.styleFrom(backgroundColor: Colors.blue[800]),
+              ),
+            ),
+          if (widget.card.cardmarket?.url.isNotEmpty == true && widget.card.tcgplayer?.url.isNotEmpty == true)
+            const SizedBox(width: 10),
+          if (widget.card.tcgplayer?.url.isNotEmpty == true)
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () => _launchURL(widget.card.tcgplayer!.url),
+                icon: const Icon(Icons.open_in_new, size: 18),
+                label: const Text("TCGPlayer"),
+                style: FilledButton.styleFrom(backgroundColor: Colors.teal[700]),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChartSection(AsyncValue historyAsync) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Preisverlauf", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          const SizedBox(height: 4),
+          const Text("Historische Preisentwicklung (Quelle: TCGdex)", style: TextStyle(color: Colors.grey, fontSize: 12)),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 320, 
+            child: historyAsync.when(
+              data: (data) => PriceHistoryChart(
+                cmHistory: (data['cm'] as List).cast<CardMarketPrice>(),
+                tcgHistory: (data['tcg'] as List).cast<TcgPlayerPrice>(),
+              ),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, s) => Center(child: Text("Verlauf nicht verfügbar")),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildCardmarketSection(BuildContext context, ApiCardMarket cm) {
     return _buildPriceSectionContainer(
@@ -397,11 +395,7 @@ class CardDetailScreen extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.withOpacity(0.2)),
-        ),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.withOpacity(0.2))),
         child: Column(
           children: [
             Container(
@@ -412,8 +406,7 @@ class CardDetailScreen extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-                  if (lastUpdate.isNotEmpty) 
-                    Text(lastUpdate.split('T')[0], style: TextStyle(color: color.withOpacity(0.6), fontSize: 10)),
+                  if (lastUpdate.isNotEmpty) Text(lastUpdate.split('T')[0], style: TextStyle(color: color.withOpacity(0.6), fontSize: 10)),
                 ],
               ),
             ),
@@ -474,21 +467,14 @@ class CardDetailScreen extends ConsumerWidget {
     final db = ref.read(databaseProvider);
     final dexApi = ref.read(tcgDexApiClientProvider);
     final importer = SetImporter(dexApi, db);
-
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aktualisiere Daten...')));
-
     try {
-      await importer.importCardsForSet(card.setId);
-      _refreshAllProviders(ref);
-      ref.invalidate(cardPriceHistoryProvider(card.id));
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Aktualisiert!'), backgroundColor: Colors.green));
-      }
+      await importer.importCardsForSet(widget.card.setId);
+      _forceRefresh();
+      ref.invalidate(cardPriceHistoryProvider(widget.card.id));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Aktualisiert!'), backgroundColor: Colors.green));
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red));
-      }
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red));
     }
   }
 
@@ -502,24 +488,12 @@ class CardDetailScreen extends ConsumerWidget {
         color: Colors.grey[100],
         child: Row(
           children: [
-            if (logo != null) SizedBox(
-              height: 40, width: 80, 
-              child: CachedNetworkImage(
-                imageUrl: logo, 
-                fit: BoxFit.contain,
-                errorWidget: (context, url, dynamic error) => const Icon(Icons.broken_image, size: 20, color: Colors.grey),
-              )
-            ),
+            if (logo != null) SizedBox(height: 40, width: 80, child: CachedNetworkImage(imageUrl: logo, fit: BoxFit.contain, errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 20))),
             const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(set.nameDe ?? set.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text("Set anzeigen (${set.printedTotal} Karten)", style: TextStyle(color: Colors.blue[700], fontSize: 12)),
-                ],
-              ),
-            ),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(set.nameDe ?? set.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text("Set anzeigen (${set.printedTotal} Karten)", style: TextStyle(color: Colors.blue[700], fontSize: 12)),
+            ])),
           ],
         ),
       ),
@@ -532,9 +506,9 @@ class CardDetailScreen extends ConsumerWidget {
       child: Column(
         children: [
           _buildClickableArtistRow(context, ref),
-          _buildDetailRow("Seltenheit", card.rarity),
-          _buildDetailRow("Nummer", "${card.number} / ${card.setPrintedTotal}"),
-          if (card.flavorTextDe != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(card.flavorTextDe!, style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey))),
+          _buildDetailRow("Seltenheit", widget.card.rarity),
+          _buildDetailRow("Nummer", "${widget.card.number} / ${widget.card.setPrintedTotal}"),
+          if (widget.card.flavorTextDe != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(widget.card.flavorTextDe!, style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey))),
         ],
       ),
     );
@@ -544,45 +518,25 @@ class CardDetailScreen extends ConsumerWidget {
     return Row(
       children: [
         const SizedBox(width: 100, child: Text("Künstler", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
-        Expanded(
-          child: InkWell(
-            onTap: () {
-              ref.read(searchModeProvider.notifier).state = SearchMode.artist;
-              ref.read(searchQueryProvider.notifier).state = card.artist;
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const CardSearchScreen()));
-            },
-            child: Text(card.artist, style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline)),
-          ),
-        ),
+        Expanded(child: InkWell(
+          onTap: () {
+            ref.read(searchModeProvider.notifier).state = SearchMode.artist;
+            ref.read(searchQueryProvider.notifier).state = widget.card.artist;
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const CardSearchScreen()));
+          },
+          child: Text(widget.card.artist, style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline)),
+        )),
       ],
     );
   }
 
   Widget _buildDetailRow(String label, String value) {
     if (value.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          SizedBox(width: 100, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
+    return Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Row(children: [SizedBox(width: 100, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))), Expanded(child: Text(value))]));
   }
 
   void _openFullscreenImage(BuildContext context, String imageUrl) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (ctx) => Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.black, iconTheme: const IconThemeData(color: Colors.white)),
-      body: Center(child: InteractiveViewer(
-        child: CachedNetworkImage(
-          imageUrl: imageUrl, 
-          fit: BoxFit.contain,
-          errorWidget: (context, url, dynamic error) => const Icon(Icons.broken_image, size: 50, color: Colors.grey),
-        )
-      )),
-    )));
+    Navigator.of(context).push(MaterialPageRoute(builder: (ctx) => Scaffold(backgroundColor: Colors.black, appBar: AppBar(backgroundColor: Colors.black, iconTheme: const IconThemeData(color: Colors.white)), body: Center(child: InteractiveViewer(child: CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.contain, errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50, color: Colors.grey)))))));
   }
 
   Future<void> _launchURL(String urlString) async {
@@ -591,7 +545,7 @@ class CardDetailScreen extends ConsumerWidget {
   }
 }
 
-// --- WIDGET FÜR BINDER LOCATION (Jetzt mit Provider) ---
+// --- WIDGET FÜR BINDER LOCATION ---
 class BinderLocationWidget extends ConsumerWidget {
   final String cardId;
   const BinderLocationWidget({required this.cardId, super.key});
@@ -608,18 +562,11 @@ class BinderLocationWidget extends ConsumerWidget {
           margin: const EdgeInsets.symmetric(vertical: 8),
           padding: const EdgeInsets.all(12),
           width: double.infinity,
-          decoration: BoxDecoration(
-            color: Colors.orange[50],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.orange[200]!),
-          ),
+          decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.orange[200]!)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                "Enthalten in Bindern:", 
-                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange)
-              ),
+              const Text("Enthalten in Bindern:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,

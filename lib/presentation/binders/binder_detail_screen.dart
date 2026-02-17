@@ -30,6 +30,25 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   int _currentIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    // Wir machen das erst nach dem ersten Frame, damit "ref" sicher verfügbar ist
+    Future.microtask(() {
+      // Löscht den Cache für diesen Binder -> Zwingt zum Neuladen aus der DB
+      _forceRefresh();
+    });
+  }
+
+  // Optional: Falls du von außen auf den Screen navigierst und sich Parameter ändern
+  @override
+  void didUpdateWidget(BinderDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.binder.id != widget.binder.id) {
+       _forceRefresh();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final asyncData = ref.watch(binderDetailProvider(widget.binder.id));
 

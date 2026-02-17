@@ -38,7 +38,7 @@ class SetImporter {
       final serieData = listSet['serie'];
       final String serieId = (serieData is Map) ? serieData['id'] ?? '' : '';
 
-      if (serieId == 'jumbo' || setId == 'wp' || setId == 'xya' || setId == 'sp') {
+      if (serieId == 'jumbo' || setId == 'xya' || setId == 'sp') {
         skipped++;
         print('⏩ Überspringe Pocket-Set: ${listSet['name']} ($setId)');
         continue; 
