@@ -9,7 +9,6 @@ import '../../data/api/tcgdex_api_client.dart';
 import '../../data/database/app_database.dart'; 
 import '../../data/database/database_provider.dart';
 import '../../data/sync/set_importer.dart';
-// NEU: Import für Binder Logik
 import '../../domain/logic/binder_service.dart';
 import '../../domain/models/api_card.dart';
 import '../../domain/models/api_set.dart';
@@ -18,10 +17,18 @@ import '../search/card_search_screen.dart';
 import '../sets/set_detail_screen.dart';
 import 'price_history_chart.dart'; 
 
-// Live-Provider für das Inventar dieser Karte
+// --- PROVIDER ---
+
+// 1. Live-Provider für das Inventar dieser Karte
 final cardInventoryProvider = StreamProvider.family<List<UserCard>, String>((ref, cardId) {
   final db = ref.watch(databaseProvider);
   return (db.select(db.userCards)..where((tbl) => tbl.cardId.equals(cardId))).watch();
+});
+
+// 2. NEU: Provider für die Binder-Standorte (damit es sich automatisch aktualisiert!)
+final cardBindersProvider = FutureProvider.family<List<String>, String>((ref, cardId) async {
+  final db = ref.watch(databaseProvider);
+  return BinderService(db).getBindersForCard(cardId);
 });
 
 class CardDetailScreen extends ConsumerWidget {
@@ -29,18 +36,21 @@ class CardDetailScreen extends ConsumerWidget {
 
   const CardDetailScreen({super.key, required this.card});
 
+  // --- ZENTRALE REFRESH METHODE ---
+  void _refreshAllProviders(WidgetRef ref) {
+    ref.invalidate(searchResultsProvider);
+    ref.invalidate(cardsForSetProvider(card.setId));
+    ref.invalidate(setStatsProvider(card.setId));
+    ref.invalidate(inventoryProvider);
+    ref.invalidate(cardBindersProvider(card.id)); // WICHTIG: Binder Infos neu laden!
+    createPortfolioSnapshot(ref);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Set Infos laden
     final setAsync = ref.watch(setByIdProvider(card.setId));
-    
-    // Inventar-Daten laden
     final inventoryAsync = ref.watch(cardInventoryProvider(card.id));
-
-    // Historie laden für den Chart
     final historyAsync = ref.watch(cardPriceHistoryProvider(card.id));
-
-    // Bild-Logik
     final displayImage = card.displayImage;
 
     return Scaffold(
@@ -61,15 +71,7 @@ class CardDetailScreen extends ConsumerWidget {
             isScrollControlled: true,
             builder: (context) => InventoryBottomSheet(card: card),
           ).then((_) {
-            // Nach dem Schließen alles refreshen
-            ref.invalidate(searchResultsProvider);
-            ref.invalidate(cardsForSetProvider(card.setId));
-            ref.invalidate(setStatsProvider(card.setId));
-            ref.invalidate(inventoryProvider);
-            createPortfolioSnapshot(ref);
-            // Damit sich auch die Binder-Anzeige aktualisiert, müssen wir das UI neu bauen
-            // (Passiert automatisch durch Riverpod, wenn wir Provider nutzen würden, 
-            // aber unser FutureBuilder unten braucht einen Trigger beim erneuten Öffnen)
+            _refreshAllProviders(ref);
           });
         },
         icon: const Icon(Icons.add_card),
@@ -89,7 +91,7 @@ class CardDetailScreen extends ConsumerWidget {
 
             const SizedBox(height: 10),
 
-            // 2. DAS BILD (Groß)
+            // 2. DAS BILD
             GestureDetector(
               onTap: () => _openFullscreenImage(context, displayImage),
               child: Hero(
@@ -118,15 +120,14 @@ class CardDetailScreen extends ConsumerWidget {
             
             const SizedBox(height: 20),
 
-            // 3. INVENTAR BOX
+            // 3. INVENTAR
             inventoryAsync.when(
               data: (items) => _buildInventorySection(context, ref, items),
               loading: () => const SizedBox.shrink(),
               error: (err, stack) => Text("Fehler: $err"),
             ),
 
-            // --- NEU: BINDER STANDORT ---
-            // Zeigt an, in welchen Bindern die Karte steckt
+            // 4. BINDER STANDORT (Jetzt Live-Aktualisiert!)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: BinderLocationWidget(cardId: card.id),
@@ -134,7 +135,7 @@ class CardDetailScreen extends ConsumerWidget {
 
             const SizedBox(height: 20),
 
-            // 4. EXTERNE LINKS
+            // 5. EXTERNE LINKS
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Row(
@@ -165,7 +166,7 @@ class CardDetailScreen extends ConsumerWidget {
 
             const SizedBox(height: 30),
 
-            // 5. PREISVERLAUF GRAPH
+            // 6. PREISVERLAUF
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Column(
@@ -193,13 +194,13 @@ class CardDetailScreen extends ConsumerWidget {
 
             const SizedBox(height: 30),
 
-            // 6. PREIS TABELLEN
+            // 7. PREIS TABELLEN
             if (card.cardmarket != null) _buildCardmarketSection(context, card.cardmarket!),
             if (card.tcgplayer != null) _buildTcgPlayerSection(context, card.tcgplayer!),
 
             const SizedBox(height: 20),
 
-            // 7. DETAILS
+            // 8. DETAILS
             _buildInfoSection(context, ref),
             
             const SizedBox(height: 80), 
@@ -209,7 +210,147 @@ class CardDetailScreen extends ConsumerWidget {
     );
   }
 
-  // --- HELPER METHODEN ---
+  // --- LOGIK & HELPER ---
+
+  Future<void> _decreaseOrDeleteItem(BuildContext context, WidgetRef ref, UserCard item) async {
+    final db = ref.read(databaseProvider);
+    final binderService = BinderService(db);
+    bool shouldDelete = false;
+
+    try {
+      // A) Abfrage: Wirklich löschen?
+      if (item.quantity == 1) {
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text("Entfernen?"),
+            content: Text("Möchtest du ${item.variant} aus deiner Sammlung löschen?"),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Abbrechen")),
+              TextButton(onPressed: () => Navigator.pop(ctx, true), style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text("Löschen")),
+            ],
+          ),
+        );
+        if (confirm != true) return;
+        shouldDelete = true;
+      }
+
+      // B) BINDER CHECK
+      final allEntries = await (db.select(db.userCards)..where((t) => t.cardId.equals(item.cardId))).get();
+      final int totalOwned = allEntries.fold(0, (sum, e) => sum + e.quantity);
+
+      final usedSlotsQuery = db.select(db.binderCards).join([
+        drift.innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
+      ]);
+      usedSlotsQuery.where(db.binderCards.cardId.equals(item.cardId) & db.binderCards.isPlaceholder.equals(false));
+      
+      final usedRows = await usedSlotsQuery.get();
+      final usedSlots = usedRows.map((r) => _BinderSlotInfo(
+        r.readTable(db.binderCards).id, 
+        r.readTable(db.binders).name
+      )).toList();
+
+      // Wenn wir weniger Karten haben als wir benutzen -> Konflikt
+      if ((totalOwned - 1) < usedSlots.length) {
+        int? slotToRemoveId;
+
+        if (usedSlots.length == 1) {
+          // Automatisch entfernen, wenn nur in einem Binder
+          slotToRemoveId = usedSlots.first.id;
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text("Auch aus Binder '${usedSlots.first.binderName}' entfernt."),
+              duration: const Duration(seconds: 2),
+            ));
+          }
+        } else if (usedSlots.length > 1) {
+          // Dialog anzeigen
+          if (context.mounted) {
+            slotToRemoveId = await _showBinderSelectionDialog(context, usedSlots);
+            // Wenn User abbricht (null), brechen wir alles ab!
+            if (slotToRemoveId == null) return; 
+          }
+        }
+
+        if (slotToRemoveId != null) {
+          await binderService.clearSlot(slotToRemoveId);
+        }
+      }
+
+      // C) DATENBANK UPDATE
+      if (shouldDelete) {
+        await (db.delete(db.userCards)..where((t) => t.id.equals(item.id))).go();
+      } else {
+        await (db.update(db.userCards)..where((t) => t.id.equals(item.id)))
+            .write(UserCardsCompanion(quantity: drift.Value(item.quantity - 1)));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("-1"), duration: Duration(milliseconds: 500)));
+        }
+      }
+
+      // D) UI AKTUALISIEREN
+      _refreshAllProviders(ref);
+
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<int?> _showBinderSelectionDialog(BuildContext context, List<_BinderSlotInfo> slots) {
+    return showDialog<int>(
+      context: context,
+      barrierDismissible: false, 
+      builder: (ctx) => SimpleDialog(
+        title: const Text("Binder Konflikt"),
+        contentPadding: const EdgeInsets.all(20),
+        children: [
+          const Text("Du entfernst eine Karte, die in mehreren Bindern verwendet wird.\n\nBitte wähle, aus welchem Binder sie entfernt werden soll:"),
+          const SizedBox(height: 20),
+          
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            constraints: const BoxConstraints(maxHeight: 200),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: slots.length,
+              separatorBuilder: (ctx, i) => const Divider(height: 1),
+              itemBuilder: (ctx, i) {
+                final slot = slots[i];
+                return SimpleDialogOption(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  onPressed: () => Navigator.pop(ctx, slot.id), 
+                  child: Row(
+                    children: [
+                      const Icon(Icons.book, color: Colors.blue),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(slot.binderName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          
+          const SizedBox(height: 20),
+          
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null), 
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text("Abbrechen (Karte behalten)"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- STANDARD WIDGETS (Unverändert) ---
 
   Widget _buildCardmarketSection(BuildContext context, ApiCardMarket cm) {
     return _buildPriceSectionContainer(
@@ -338,9 +479,8 @@ class CardDetailScreen extends ConsumerWidget {
 
     try {
       await importer.importCardsForSet(card.setId);
-      ref.invalidate(searchResultsProvider);
-      ref.invalidate(cardsForSetProvider(card.setId));
-      ref.invalidate(cardPriceHistoryProvider(card.id)); // History refreshen
+      _refreshAllProviders(ref);
+      ref.invalidate(cardPriceHistoryProvider(card.id));
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Aktualisiert!'), backgroundColor: Colors.green));
@@ -367,7 +507,6 @@ class CardDetailScreen extends ConsumerWidget {
               child: CachedNetworkImage(
                 imageUrl: logo, 
                 fit: BoxFit.contain,
-                // Auch hier errorWidget sicherheitshalber
                 errorWidget: (context, url, dynamic error) => const Icon(Icons.broken_image, size: 20, color: Colors.grey),
               )
             ),
@@ -440,7 +579,6 @@ class CardDetailScreen extends ConsumerWidget {
         child: CachedNetworkImage(
           imageUrl: imageUrl, 
           fit: BoxFit.contain,
-          // FIX: Error Widget auch hier
           errorWidget: (context, url, dynamic error) => const Icon(Icons.broken_image, size: 50, color: Colors.grey),
         )
       )),
@@ -451,66 +589,27 @@ class CardDetailScreen extends ConsumerWidget {
     final Uri url = Uri.parse(urlString);
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) throw 'Could not launch $url';
   }
-
-  Future<void> _decreaseOrDeleteItem(BuildContext context, WidgetRef ref, UserCard item) async {
-    final db = ref.read(databaseProvider);
-    bool dataChanged = false; 
-
-    if (item.quantity > 1) {
-      await (db.update(db.userCards)..where((t) => t.id.equals(item.id)))
-          .write(UserCardsCompanion(quantity: drift.Value(item.quantity - 1)));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("-1"), duration: Duration(milliseconds: 500)));
-      dataChanged = true;
-    } else {
-      final confirm = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text("Entfernen?"),
-          content: Text("Möchtest du ${item.variant} aus deiner Sammlung löschen?"),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Abbrechen")),
-            TextButton(onPressed: () => Navigator.pop(ctx, true), style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text("Löschen")),
-          ],
-        ),
-      );
-
-      if (confirm == true) {
-        await (db.delete(db.userCards)..where((t) => t.id.equals(item.id))).go();
-        dataChanged = true;
-      }
-    }
-
-    if (dataChanged) {
-      ref.invalidate(searchResultsProvider);
-      ref.invalidate(cardsForSetProvider(card.setId));
-      ref.invalidate(setStatsProvider(card.setId));
-      ref.invalidate(inventoryProvider); 
-      await createPortfolioSnapshot(ref);
-    }
-  }
 }
 
-// --- NEU: Widget für die Anzeige der Binder ---
+// --- WIDGET FÜR BINDER LOCATION (Jetzt mit Provider) ---
 class BinderLocationWidget extends ConsumerWidget {
   final String cardId;
   const BinderLocationWidget({required this.cardId, super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final db = ref.watch(databaseProvider);
+    final bindersAsync = ref.watch(cardBindersProvider(cardId));
     
-    // Einfacher FutureBuilder, um die Binder zu laden
-    return FutureBuilder<List<String>>(
-      future: BinderService(db).getBindersForCard(cardId),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
+    return bindersAsync.when(
+      data: (binders) {
+        if (binders.isEmpty) return const SizedBox.shrink();
         
         return Container(
           margin: const EdgeInsets.symmetric(vertical: 8),
           padding: const EdgeInsets.all(12),
           width: double.infinity,
           decoration: BoxDecoration(
-            color: Colors.orange[50], // Unterscheidet sich farblich vom Inventar
+            color: Colors.orange[50],
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.orange[200]!),
           ),
@@ -525,7 +624,7 @@ class BinderLocationWidget extends ConsumerWidget {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: snapshot.data!.map((name) => Chip(
+                children: binders.map((name) => Chip(
                   label: Text(name),
                   backgroundColor: Colors.white,
                   side: BorderSide(color: Colors.orange[100]!),
@@ -537,6 +636,14 @@ class BinderLocationWidget extends ConsumerWidget {
           ),
         );
       },
+      loading: () => const SizedBox.shrink(),
+      error: (_,__) => const SizedBox.shrink(),
     );
   }
+}
+
+class _BinderSlotInfo {
+  final int id;
+  final String binderName;
+  _BinderSlotInfo(this.id, this.binderName);
 }

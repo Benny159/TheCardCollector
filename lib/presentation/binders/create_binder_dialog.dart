@@ -40,7 +40,7 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
               const SizedBox(height: 8),
               
 DropdownButtonFormField<BinderType>(
-                value: _selectedType,
+                initialValue: _selectedType,
                 isExpanded: true, // WICHTIG: Damit der Text den Platz nutzt
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),

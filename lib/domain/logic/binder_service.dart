@@ -100,11 +100,11 @@ class BinderService {
       // Wir sortieren die Liste manuell
       possibleCards.sort((a, b) {
         // Prüfen ob A ein Bild hat
-        final bool aHasImg = (a.imageUrl != null && a.imageUrl!.isNotEmpty) || 
-                             (a.imageUrlDe != null && a.imageUrlDe!.isNotEmpty);
+        final bool aHasImg = (a.imageUrl.isNotEmpty) || 
+                             (a.imageUrlDe.isNotEmpty);
         // Prüfen ob B ein Bild hat
-        final bool bHasImg = (b.imageUrl != null && b.imageUrl!.isNotEmpty) || 
-                             (b.imageUrlDe != null && b.imageUrlDe!.isNotEmpty);
+        final bool bHasImg = (b.imageUrl.isNotEmpty) || 
+                             (b.imageUrlDe.isNotEmpty);
 
         if (aHasImg && !bHasImg) return -1; // A kommt zuerst
         if (!aHasImg && bHasImg) return 1;  // B kommt zuerst
