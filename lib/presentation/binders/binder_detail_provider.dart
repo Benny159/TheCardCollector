@@ -26,6 +26,49 @@ class BinderDetailState {
   });
 }
 
+class BinderStats {
+  final double value;
+  final int total;
+  final int filled;
+  double get progress => total == 0 ? 0 : filled / total;
+
+  BinderStats(this.value, this.filled, this.total);
+}
+
+final binderStatsProvider = StreamProvider.family<BinderStats, int>((ref, binderId) {
+  final db = ref.watch(databaseProvider);
+
+  // Wir nutzen .watch() statt .get(), damit es live bleibt
+  final query = db.select(db.binderCards).join([
+    leftOuterJoin(db.cards, db.cards.id.equalsExp(db.binderCards.cardId)),
+    leftOuterJoin(db.cardMarketPrices, db.cardMarketPrices.cardId.equalsExp(db.cards.id)),
+  ]);
+
+  query.where(db.binderCards.binderId.equals(binderId));
+  
+  // Mappen des Streams
+  return query.watch().map((rows) {
+    final Set<int> processedSlots = {};
+    double totalValue = 0;
+    int filled = 0;
+    int total = 0;
+
+    for (final row in rows) {
+      final bc = row.readTable(db.binderCards);
+      if (processedSlots.contains(bc.id)) continue;
+      processedSlots.add(bc.id);
+
+      total++;
+      if (!bc.isPlaceholder && bc.cardId != null) {
+         filled++;
+         final price = row.readTableOrNull(db.cardMarketPrices)?.trend ?? 0.0;
+         totalValue += price;
+      }
+    }
+    return BinderStats(totalValue, filled, total);
+  });
+});
+
 final binderDetailProvider = FutureProvider.family<BinderDetailState, int>((ref, binderId) async {
   final db = ref.watch(databaseProvider);
 
@@ -84,4 +127,84 @@ final binderDetailProvider = FutureProvider.family<BinderDetailState, int>((ref,
     totalSlots: slots.length,
     filledSlots: filled,
   );
+});
+
+class BinderHistoryPoint {
+  final DateTime date;
+  final double value;
+  BinderHistoryPoint(this.date, this.value);
+}
+
+final binderHistoryProvider = FutureProvider.family<List<BinderHistoryPoint>, int>((ref, binderId) async {
+  final db = ref.read(databaseProvider);
+  
+  // 1. Hole alle Karten-IDs, die aktuell im Binder stecken (keine Platzhalter)
+  final binderCards = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
+  final cardIds = binderCards
+      .where((bc) => !bc.isPlaceholder && bc.cardId != null)
+      .map((bc) => bc.cardId!)
+      .toList();
+
+  if (cardIds.isEmpty) return [];
+
+  // 2. Hole die gesamte Preishistorie für diese Karten
+  // Wir laden nur das Datum (fetchedAt) und den Trend-Preis
+  final prices = await (db.select(db.cardMarketPrices)
+    ..where((t) => t.cardId.isIn(cardIds))
+    ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt)])
+  ).get();
+
+  if (prices.isEmpty) return [];
+
+  // 3. Daten aggregieren (Tag -> {CardId -> Preis})
+  final Map<DateTime, Map<String, double>> dailyPrices = {};
+  
+  for (var p in prices) {
+    // Datum normalisieren (Uhrzeit entfernen)
+    final date = DateTime(p.fetchedAt.year, p.fetchedAt.month, p.fetchedAt.day);
+    
+    if (!dailyPrices.containsKey(date)) {
+      dailyPrices[date] = {};
+    }
+    // Wir speichern den Preis. Falls es mehrere Einträge pro Tag gibt, gewinnt der letzte.
+    if (p.trend != null) {
+       dailyPrices[date]![p.cardId] = p.trend!;
+    }
+  }
+
+  // 4. Historie aufbauen (Forward Fill)
+  // Wir gehen alle Tage durch und summieren den Wert des Binders
+  if (dailyPrices.isEmpty) return [];
+  
+  final sortedDates = dailyPrices.keys.toList()..sort();
+  final start = sortedDates.first;
+  final end = DateTime.now(); // Bis heute
+  
+  final List<BinderHistoryPoint> history = [];
+  final Map<String, double> currentCardValues = {}; // Letzter bekannter Wert jeder Karte
+
+  // Schleife über jeden Tag vom ersten Datenpunkt bis heute
+  for (var d = start; d.isBefore(end) || d.isAtSameMomentAs(end); d = d.add(const Duration(days: 1))) {
+    final today = DateTime(d.year, d.month, d.day);
+    
+    // Updates für heute einpflegen
+    if (dailyPrices.containsKey(today)) {
+      currentCardValues.addAll(dailyPrices[today]!);
+    }
+    
+    // Gesamtwert berechnen (Summe aller aktuellen Kartenwerte)
+    double dailyTotal = 0.0;
+    // Wir summieren nur die Karten, die JETZT im Binder sind (cardIds)
+    // Das simuliert: "Was wäre mein jetziger Binder damals wert gewesen?"
+    for (var id in cardIds) {
+      dailyTotal += currentCardValues[id] ?? 0.0;
+    }
+    
+    // Nur speichern, wenn wir > 0 sind (optional)
+    if (dailyTotal > 0) {
+       history.add(BinderHistoryPoint(today, dailyTotal));
+    }
+  }
+
+  return history;
 });

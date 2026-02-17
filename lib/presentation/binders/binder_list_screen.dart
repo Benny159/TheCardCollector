@@ -6,55 +6,8 @@ import '../../data/database/database_provider.dart';
 import '../../data/database/app_database.dart';
 import 'create_binder_dialog.dart';
 import 'binder_detail_screen.dart';
-
-// --- 1. NEUER STATS PROVIDER ---
-// Berechnet Wert & Fortschritt für EINEN Binder
-class BinderStats {
-  final double value;
-  final int total;
-  final int filled;
-  double get progress => total == 0 ? 0 : filled / total;
-
-  BinderStats(this.value, this.filled, this.total);
-}
-
-final binderStatsProvider = FutureProvider.family<BinderStats, int>((ref, binderId) async {
-  final db = ref.read(databaseProvider);
-
-  // Gleicher Join wie im Detail Screen
-  final query = db.select(db.binderCards).join([
-    drift.leftOuterJoin(db.cards, db.cards.id.equalsExp(db.binderCards.cardId)),
-    drift.leftOuterJoin(db.cardMarketPrices, db.cardMarketPrices.cardId.equalsExp(db.cards.id)),
-  ]);
-
-  query.where(db.binderCards.binderId.equals(binderId));
-  
-  final rows = await query.get();
-
-  // Deduplizierung (Wichtig, falls mehrere Preise pro Karte existieren)
-  final Set<int> processedSlots = {};
-  double totalValue = 0;
-  int filled = 0;
-  int total = 0;
-
-  for (final row in rows) {
-    final bc = row.readTable(db.binderCards);
-    if (processedSlots.contains(bc.id)) continue;
-    processedSlots.add(bc.id);
-
-    total++;
-    
-    // Prüfen ob Slot gefüllt ist (kein Platzhalter + Karte verknüpft)
-    if (!bc.isPlaceholder && bc.cardId != null) {
-       filled++;
-       final price = row.readTableOrNull(db.cardMarketPrices)?.trend ?? 0.0;
-       totalValue += price;
-    }
-  }
-
-  return BinderStats(totalValue, filled, total);
-});
-
+// WICHTIG: Hier importieren wir jetzt den Provider!
+import 'binder_detail_provider.dart'; 
 
 // --- HAUPT SCREEN ---
 final allBindersProvider = StreamProvider<List<Binder>>((ref) {
@@ -108,7 +61,7 @@ class BinderListScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2, 
-              childAspectRatio: 0.70, // Etwas höher für die Stats
+              childAspectRatio: 0.70, 
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
             ),
@@ -123,7 +76,7 @@ class BinderListScreen extends ConsumerWidget {
   }
 }
 
-// --- 2. UPDATE BINDER CARD (ConsumerWidget) ---
+// --- BINDER CARD ---
 class _BinderCard extends ConsumerWidget {
   final Binder binder;
   const _BinderCard({required this.binder});
@@ -132,7 +85,8 @@ class _BinderCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final color = Color(binder.color);
     
-    // Hier laden wir die Statistik für DIESEN Binder
+    // Hier laden wir jetzt den StreamProvider aus binder_detail_provider.dart
+    // Da es ein Stream ist, aktualisiert er sich automatisch!
     final statsAsync = ref.watch(binderStatsProvider(binder.id));
 
     return GestureDetector(
@@ -181,12 +135,11 @@ class _BinderCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- HEADER: Name & Wert ---
+                  // --- HEADER: Name ---
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Name
                       Expanded(
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -207,7 +160,7 @@ class _BinderCard extends ConsumerWidget {
                   
                   const SizedBox(height: 8),
 
-                  // WERT ANZEIGE (Oben rechts oder mittig)
+                  // WERT ANZEIGE
                   statsAsync.when(
                     data: (stats) => Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -220,7 +173,7 @@ class _BinderCard extends ConsumerWidget {
                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                       ),
                     ),
-                    loading: () => const SizedBox(),
+                    loading: () => const SizedBox(), // Kein Platzhalter mehr, flackert sonst
                     error: (_,__) => const SizedBox(),
                   ),
 
@@ -230,7 +183,6 @@ class _BinderCard extends ConsumerWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Grid Info
                       Text(
                         "${binder.rowsPerPage}x${binder.columnsPerPage} Grid", 
                         style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10)

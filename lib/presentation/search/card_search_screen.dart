@@ -694,9 +694,7 @@ class _SearchResultsView extends ConsumerWidget {
                               card.number,
                               style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                             ),
-                            if (isOwned)
-                              const Icon(Icons.check_circle, color: Colors.green, size: 12)
-                            else if (displayPrice != null && displayPrice > 0)
+                            if (displayPrice != null && displayPrice > 0)
                               Text(
                                 '${displayPrice.toStringAsFixed(2)}€',
                                 style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold),

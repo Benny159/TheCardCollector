@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:page_flip/page_flip.dart'; // <--- WICHTIG: Neues Import
+import 'package:page_flip/page_flip.dart'; 
+import 'package:drift/drift.dart' as drift; 
 import '../../data/database/app_database.dart';
-import 'binder_detail_provider.dart';
-import 'widgets/binder_page_widget.dart';
-import '../../domain/logic/binder_service.dart';
-import '../search/card_search_screen.dart';
 import '../../data/database/database_provider.dart';
-import '../../domain/models/api_card.dart';
-import 'package:drift/drift.dart' as drift;
+import '../../domain/logic/binder_service.dart';
+import '../../domain/models/api_card.dart'; 
+import 'binder_detail_provider.dart'; // Hier ist jetzt auch der StatsProvider drin
+import 'widgets/binder_page_widget.dart';
+import '../search/card_search_screen.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 
 class BinderDetailScreen extends ConsumerStatefulWidget {
   final Binder binder;
@@ -19,18 +21,20 @@ class BinderDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
-  // Key für das neue Paket
-  final _pageFlipKey = GlobalKey<PageFlipWidgetState>();
+  GlobalKey<PageFlipWidgetState> _pageFlipKey = GlobalKey<PageFlipWidgetState>();
   final _searchController = TextEditingController();
+  
+  // Rebuild Counter zwingt das Widget zum neu zeichnen
+  int _rebuildCounter = 0;
 
-  int _rebuildKey = 0;
+  int _currentIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     final asyncData = ref.watch(binderDetailProvider(widget.binder.id));
 
     return Scaffold(
-      backgroundColor: Colors.grey[800], // Tisch-Hintergrund
+      backgroundColor: Colors.grey[800], 
       appBar: AppBar(
         title: Text(widget.binder.name),
         backgroundColor: Color(widget.binder.color),
@@ -51,7 +55,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         data: (state) {
           if (state.slots.isEmpty) return const Center(child: Text("Binder ist leer."));
 
-          // Seiten berechnen (Code bleibt gleich)
           final int itemsPerPage = widget.binder.rowsPerPage * widget.binder.columnsPerPage;
           final int totalPages = (state.slots.length / itemsPerPage).ceil();
 
@@ -65,8 +68,9 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
             final pageSlots = state.slots.sublist(start, end);
 
             pages.add(
+              // WICHTIG: Key enthält _rebuildCounter, damit er bei Änderung ALLES neu baut
               RepaintBoundary(
-                key: ValueKey('page_$i'), 
+                key: ValueKey('binder_${widget.binder.id}_page_${i}_v$_rebuildCounter'), 
                 child: Container(
                   color: const Color(0xFFFDFDFD), 
                   child: InteractiveViewer(
@@ -78,12 +82,10 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                       rows: widget.binder.rowsPerPage,
                       cols: widget.binder.columnsPerPage,
                       pageNumber: i,
-                      totalPages: totalPages, // <--- Übergeben
+                      totalPages: totalPages, 
                       onSlotTap: (slot) => _handleSlotTap(slot),
                       
-                      // --- NAVIGATION STEUERUNG ---
                       onNextPage: () {
-                        // Tastatur weg, falls noch offen
                         FocusScope.of(context).unfocus();
                         _pageFlipKey.currentState?.nextPage();
                       },
@@ -100,14 +102,14 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
 
           return Center(
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20.0), // Etwas Abstand oben/unten
+              padding: const EdgeInsets.symmetric(vertical: 20.0), 
               child: AspectRatio(
-                // FIX: 0.65 ist deutlich höher (wie ein A4 Blatt). 
-                // Das gibt dem 4x4 Grid genug Platz nach unten.
                 aspectRatio: 0.65, 
                 child: PageFlipWidget(
-                  key: ValueKey("binder_view_$_rebuildKey"),
+                  // Auch hier: Key ändern zwingt zum "Hard Reset"
+                  key: _pageFlipKey, 
                   backgroundColor: Colors.grey[800]!,
+                  initialIndex: _currentIndex,
                   lastPage: Container(
                       color: Colors.white, 
                       child: const Center(child: Text("Ende des Binders"))
@@ -120,6 +122,28 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _forceRefresh() async {
+    // 1. WICHTIG: Aktuelle Seite JETZT sichern (bevor das Widget verschwindet)
+    if (_pageFlipKey.currentState != null) {
+       _currentIndex = _pageFlipKey.currentState!.pageNumber;
+    }
+
+    // 2. Stats Provider invalidieren (für Fortschrittsbalken)
+    ref.invalidate(binderStatsProvider(widget.binder.id));
+    
+    // 3. Daten neu laden und WARTEN
+    // Dadurch geht der Screen kurz in den "Loading" Zustand
+    await ref.refresh(binderDetailProvider(widget.binder.id).future);
+
+    if (mounted) {
+      setState(() {
+        // 4. Hard Reset: Neuen Key vergeben -> Buch wird neu gebaut
+        _pageFlipKey = GlobalKey<PageFlipWidgetState>();
+        _rebuildCounter++;
+      });
+    }
   }
 
   void _handleSlotTap(BinderSlotData slot) {
@@ -135,8 +159,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
             ),
             const Divider(),
             
-            // 1. BEFÜLLEN (Nur wenn Platzhalter)
-            if (slot.binderCard.isPlaceholder)
+            if (slot.binderCard.isPlaceholder) ...[
               ListTile(
                 leading: const Icon(Icons.add_photo_alternate, color: Colors.green),
                 title: const Text("Karte aus Inventar hinzufügen"),
@@ -145,20 +168,16 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                   _pickCardForSlot(slot, onlyOwned: true);
                 },
               ),
-
-            // 2. KONFIGURIEREN (Platzhalter ändern)
-            if (slot.binderCard.isPlaceholder)
-               ListTile(
+              ListTile(
                 leading: const Icon(Icons.edit, color: Colors.blue),
                 title: const Text("Platzhalter ändern (Suchen)"),
                 onTap: () {
                   Navigator.pop(ctx);
-                  // Suche ALLE Karten, nicht nur eigene
                   _pickCardForSlot(slot, onlyOwned: false); 
                 },
               ),
+            ],
               
-            // 3. ENTFERNEN / ÄNDERN (Wenn befüllt)
             if (!slot.binderCard.isPlaceholder) ...[
               ListTile(
                 leading: const Icon(Icons.change_circle, color: Colors.orange),
@@ -174,8 +193,15 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                 onTap: () async {
                   Navigator.pop(ctx);
                   final db = ref.read(databaseProvider);
+                  
+                  // DB Update
                   await BinderService(db).clearSlot(slot.binderCard.id);
-                  setState(() { _rebuildKey++; }); // UI Refresh
+                  
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Karte entfernt.")));
+                    // Hier mit await aufrufen!
+                    await _forceRefresh();
+                  }
                 },
               ),
             ]
@@ -185,13 +211,13 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
     );
   }
 
- Future<void> _pickCardForSlot(BinderSlotData slot, {required bool onlyOwned}) async {
+  Future<void> _pickCardForSlot(BinderSlotData slot, {required bool onlyOwned}) async {
     String initialQuery = slot.binderCard.placeholderLabel ?? "";
     if (initialQuery.contains(" ")) {
-        initialQuery = initialQuery.split(" ").sublist(1).join(" ");
+        final parts = initialQuery.split(" ");
+        if (parts.length > 1) initialQuery = parts.sublist(1).join(" ");
     }
 
-    // Wir erwarten jetzt ein ApiCard Objekt zurück, keinen String
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -203,17 +229,12 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
       ),
     );
 
-    // FIX: Check auf ApiCard Typ
     if (result != null && result is ApiCard) { 
       final ApiCard pickedCard = result;
       final db = ref.read(databaseProvider);
       final service = BinderService(db);
       
       try {
-        // --- SCHRITT A: Karte in lokaler DB sichern ---
-        // Falls die Karte aus der API kommt und noch nicht in der DB ist, speichern wir sie jetzt.
-        // Das ist entscheidend, damit der Binder das Bild laden kann!
-        
         await db.into(db.cards).insertOnConflictUpdate(
           CardsCompanion(
             id: drift.Value(pickedCard.id),
@@ -224,37 +245,29 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
             imageUrl: drift.Value(pickedCard.smallImageUrl),
             imageUrlDe: drift.Value(pickedCard.imageUrlDe ?? pickedCard.smallImageUrl),
             rarity: drift.Value(pickedCard.rarity),
-            // Wir importieren hier nur die Basics, damit die Anzeige funktioniert
           )
         );
 
-        // --- SCHRITT B: Binder Slot updaten ---
         if (onlyOwned) {
            if (await service.isCardAvailable(pickedCard.id)) {
              await service.fillSlot(slot.binderCard.id, pickedCard.id);
-             if (mounted) {
-               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Karte hinzugefügt!")));
-             }
+             if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Karte hinzugefügt!")));
            } else {
              _showSwapDialog(slot.binderCard.id, pickedCard.id); 
+             return; 
            }
         } else {
-           // Platzhalter konfigurieren
            String label = pickedCard.nameDe ?? pickedCard.name;
            await service.configureSlot(slot.binderCard.id, pickedCard.id, label);
         }
         
-        // --- SCHRITT C: Refresh ---
-        // Provider invalidieren
-        ref.invalidate(binderDetailProvider(widget.binder.id));
-        
-        // Widget komplett neu bauen (zwingt Bilder zum Neuladen)
-        setState(() { _rebuildKey++; }); 
+        // Wichtig: await _forceRefresh()
+        if (mounted) {
+          await _forceRefresh();
+        }
         
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e")));
-        }
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e")));
       }
     }
   }
@@ -264,59 +277,30 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
        context: context, 
        builder: (ctx) => AlertDialog(
          title: const Text("Keine Karte verfügbar"),
-         content: const Text("Du hast alle Exemplare dieser Karte bereits in anderen Bindern verwendet. Möchtest du sie hier nutzen und dort entfernen? (Auto-Swap Logik hier einfügen)"),
+         content: const Text("Du hast alle Exemplare dieser Karte bereits in anderen Bindern verwendet."),
          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK"))],
        )
      );
-     // Anmerkung: Echter Swap ist komplexer, da wir wissen müssen WO sie ist. 
-     // Fürs Erste reicht die Info, dass es nicht geht.
   }
-
-  // --- STATISTIK & SUCHE ---
 
   void _showStats(BuildContext context, BinderDetailState? state) {
     if (state == null) return;
+    
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true, // Wichtig für mehr Platz
+      backgroundColor: Colors.transparent, // Für abgerundete Ecken
       builder: (ctx) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text("Optionen & Statistik", style: Theme.of(context).textTheme.titleLarge),
-            const Divider(),
-            
-            // Statistik
-            ListTile(
-              leading: const Icon(Icons.euro, color: Colors.green),
-              title: const Text("Gesamtwert"),
-              trailing: Text("${state.totalValue.toStringAsFixed(2)} €", 
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.pie_chart, color: Colors.blue),
-              title: const Text("Vervollständigung"),
-              trailing: Text("${state.filledSlots} / ${state.totalSlots}"),
-              subtitle: LinearProgressIndicator(
-                value: state.filledSlots / (state.totalSlots == 0 ? 1 : state.totalSlots)
-              ),
-            ),
-            
-            const Divider(),
-            
-            // --- LÖSCHEN BUTTON ---
-            ListTile(
-              leading: const Icon(Icons.delete_forever, color: Colors.red),
-              title: const Text("Binder löschen", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-              onTap: () {
-                // Dialog schließen
-                Navigator.pop(ctx);
-                // Bestätigung anzeigen
-                _confirmDelete(context); 
-              },
-            ),
-          ],
+        height: MediaQuery.of(context).size.height * 0.65, // 65% Höhe
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
+        padding: const EdgeInsets.all(20),
+        child: _BinderStatsContent(binderId: widget.binder.id, currentState: state, onDelete: () {
+           Navigator.pop(ctx);
+           _confirmDelete(context);
+        }),
       ),
     );
   }
@@ -326,29 +310,19 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Binder löschen?"),
-        content: Text("Möchtest du '${widget.binder.name}' wirklich löschen? Alle Slots und Sortierungen gehen verloren. Deine Karten bleiben im Inventar."),
+        content: Text("Möchtest du '${widget.binder.name}' wirklich löschen?"),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx), 
-            child: const Text("Abbrechen")
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Abbrechen")),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
-              // 1. Löschen
               final db = ref.read(databaseProvider);
-              final service = BinderService(db);
-              await service.deleteBinder(widget.binder.id);
-              
+              await BinderService(db).deleteBinder(widget.binder.id);
+              // Provider invalidieren, damit Liste sich aktualisiert
+              ref.invalidate(binderStatsProvider(widget.binder.id)); 
               if (ctx.mounted) {
-                // 2. Dialog schließen
                 Navigator.pop(ctx); 
-                // 3. Zurück zur Liste (Screen schließen)
                 Navigator.pop(context); 
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Binder gelöscht."))
-                );
               }
             }, 
             child: const Text("Löschen"),
@@ -360,10 +334,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
 
   void _showSearchDialog(BuildContext context, BinderDetailState? state) {
     if (state == null) return;
-    
-    // --- FIX: Suche leeren bevor der Dialog aufgeht ---
     _searchController.clear(); 
-    
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -388,16 +359,14 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
     );
   }
 
-  void _performSearch(String query, BinderDetailState state) async { // <--- async hinzufügen
+  void _performSearch(String query, BinderDetailState state) async {
     if (query.isEmpty) return;
-    
     final qLower = query.toLowerCase();
     
     final index = state.slots.indexWhere((s) {
       final label = s.binderCard.placeholderLabel?.toLowerCase() ?? "";
       final cardName = s.card?.name.toLowerCase() ?? "";
       final cardNameDe = s.card?.nameDe?.toLowerCase() ?? "";
-      
       return label.contains(qLower) || cardName.contains(qLower) || cardNameDe.contains(qLower);
     });
 
@@ -405,35 +374,236 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
       final int itemsPerPage = widget.binder.rowsPerPage * widget.binder.columnsPerPage;
       final int targetPage = (index / itemsPerPage).floor();
 
-      // WICHTIG: Tastatur ausblenden (falls sie noch offen ist)
       FocusScope.of(context).unfocus();
-
-      // WICHTIG: Kurze Pause, damit der Dialog erst schließen kann
       await Future.delayed(const Duration(milliseconds: 300));
 
-      // Jetzt erst springen
-      _pageFlipKey.currentState?.goToPage(targetPage);
-      
-      await Future.delayed(const Duration(milliseconds: 150));
-
       if (mounted) {
-        setState(() {
-          // Leeres setState triggert einen neuen Frame
-        });
-        
+        _currentIndex = targetPage;
+        _pageFlipKey.currentState?.goToPage(targetPage);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Gefunden auf Seite ${targetPage + 1}!"),
-            duration: const Duration(milliseconds: 1500),
-          )
+          SnackBar(content: Text("Gefunden auf Seite ${targetPage + 1}!"), duration: const Duration(seconds: 1))
         );
       }
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Nichts gefunden."))
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nichts gefunden.")));
       }
     }
+  }
+}
+
+class _BinderStatsContent extends ConsumerWidget {
+  final int binderId;
+  final BinderDetailState currentState;
+  final VoidCallback onDelete;
+
+  const _BinderStatsContent({required this.binderId, required this.currentState, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final historyAsync = ref.watch(binderHistoryProvider(binderId));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Griffleiste
+        Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+        const SizedBox(height: 20),
+        
+        Text("Statistik & Verlauf", style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 5),
+        
+        // --- PREIS & ÄNDERUNG ---
+        historyAsync.when(
+          data: (history) {
+             double change = 0;
+             double percent = 0;
+             final current = currentState.totalValue;
+             
+             // Änderung zum Vortag (oder letztem Datenpunkt)
+             if (history.length >= 2) {
+               // Der letzte Punkt ist "heute" (oder der aktuellste), der vorletzte ist "gestern"
+               // Wir müssen sicherstellen, dass wir nicht den gleichen Tag vergleichen
+               final last = history.last.value;
+               final prev = history[history.length - 2].value;
+               change = last - prev;
+               if (prev > 0) percent = (change / prev) * 100;
+             }
+
+             final isPositive = change >= -0.01;
+             final color = isPositive ? Colors.green : Colors.red;
+             final sign = isPositive ? "+" : "";
+
+             return Row(
+               crossAxisAlignment: CrossAxisAlignment.end,
+               children: [
+                 Text("${current.toStringAsFixed(2)} €", style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+                 const SizedBox(width: 10),
+                 Padding(
+                   padding: const EdgeInsets.only(bottom: 6),
+                   child: Container(
+                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                     decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                     child: Text(
+                       "$sign${change.toStringAsFixed(2)}€ ($sign${percent.toStringAsFixed(1)}%)",
+                       style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
+                     ),
+                   ),
+                 ),
+               ],
+             );
+          },
+          loading: () => const Text("Lade Historie...", style: TextStyle(color: Colors.grey)),
+          error: (e, s) => const SizedBox(),
+        ),
+
+        const SizedBox(height: 20),
+
+        // --- CHART ---
+        Expanded(
+          child: historyAsync.when(
+            data: (history) {
+              if (history.length < 2) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.show_chart, size: 48, color: Colors.grey[300]),
+                      const Text("Zu wenig Daten für einen Graphen", style: TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                );
+              }
+              return _BinderHistoryChart(history: history);
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e,s) => Center(child: Text("Fehler beim Laden: $e")),
+          ),
+        ),
+
+        const SizedBox(height: 20),
+        const Divider(),
+
+        // --- VERVOLLSTÄNDIGUNG ---
+        ListTile(
+          leading: const Icon(Icons.pie_chart, color: Colors.blue),
+          title: const Text("Vervollständigung"),
+          trailing: Text("${currentState.filledSlots} / ${currentState.totalSlots}"),
+          subtitle: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: currentState.filledSlots / (currentState.totalSlots == 0 ? 1 : currentState.totalSlots),
+              minHeight: 8,
+            ),
+          ),
+        ),
+
+        // --- LÖSCHEN ---
+        ListTile(
+          leading: const Icon(Icons.delete_forever, color: Colors.red),
+          title: const Text("Binder löschen", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          onTap: onDelete,
+        ),
+      ],
+    );
+  }
+}
+
+class _BinderHistoryChart extends StatelessWidget {
+  final List<BinderHistoryPoint> history;
+  const _BinderHistoryChart({required this.history});
+
+  @override
+  Widget build(BuildContext context) {
+    // Spots erstellen
+    final spots = history.map((e) => FlSpot(e.date.millisecondsSinceEpoch.toDouble(), e.value)).toList();
+    
+    // Min/Max für Achsen
+    double minY = spots.map((e) => e.y).reduce((a, b) => a < b ? a : b);
+    double maxY = spots.map((e) => e.y).reduce((a, b) => a > b ? a : b);
+    if (minY == maxY) { minY *= 0.9; maxY = (maxY == 0 ? 10 : maxY * 1.1); }
+    
+    // Puffer
+    final delta = maxY - minY;
+    minY -= delta * 0.1;
+    maxY += delta * 0.1;
+    if (minY < 0) minY = 0;
+
+    return LineChart(
+      LineChartData(
+        gridData: FlGridData(
+          show: true, 
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (_) => FlLine(color: Colors.grey[200], strokeWidth: 1),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 40,
+              getTitlesWidget: (val, _) => Text(
+                "${val.toInt()}€", 
+                style: TextStyle(color: Colors.grey[400], fontSize: 10),
+                textAlign: TextAlign.right,
+              ),
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 22,
+              interval: (spots.last.x - spots.first.x) / 3, // Max 3-4 Labels
+              getTitlesWidget: (val, _) {
+                final date = DateTime.fromMillisecondsSinceEpoch(val.toInt());
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(DateFormat('dd.MM').format(date), style: TextStyle(color: Colors.grey[400], fontSize: 10)),
+                );
+              },
+            ),
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        minX: spots.first.x,
+        maxX: spots.last.x,
+        minY: minY,
+        maxY: maxY,
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: Colors.blueAccent,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.blue.withOpacity(0.2), Colors.blue.withOpacity(0.0)],
+              ),
+            ),
+          ),
+        ],
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            tooltipBgColor: Colors.blueGrey,
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) {
+                final date = DateTime.fromMillisecondsSinceEpoch(spot.x.toInt());
+                return LineTooltipItem(
+                  "${DateFormat('dd.MM.yy').format(date)}\n${spot.y.toStringAsFixed(2)} €",
+                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                );
+              }).toList();
+            },
+          ),
+        ),
+      ),
+    );
   }
 }

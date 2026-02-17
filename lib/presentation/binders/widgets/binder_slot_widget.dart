@@ -14,6 +14,7 @@ class BinderSlotWidget extends StatelessWidget {
     final card = slotData.card;
 
     return GestureDetector(
+      key: ValueKey("${slotData.binderCard.id}_${isPlaceholder}_${card?.id ?? 'null'}"),
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.all(4),
@@ -80,10 +81,25 @@ class BinderSlotWidget extends StatelessWidget {
 
             // --- STATUS ---
             if (!isPlaceholder)
-              const Positioned(
-                top: 2, right: 2,
-                child: Icon(Icons.check_circle, color: Colors.green, size: 14),
+            Positioned(
+              top: 4, 
+              right: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7), // Halb-transparenter Hintergrund für Lesbarkeit
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  "${slotData.marketPrice.toStringAsFixed(2)} €",
+                  style: const TextStyle(
+                    color: Colors.greenAccent, // oder Colors.white
+                    fontSize: 8, // Klein genug, um nicht zu stören
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
+            ),
           ],
         ),
       ),

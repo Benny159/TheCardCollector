@@ -89,16 +89,30 @@ class BinderService {
       }
 
       // 2. INTELLIGENTE NAMENSUCHE
-      // Wir generieren eine Liste möglicher Namen (z.B. ["Tapu-koko", "Tapu Koko", "Tapu Lele GX"])
       final List<String> candidates = _generateCandidateNames(pokeNameEn);
 
-      // Wir suchen in der DB nach irgendeinem dieser Namen
-      // Wir sortieren so, dass normale Karten vor V/VMAX kommen, falls mehrere matchen.
-      final matchingCard = await (db.select(db.cards)
-        ..where((tbl) => tbl.name.isIn(candidates)) 
-        ..orderBy([(t) => OrderingTerm(expression: t.id)]) 
-        ..limit(1)
-      ).getSingleOrNull();
+      // Wir suchen ALLE passenden Karten (statt nur limit(1))
+      final possibleCards = await (db.select(db.cards)
+        ..where((tbl) => tbl.name.isIn(candidates))
+      ).get();
+
+      // SORTIERUNG: Karten mit Bild nach vorne!
+      // Wir sortieren die Liste manuell
+      possibleCards.sort((a, b) {
+        // Prüfen ob A ein Bild hat
+        final bool aHasImg = (a.imageUrl != null && a.imageUrl!.isNotEmpty) || 
+                             (a.imageUrlDe != null && a.imageUrlDe!.isNotEmpty);
+        // Prüfen ob B ein Bild hat
+        final bool bHasImg = (b.imageUrl != null && b.imageUrl!.isNotEmpty) || 
+                             (b.imageUrlDe != null && b.imageUrlDe!.isNotEmpty);
+
+        if (aHasImg && !bHasImg) return -1; // A kommt zuerst
+        if (!aHasImg && bHasImg) return 1;  // B kommt zuerst
+        return 0; // Egal
+      });
+
+      // Jetzt nehmen wir die erste (die jetzt hoffentlich ein Bild hat)
+      final matchingCard = possibleCards.isNotEmpty ? possibleCards.first : null;
 
       // 3. LABEL BAUEN (Deutsch bevorzugt)
       String displayName = pokeNameEn; // Fallback
@@ -157,7 +171,6 @@ class BinderService {
       'jangmo-o': 'Jangmo-o',
       'hakamo-o': 'Hakamo-o',
       'kommo-o': 'Kommo-o',
-      'chingling': "Team Rocket's Chingling", 
       'dudunsparce-two-segments': "Dudunsparce",
       'wo-chien': "Wo-Chien",
       'chien-pao': "Chien-Pao",
@@ -255,9 +268,15 @@ class BinderService {
   }
 
   Future<void> deleteBinder(int binderId) async {
-    await (db.delete(db.binders)..where((t) => t.id.equals(binderId))).go();
+   await db.batch((batch) {
+      // 1. ZUERST alle Karten-Slots dieses Binders löschen
+      batch.deleteWhere(db.binderCards, (t) => t.binderId.equals(binderId));
+      
+      // 2. DANN den Binder selbst löschen
+      batch.deleteWhere(db.binders, (t) => t.id.equals(binderId));
+    });
   }
-  
+
   // Prüft, ob wir noch ein Exemplar dieser Karte übrig haben
   Future<bool> isCardAvailable(String cardId) async {
     // 1. Wie viele besitzen wir?
@@ -325,4 +344,3 @@ class BinderService {
     );
   }
 }
-
