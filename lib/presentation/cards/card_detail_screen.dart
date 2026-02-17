@@ -9,12 +9,14 @@ import '../../data/api/tcgdex_api_client.dart';
 import '../../data/database/app_database.dart'; 
 import '../../data/database/database_provider.dart';
 import '../../data/sync/set_importer.dart';
+// NEU: Import für Binder Logik
+import '../../domain/logic/binder_service.dart';
 import '../../domain/models/api_card.dart';
 import '../../domain/models/api_set.dart';
 import '../inventory/inventory_bottom_sheet.dart'; 
 import '../search/card_search_screen.dart';
 import '../sets/set_detail_screen.dart';
-import 'price_history_chart.dart'; // Dein Chart Widget
+import 'price_history_chart.dart'; 
 
 // Live-Provider für das Inventar dieser Karte
 final cardInventoryProvider = StreamProvider.family<List<UserCard>, String>((ref, cardId) {
@@ -65,6 +67,9 @@ class CardDetailScreen extends ConsumerWidget {
             ref.invalidate(setStatsProvider(card.setId));
             ref.invalidate(inventoryProvider);
             createPortfolioSnapshot(ref);
+            // Damit sich auch die Binder-Anzeige aktualisiert, müssen wir das UI neu bauen
+            // (Passiert automatisch durch Riverpod, wenn wir Provider nutzen würden, 
+            // aber unser FutureBuilder unten braucht einen Trigger beim erneuten Öffnen)
           });
         },
         icon: const Icon(Icons.add_card),
@@ -104,7 +109,6 @@ class CardDetailScreen extends ConsumerWidget {
                   child: CachedNetworkImage(
                     imageUrl: displayImage,
                     placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                    // FIX: Explizite Typen für errorWidget
                     errorWidget: (context, url, dynamic error) => const Icon(Icons.broken_image, size: 100, color: Colors.grey),
                     fit: BoxFit.contain,
                   ),
@@ -119,6 +123,13 @@ class CardDetailScreen extends ConsumerWidget {
               data: (items) => _buildInventorySection(context, ref, items),
               loading: () => const SizedBox.shrink(),
               error: (err, stack) => Text("Fehler: $err"),
+            ),
+
+            // --- NEU: BINDER STANDORT ---
+            // Zeigt an, in welchen Bindern die Karte steckt
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: BinderLocationWidget(cardId: card.id),
             ),
 
             const SizedBox(height: 20),
@@ -476,5 +487,56 @@ class CardDetailScreen extends ConsumerWidget {
       ref.invalidate(inventoryProvider); 
       await createPortfolioSnapshot(ref);
     }
+  }
+}
+
+// --- NEU: Widget für die Anzeige der Binder ---
+class BinderLocationWidget extends ConsumerWidget {
+  final String cardId;
+  const BinderLocationWidget({required this.cardId, super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final db = ref.watch(databaseProvider);
+    
+    // Einfacher FutureBuilder, um die Binder zu laden
+    return FutureBuilder<List<String>>(
+      future: BinderService(db).getBindersForCard(cardId),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
+        
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.all(12),
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.orange[50], // Unterscheidet sich farblich vom Inventar
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.orange[200]!),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Enthalten in Bindern:", 
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange)
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: snapshot.data!.map((name) => Chip(
+                  label: Text(name),
+                  backgroundColor: Colors.white,
+                  side: BorderSide(color: Colors.orange[100]!),
+                  avatar: const Icon(Icons.book, size: 16, color: Colors.orange),
+                  visualDensity: VisualDensity.compact,
+                )).toList(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

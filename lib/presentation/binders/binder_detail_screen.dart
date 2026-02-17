@@ -5,7 +5,10 @@ import '../../data/database/app_database.dart';
 import 'binder_detail_provider.dart';
 import 'widgets/binder_page_widget.dart';
 import '../../domain/logic/binder_service.dart';
+import '../search/card_search_screen.dart';
 import '../../data/database/database_provider.dart';
+import '../../domain/models/api_card.dart';
+import 'package:drift/drift.dart' as drift;
 
 class BinderDetailScreen extends ConsumerStatefulWidget {
   final Binder binder;
@@ -19,6 +22,8 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   // Key für das neue Paket
   final _pageFlipKey = GlobalKey<PageFlipWidgetState>();
   final _searchController = TextEditingController();
+
+  int _rebuildKey = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +106,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                 // Das gibt dem 4x4 Grid genug Platz nach unten.
                 aspectRatio: 0.65, 
                 child: PageFlipWidget(
-                  key: _pageFlipKey,
+                  key: ValueKey("binder_view_$_rebuildKey"),
                   backgroundColor: Colors.grey[800]!,
                   lastPage: Container(
                       color: Colors.white, 
@@ -118,10 +123,153 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   }
 
   void _handleSlotTap(BinderSlotData slot) {
-    // Hier kommt gleich das Hinzufügen-Menü hin
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Slot: ${slot.binderCard.placeholderLabel}"))
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(slot.binderCard.placeholderLabel ?? "Slot"),
+              subtitle: Text(slot.binderCard.isPlaceholder ? "Leer (Platzhalter)" : "Befüllt"),
+            ),
+            const Divider(),
+            
+            // 1. BEFÜLLEN (Nur wenn Platzhalter)
+            if (slot.binderCard.isPlaceholder)
+              ListTile(
+                leading: const Icon(Icons.add_photo_alternate, color: Colors.green),
+                title: const Text("Karte aus Inventar hinzufügen"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickCardForSlot(slot, onlyOwned: true);
+                },
+              ),
+
+            // 2. KONFIGURIEREN (Platzhalter ändern)
+            if (slot.binderCard.isPlaceholder)
+               ListTile(
+                leading: const Icon(Icons.edit, color: Colors.blue),
+                title: const Text("Platzhalter ändern (Suchen)"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  // Suche ALLE Karten, nicht nur eigene
+                  _pickCardForSlot(slot, onlyOwned: false); 
+                },
+              ),
+              
+            // 3. ENTFERNEN / ÄNDERN (Wenn befüllt)
+            if (!slot.binderCard.isPlaceholder) ...[
+              ListTile(
+                leading: const Icon(Icons.change_circle, color: Colors.orange),
+                title: const Text("Karte austauschen"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickCardForSlot(slot, onlyOwned: true);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                title: const Text("Entfernen (wieder Platzhalter)"),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final db = ref.read(databaseProvider);
+                  await BinderService(db).clearSlot(slot.binderCard.id);
+                  setState(() { _rebuildKey++; }); // UI Refresh
+                },
+              ),
+            ]
+          ],
+        ),
+      ),
     );
+  }
+
+ Future<void> _pickCardForSlot(BinderSlotData slot, {required bool onlyOwned}) async {
+    String initialQuery = slot.binderCard.placeholderLabel ?? "";
+    if (initialQuery.contains(" ")) {
+        initialQuery = initialQuery.split(" ").sublist(1).join(" ");
+    }
+
+    // Wir erwarten jetzt ein ApiCard Objekt zurück, keinen String
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CardSearchScreen(
+            initialQuery: initialQuery, 
+            pickerMode: true, 
+            onlyOwned: onlyOwned 
+        ), 
+      ),
+    );
+
+    // FIX: Check auf ApiCard Typ
+    if (result != null && result is ApiCard) { 
+      final ApiCard pickedCard = result;
+      final db = ref.read(databaseProvider);
+      final service = BinderService(db);
+      
+      try {
+        // --- SCHRITT A: Karte in lokaler DB sichern ---
+        // Falls die Karte aus der API kommt und noch nicht in der DB ist, speichern wir sie jetzt.
+        // Das ist entscheidend, damit der Binder das Bild laden kann!
+        
+        await db.into(db.cards).insertOnConflictUpdate(
+          CardsCompanion(
+            id: drift.Value(pickedCard.id),
+            setId: drift.Value(pickedCard.setId),
+            name: drift.Value(pickedCard.name),
+            nameDe: drift.Value(pickedCard.nameDe),
+            number: drift.Value(pickedCard.number),
+            imageUrl: drift.Value(pickedCard.smallImageUrl),
+            imageUrlDe: drift.Value(pickedCard.imageUrlDe ?? pickedCard.smallImageUrl),
+            rarity: drift.Value(pickedCard.rarity),
+            // Wir importieren hier nur die Basics, damit die Anzeige funktioniert
+          )
+        );
+
+        // --- SCHRITT B: Binder Slot updaten ---
+        if (onlyOwned) {
+           if (await service.isCardAvailable(pickedCard.id)) {
+             await service.fillSlot(slot.binderCard.id, pickedCard.id);
+             if (mounted) {
+               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Karte hinzugefügt!")));
+             }
+           } else {
+             _showSwapDialog(slot.binderCard.id, pickedCard.id); 
+           }
+        } else {
+           // Platzhalter konfigurieren
+           String label = pickedCard.nameDe ?? pickedCard.name;
+           await service.configureSlot(slot.binderCard.id, pickedCard.id, label);
+        }
+        
+        // --- SCHRITT C: Refresh ---
+        // Provider invalidieren
+        ref.invalidate(binderDetailProvider(widget.binder.id));
+        
+        // Widget komplett neu bauen (zwingt Bilder zum Neuladen)
+        setState(() { _rebuildKey++; }); 
+        
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e")));
+        }
+      }
+    }
+  }
+
+  void _showSwapDialog(int slotId, String cardId) {
+     showDialog(
+       context: context, 
+       builder: (ctx) => AlertDialog(
+         title: const Text("Keine Karte verfügbar"),
+         content: const Text("Du hast alle Exemplare dieser Karte bereits in anderen Bindern verwendet. Möchtest du sie hier nutzen und dort entfernen? (Auto-Swap Logik hier einfügen)"),
+         actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK"))],
+       )
+     );
+     // Anmerkung: Echter Swap ist komplexer, da wir wissen müssen WO sie ist. 
+     // Fürs Erste reicht die Info, dass es nicht geht.
   }
 
   // --- STATISTIK & SUCHE ---

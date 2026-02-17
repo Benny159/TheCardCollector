@@ -30,7 +30,7 @@ class Cards extends Table {
   
   // BILDER: Beide Sprachen
   TextColumn get imageUrl => text()();    // Englisch
-  TextColumn get imageUrlDe => text()(); 
+  TextColumn get imageUrlDe => text().nullable()(); // <--- NEU: Deutsch
   
   TextColumn get artist => text().nullable()();
   TextColumn get rarity => text().nullable()();

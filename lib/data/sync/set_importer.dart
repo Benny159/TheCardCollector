@@ -142,31 +142,37 @@ class SetImporter {
     }
   }
 
-  Future<_CardImportData?> _prepareCardData(dynamic summaryEn, dynamic summaryDe) async {
+Future<_CardImportData?> _prepareCardData(dynamic summaryEn, dynamic summaryDe) async {
     final cardId = summaryEn['id'];
     
-    // Wir laden EN Details, weil dort Preise & Co stehen
+    // Wir laden EN Details
     final data = await dexClient.fetchCardDetails(cardId, lang: 'en');
     if (data == null) return null;
 
     final nameEn = data['name'] ?? 'Unknown';
-    // Deutscher Name (kann null sein in der API)
     final String? nameDeApi = summaryDe?['name']; 
 
-    // Bilder aus API
+    // --- BILD LOGIK (ROBUST) ---
     String imageEn = data['image'] ?? summaryEn['image'] ?? '';
+    // API Fix: Manchmal fehlt die Endung
     if (imageEn.isNotEmpty && !imageEn.endsWith('.png')) imageEn += '/high.png';
 
-    String? imageDe = summaryDe?['image'];
-    if (imageDe != null && imageDe.isNotEmpty) {
-       if (!imageDe.endsWith('.png')) imageDe += '/high.png';
-    } else {
-       imageDe = null; 
-    }
+    String imageDe = summaryDe?['image'] ?? '';
+    if (imageDe.isNotEmpty && !imageDe.endsWith('.png')) imageDe += '/high.png';
 
-    // Künstler aus API
+    // Sicherstellen, dass wir gültige Strings haben
+    final bool hasEn = imageEn.isNotEmpty;
+    final bool hasDe = imageDe.isNotEmpty;
+
+    // 1. Englisches Feld füllen (Prio: EN -> DE -> Leer)
+    // Wir dürfen NIEMALS Value.absent() senden, da die DB "NOT NULL" ist.
+    final String finalImageEn = hasEn ? imageEn : (hasDe ? imageDe : '');
+
+    // 2. Deutsches Feld füllen (Prio: DE -> EN -> Leer)
+    final String finalImageDe = hasDe ? imageDe : (hasEn ? imageEn : '');
+    // ---------------------------
+
     final String? artistApi = data['illustrator'];
-
     final v = data['variants'] ?? {};
     final number = data['localId'] ?? '0';
     int sortNum = int.tryParse(number) ?? 0;
@@ -178,14 +184,13 @@ class SetImporter {
         number: Value(number),
         sortNumber: Value(sortNum),
         
-        // --- MANUELLE DATEN SCHÜTZEN ---
-        // Wenn API null/leer liefert, nutzen wir Value.absent(), damit der alte DB-Wert bleibt
         nameDe: (nameDeApi != null && nameDeApi.isNotEmpty) ? Value(nameDeApi) : const Value.absent(),
         artist: (artistApi != null && artistApi.isNotEmpty) ? Value(artistApi) : const Value.absent(),
         
-        // Bilder schützen
-        imageUrl: imageEn.isNotEmpty ? Value(imageEn) : const Value.absent(),
-        imageUrlDe: imageDe != null ? Value(imageDe) : const Value.absent(),
+        // --- FIX: Immer Value() senden, niemals Value.absent() für Bilder ---
+        imageUrl: Value(finalImageEn),
+        imageUrlDe: Value(finalImageDe),
+        // -------------------------------------------------------------------
         
         rarity: Value(data['rarity']),
         hasFirstEdition: Value(v['firstEdition'] == true),
@@ -194,7 +199,6 @@ class SetImporter {
         hasReverse: Value(v['reverse'] == true),
         hasWPromo: Value(v['wPromo'] == true),
     );
-
     CardMarketPricesCompanion? cmCompanion;
     TcgPlayerPricesCompanion? tcgCompanion;
     

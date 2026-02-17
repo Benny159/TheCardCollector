@@ -257,5 +257,72 @@ class BinderService {
   Future<void> deleteBinder(int binderId) async {
     await (db.delete(db.binders)..where((t) => t.id.equals(binderId))).go();
   }
+  
+  // Prüft, ob wir noch ein Exemplar dieser Karte übrig haben
+  Future<bool> isCardAvailable(String cardId) async {
+    // 1. Wie viele besitzen wir?
+    final userCard = await (db.select(db.userCards)..where((t) => t.cardId.equals(cardId))).getSingleOrNull();
+    final int ownedQty = userCard?.quantity ?? 0;
+
+    if (ownedQty == 0) return false;
+
+    // 2. Wie viele stecken schon in Bindern (als echte Karte, nicht Platzhalter)?
+    final usedCountList = await (db.select(db.binderCards)
+      ..where((t) => t.cardId.equals(cardId) & t.isPlaceholder.equals(false))
+    ).get();
+    
+    final int usedQty = usedCountList.length;
+
+    return ownedQty > usedQty;
+  }
+
+  // Findet heraus, in welchen Bindern eine Karte steckt
+  Future<List<String>> getBindersForCard(String cardId) async {
+    final query = db.select(db.binderCards).join([
+      innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
+    ]);
+    
+    query.where(db.binderCards.cardId.equals(cardId) & db.binderCards.isPlaceholder.equals(false));
+    
+    final rows = await query.get();
+    // Gibt Liste von Binder-Namen zurück (oder ganze Binder-Objekte, wenn du willst)
+    return rows.map((r) => r.readTable(db.binders).name).toSet().toList(); 
+  }
+
+  // Slot konfigurieren (Grauen Platzhalter ändern)
+  Future<void> configureSlot(int slotId, String newCardId, String labelName) async {
+    await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
+      BinderCardsCompanion(
+        cardId: Value(newCardId),
+        placeholderLabel: Value(labelName), // Update Label passend zur Karte
+        isPlaceholder: const Value(true), // Bleibt grau
+      ),
+    );
+  }
+
+  // Slot befüllen (Echte Karte reinlegen)
+  Future<void> fillSlot(int slotId, String cardId) async {
+    // Sicherheitscheck: Haben wir die Karte?
+    if (!await isCardAvailable(cardId)) {
+      throw Exception("Keine Karte mehr verfügbar!");
+    }
+
+    await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
+      BinderCardsCompanion(
+        cardId: Value(cardId),
+        isPlaceholder: const Value(false), // Jetzt wird sie bunt!
+      ),
+    );
+  }
+
+  // Karte entfernen (Zurücksetzen auf Platzhalter)
+  Future<void> clearSlot(int slotId) async {
+    // Wir lassen cardId drin (damit das graue Bild bleibt), setzen aber isPlaceholder auf true
+    await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
+      const BinderCardsCompanion(
+        isPlaceholder: Value(true),
+      ),
+    );
+  }
 }
 

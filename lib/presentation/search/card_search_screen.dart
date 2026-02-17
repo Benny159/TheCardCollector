@@ -6,15 +6,25 @@ import 'package:intl/intl.dart';
 
 import '../../data/database/app_database.dart' as db; 
 import '../../data/api/search_provider.dart'; 
-// Wichtig für ApiCard Klasse
 import '../cards/card_detail_screen.dart';
 import '../inventory/inventory_bottom_sheet.dart';
+
 
 enum ChartFilter { week, month, year, all }
 final chartFilterProvider = StateProvider<ChartFilter>((ref) => ChartFilter.week);
 
 class CardSearchScreen extends ConsumerStatefulWidget {
-  const CardSearchScreen({super.key});
+  // --- NEUE PARAMETER ---
+  final String? initialQuery;
+  final bool pickerMode; 
+  final bool onlyOwned; 
+
+  const CardSearchScreen({
+    super.key, 
+    this.initialQuery,
+    this.pickerMode = false,
+    this.onlyOwned = false,
+  });
 
   @override
   ConsumerState<CardSearchScreen> createState() => _CardSearchScreenState();
@@ -26,12 +36,24 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
   @override
   void initState() {
     super.initState();
-    final initialQuery = ref.read(searchQueryProvider);
-    _searchController = TextEditingController(text: initialQuery);
 
-    Future.delayed(Duration.zero, () {
-      createPortfolioSnapshot(ref);
-    });
+    // 1. Initial Query setzen (entweder vom Parameter oder Provider)
+    final startQuery = widget.initialQuery ?? ref.read(searchQueryProvider);
+    _searchController = TextEditingController(text: startQuery);
+
+    // 2. Wenn Parameter übergeben wurde, Suche sofort starten
+    if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
+       Future.delayed(Duration.zero, () {
+         ref.read(searchQueryProvider.notifier).state = widget.initialQuery!;
+       });
+    }
+
+    // Snapshot nur erstellen, wenn wir NICHT im Picker Modus sind (Performance)
+    if (!widget.pickerMode) {
+      Future.delayed(Duration.zero, () {
+        createPortfolioSnapshot(ref);
+      });
+    }
   }
 
   @override
@@ -46,9 +68,12 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
     final isSearching = searchQuery.isNotEmpty;
     final currentMode = ref.watch(searchModeProvider);
 
+    // Im Picker Mode immer die Ergebnisse anzeigen, sonst Dashboard nur wenn nicht gesucht wird
+    final showResults = isSearching || widget.pickerMode;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(isSearching ? 'Suche' : 'Dashboard'),
+        title: Text(widget.pickerMode ? 'Karte auswählen' : (isSearching ? 'Suche' : 'Dashboard')),
       ),
       body: Column(
         children: [
@@ -60,6 +85,8 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
               children: [
                 TextField(
                   controller: _searchController,
+                  // Fokus automatisch setzen im Picker Mode, wenn keine Query da ist
+                  autofocus: widget.pickerMode && (widget.initialQuery?.isEmpty ?? true),
                   decoration: InputDecoration(
                     hintText: currentMode == SearchMode.name 
                         ? 'Suche Karte (z.B. Glurak)...' 
@@ -74,7 +101,8 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                             onPressed: () {
                               _searchController.clear();
                               ref.read(searchQueryProvider.notifier).state = '';
-                              FocusScope.of(context).unfocus(); 
+                              // Im Picker Mode nicht unfocusen, damit man direkt weitertippen kann
+                              if (!widget.pickerMode) FocusScope.of(context).unfocus(); 
                             },
                           )
                         : null,
@@ -86,11 +114,21 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                 
                 const SizedBox(height: 8),
                 
+                // Filter Chips (Künstler Suche macht im Picker Mode wenig Sinn, aber lassen wir drin)
                 Row(
                   children: [
                     _buildFilterChip("Karten Name", SearchMode.name, ref),
                     const SizedBox(width: 8),
                     _buildFilterChip("Künstler", SearchMode.artist, ref),
+                    // Optional: Info Chip wenn "Nur Inventar" aktiv ist
+                    if (widget.onlyOwned) ...[
+                       const SizedBox(width: 8),
+                       const Chip(
+                         label: Text("Nur Inventar"), 
+                         backgroundColor: Colors.greenAccent, 
+                         visualDensity: VisualDensity.compact
+                       ),
+                    ]
                   ],
                 ),
               ],
@@ -99,8 +137,8 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
 
           // --- 2. INHALT ---
           Expanded(
-            child: isSearching 
-              ? const _SearchResultsView() 
+            child: showResults 
+              ? _SearchResultsView(pickerMode: widget.pickerMode, onlyOwned: widget.onlyOwned) // Parameter weitergeben 
               : const _DashboardView(),    
           ),
         ],
@@ -555,14 +593,22 @@ class _PortfolioChart extends ConsumerWidget {
 // VIEW 2: SUCHERGEBNISSE
 // =========================================================
 class _SearchResultsView extends ConsumerWidget {
-  const _SearchResultsView();
+  final bool pickerMode;
+  final bool onlyOwned;
+
+  const _SearchResultsView({this.pickerMode = false, this.onlyOwned = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final searchAsyncValue = ref.watch(searchResultsProvider);
 
     return searchAsyncValue.when(
-      data: (cards) {
+      data: (allCards) {
+        // --- FILTER: Wenn "Nur Inventar" aktiv ist ---
+        final cards = onlyOwned 
+            ? allCards.where((c) => c.isOwned).toList() 
+            : allCards;
+
         if (cards.isEmpty) {
           return const Center(
             child: Column(
@@ -589,7 +635,7 @@ class _SearchResultsView extends ConsumerWidget {
             final card = cards[index];
             final bool isOwned = card.isOwned;
 
-            // Preisberechnung (Priorität: Cardmarket Trend -> TCGPlayer)
+            // Preisberechnung
             double? displayPrice = card.cardmarket?.trendPrice;
             if (displayPrice == null || displayPrice == 0) {
               displayPrice = card.tcgplayer?.prices?.normal?.market ?? 
@@ -597,15 +643,20 @@ class _SearchResultsView extends ConsumerWidget {
                              card.tcgplayer?.prices?.reverseHolofoil?.market;
             }
             
-            // Bild (Deutsch bevorzugt)
             final displayImage = card.displayImage;
 
             return InkWell(
               onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => CardDetailScreen(card: card)))
-                  .then((_) => ref.invalidate(searchResultsProvider));
+                if (pickerMode) {
+                  // --- FIX: Wir geben das GANZE Karten-Objekt zurück, nicht nur die ID ---
+                  Navigator.pop(context, card); 
+                } else {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => CardDetailScreen(card: card)))
+                    .then((_) => ref.invalidate(searchResultsProvider));
+                }
               },
               onLongPress: () {
+                // Inventar Menü nur im Normalmodus oder wenn gewollt
                 showModalBottomSheet(
                   context: context,
                   isScrollControlled: true,
@@ -615,11 +666,16 @@ class _SearchResultsView extends ConsumerWidget {
               child: Card(
                 elevation: 2,
                 clipBehavior: Clip.antiAlias,
+                // Visuelles Feedback im Picker Mode (z.B. grüner Rahmen wenn owned)
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  side: (pickerMode && isOwned) ? const BorderSide(color: Colors.green, width: 2) : BorderSide.none
+                ),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
                     Hero(
-                      tag: card.id,
+                      tag: card.id, // Tag beachten bei Picker Mode könnte Hero conflict machen, aber meist ok
                       child: CachedNetworkImage(
                         imageUrl: displayImage,
                         placeholder: (context, url) => Container(color: Colors.grey[200]),
@@ -649,6 +705,7 @@ class _SearchResultsView extends ConsumerWidget {
                         ),
                       ),
                     ),
+                    // Im Picker Mode Overlay, wenn nicht owned aber onlyOwned gefordert (sollte durch Filter weg sein, aber sicher ist sicher)
                   ],
                 ),
               ),
