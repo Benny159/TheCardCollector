@@ -271,6 +271,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
            if (await service.isCardAvailable(pickedCard.id)) {
              await service.fillSlot(slot.binderCard.id, pickedCard.id);
              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Karte hinzugefügt!")));
+             _forceRefresh();
            } else {
              _showSwapDialog(slot.binderCard.id, pickedCard.id); 
              return; 
@@ -402,6 +403,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Gefunden auf Seite ${targetPage + 1}!"), duration: const Duration(seconds: 1))
         );
+        await _forceRefresh();
       }
     } else {
       if (mounted) {

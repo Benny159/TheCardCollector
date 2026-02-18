@@ -115,7 +115,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 tag: widget.card.id,
                 child: Container(
                   height: 350, 
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     boxShadow: [BoxShadow(color: Colors.black38, blurRadius: 20, offset: Offset(0, 10))],
                   ),
                   child: CachedNetworkImage(
@@ -342,7 +342,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 tcgHistory: (data['tcg'] as List).cast<TcgPlayerPrice>(),
               ),
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, s) => Center(child: Text("Verlauf nicht verfügbar")),
+              error: (e, s) => const Center(child: Text("Verlauf nicht verfügbar")),
             ),
           ),
         ],
