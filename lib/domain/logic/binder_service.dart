@@ -101,10 +101,10 @@ class BinderService {
       possibleCards.sort((a, b) {
         // Prüfen ob A ein Bild hat
         final bool aHasImg = (a.imageUrl.isNotEmpty) || 
-                             (a.imageUrlDe.isNotEmpty);
+                             (a.imageUrlDe != null && a.imageUrlDe!.isNotEmpty);
         // Prüfen ob B ein Bild hat
         final bool bHasImg = (b.imageUrl.isNotEmpty) || 
-                             (b.imageUrlDe.isNotEmpty);
+                             (b.imageUrlDe != null && b.imageUrlDe!.isNotEmpty);
 
         if (aHasImg && !bHasImg) return -1; // A kommt zuerst
         if (!aHasImg && bHasImg) return 1;  // B kommt zuerst
@@ -325,11 +325,16 @@ class BinderService {
     }
 
     await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
-      BinderCardsCompanion(
-        cardId: Value(cardId),
-        isPlaceholder: const Value(false), // Jetzt wird sie bunt!
-      ),
-    );
+    BinderCardsCompanion(
+      cardId: Value(cardId),
+      isPlaceholder: const Value(false),
+      // label resetten oder behalten? Meistens resetten oder Name der Karte
+    )
+  );
+  
+  // NEU: Wert neu berechnen!
+  final slot = await (db.select(db.binderCards)..where((t) => t.id.equals(slotId))).getSingle();
+  await recalculateBinderValue(slot.binderId);
   }
 
   // Karte entfernen (Zurücksetzen auf Platzhalter)
@@ -340,6 +345,62 @@ class BinderService {
         isPlaceholder: Value(true),
       ),
     );
+    final slot = await (db.select(db.binderCards)..where((t) => t.id.equals(slotId))).getSingle();
+    await recalculateBinderValue(slot.binderId);
   }
+
+  // Füge diese Methode zur BinderService Klasse hinzu:
+Future<void> recalculateBinderValue(int binderId) async {
+  // 1. Alle belegten Slots holen
+  final slots = await (db.select(db.binderCards)
+    ..where((t) => t.binderId.equals(binderId))
+    ..where((t) => t.isPlaceholder.equals(false))
+  ).get();
+
+  double total = 0.0;
+
+  for (var slot in slots) {
+    // Preis ermitteln (Hier nehmen wir vereinfacht den Marktpreis, 
+    // idealerweise würden wir die Variante aus dem Slot prüfen, wenn gespeichert)
+    final cardId = slot.cardId;
+    if (cardId == null) continue;
+
+    // Wir schauen in die Preis-Tabellen
+    final cmPrice = await (db.select(db.cardMarketPrices)
+      ..where((t) => t.cardId.equals(cardId))
+      ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])
+      ..limit(1)
+    ).getSingleOrNull();
+
+    final tcgPrice = await (db.select(db.tcgPlayerPrices)
+      ..where((t) => t.cardId.equals(cardId))
+      ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])
+      ..limit(1)
+    ).getSingleOrNull();
+
+    // Priorität: Cardmarket Trend -> TCG Market
+    // HIER FIXEN WIR AUCH TEIL C (Preis-Logik Basis):
+    // Aktuell nehmen wir pauschal Trend. Später können wir hier Variant-Logik einbauen.
+    double price = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
+    total += price;
+  }
+
+  // 2. Binder updaten
+  await (db.update(db.binders)..where((t) => t.id.equals(binderId))).write(
+    BindersCompanion(totalValue: Value(total))
+  );
+  
+  // 3. Historien-Eintrag für den Graphen erstellen (Fix für A)
+  final today = DateTime.now();
+  final dateOnly = DateTime(today.year, today.month, today.day);
+  
+  await db.into(db.binderHistory).insertOnConflictUpdate(
+    BinderHistoryCompanion.insert(
+      binderId: binderId,
+      date: dateOnly,
+      value: total,
+    )
+  );
+}
 }
 

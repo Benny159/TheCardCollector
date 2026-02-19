@@ -599,8 +599,8 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
       const VerificationMeta('imageUrlDe');
   @override
   late final GeneratedColumn<String> imageUrlDe = GeneratedColumn<String>(
-      'image_url_de', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+      'image_url_de', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _artistMeta = const VerificationMeta('artist');
   @override
   late final GeneratedColumn<String> artist = GeneratedColumn<String>(
@@ -749,8 +749,6 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
           _imageUrlDeMeta,
           imageUrlDe.isAcceptableOrUnknown(
               data['image_url_de']!, _imageUrlDeMeta));
-    } else if (isInserting) {
-      context.missing(_imageUrlDeMeta);
     }
     if (data.containsKey('artist')) {
       context.handle(_artistMeta,
@@ -826,7 +824,7 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
       imageUrl: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}image_url'])!,
       imageUrlDe: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}image_url_de'])!,
+          .read(DriftSqlType.string, data['${effectivePrefix}image_url_de']),
       artist: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}artist']),
       rarity: attachedDatabase.typeMapping
@@ -863,7 +861,7 @@ class Card extends DataClass implements Insertable<Card> {
   final String? nameDe;
   final String number;
   final String imageUrl;
-  final String imageUrlDe;
+  final String? imageUrlDe;
   final String? artist;
   final String? rarity;
   final String? flavorText;
@@ -881,7 +879,7 @@ class Card extends DataClass implements Insertable<Card> {
       this.nameDe,
       required this.number,
       required this.imageUrl,
-      required this.imageUrlDe,
+      this.imageUrlDe,
       this.artist,
       this.rarity,
       this.flavorText,
@@ -903,7 +901,9 @@ class Card extends DataClass implements Insertable<Card> {
     }
     map['number'] = Variable<String>(number);
     map['image_url'] = Variable<String>(imageUrl);
-    map['image_url_de'] = Variable<String>(imageUrlDe);
+    if (!nullToAbsent || imageUrlDe != null) {
+      map['image_url_de'] = Variable<String>(imageUrlDe);
+    }
     if (!nullToAbsent || artist != null) {
       map['artist'] = Variable<String>(artist);
     }
@@ -934,7 +934,9 @@ class Card extends DataClass implements Insertable<Card> {
           nameDe == null && nullToAbsent ? const Value.absent() : Value(nameDe),
       number: Value(number),
       imageUrl: Value(imageUrl),
-      imageUrlDe: Value(imageUrlDe),
+      imageUrlDe: imageUrlDe == null && nullToAbsent
+          ? const Value.absent()
+          : Value(imageUrlDe),
       artist:
           artist == null && nullToAbsent ? const Value.absent() : Value(artist),
       rarity:
@@ -964,7 +966,7 @@ class Card extends DataClass implements Insertable<Card> {
       nameDe: serializer.fromJson<String?>(json['nameDe']),
       number: serializer.fromJson<String>(json['number']),
       imageUrl: serializer.fromJson<String>(json['imageUrl']),
-      imageUrlDe: serializer.fromJson<String>(json['imageUrlDe']),
+      imageUrlDe: serializer.fromJson<String?>(json['imageUrlDe']),
       artist: serializer.fromJson<String?>(json['artist']),
       rarity: serializer.fromJson<String?>(json['rarity']),
       flavorText: serializer.fromJson<String?>(json['flavorText']),
@@ -987,7 +989,7 @@ class Card extends DataClass implements Insertable<Card> {
       'nameDe': serializer.toJson<String?>(nameDe),
       'number': serializer.toJson<String>(number),
       'imageUrl': serializer.toJson<String>(imageUrl),
-      'imageUrlDe': serializer.toJson<String>(imageUrlDe),
+      'imageUrlDe': serializer.toJson<String?>(imageUrlDe),
       'artist': serializer.toJson<String?>(artist),
       'rarity': serializer.toJson<String?>(rarity),
       'flavorText': serializer.toJson<String?>(flavorText),
@@ -1008,7 +1010,7 @@ class Card extends DataClass implements Insertable<Card> {
           Value<String?> nameDe = const Value.absent(),
           String? number,
           String? imageUrl,
-          String? imageUrlDe,
+          Value<String?> imageUrlDe = const Value.absent(),
           Value<String?> artist = const Value.absent(),
           Value<String?> rarity = const Value.absent(),
           Value<String?> flavorText = const Value.absent(),
@@ -1026,7 +1028,7 @@ class Card extends DataClass implements Insertable<Card> {
         nameDe: nameDe.present ? nameDe.value : this.nameDe,
         number: number ?? this.number,
         imageUrl: imageUrl ?? this.imageUrl,
-        imageUrlDe: imageUrlDe ?? this.imageUrlDe,
+        imageUrlDe: imageUrlDe.present ? imageUrlDe.value : this.imageUrlDe,
         artist: artist.present ? artist.value : this.artist,
         rarity: rarity.present ? rarity.value : this.rarity,
         flavorText: flavorText.present ? flavorText.value : this.flavorText,
@@ -1142,7 +1144,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
   final Value<String?> nameDe;
   final Value<String> number;
   final Value<String> imageUrl;
-  final Value<String> imageUrlDe;
+  final Value<String?> imageUrlDe;
   final Value<String?> artist;
   final Value<String?> rarity;
   final Value<String?> flavorText;
@@ -1181,7 +1183,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.nameDe = const Value.absent(),
     required String number,
     required String imageUrl,
-    required String imageUrlDe,
+    this.imageUrlDe = const Value.absent(),
     this.artist = const Value.absent(),
     this.rarity = const Value.absent(),
     this.flavorText = const Value.absent(),
@@ -1197,8 +1199,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
         setId = Value(setId),
         name = Value(name),
         number = Value(number),
-        imageUrl = Value(imageUrl),
-        imageUrlDe = Value(imageUrlDe);
+        imageUrl = Value(imageUrl);
   static Insertable<Card> custom({
     Expression<String>? id,
     Expression<String>? setId,
@@ -1248,7 +1249,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
       Value<String?>? nameDe,
       Value<String>? number,
       Value<String>? imageUrl,
-      Value<String>? imageUrlDe,
+      Value<String?>? imageUrlDe,
       Value<String?>? artist,
       Value<String?>? rarity,
       Value<String?>? flavorText,
@@ -3589,6 +3590,14 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       defaultValue: const Constant('leftToRight'));
+  static const VerificationMeta _totalValueMeta =
+      const VerificationMeta('totalValue');
+  @override
+  late final GeneratedColumn<double> totalValue = GeneratedColumn<double>(
+      'total_value', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0.0));
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -3613,6 +3622,7 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
         columnsPerPage,
         type,
         sortOrder,
+        totalValue,
         createdAt,
         updatedAt
       ];
@@ -3665,6 +3675,12 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
       context.handle(_sortOrderMeta,
           sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta));
     }
+    if (data.containsKey('total_value')) {
+      context.handle(
+          _totalValueMeta,
+          totalValue.isAcceptableOrUnknown(
+              data['total_value']!, _totalValueMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -3698,6 +3714,8 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
           .read(DriftSqlType.string, data['${effectivePrefix}type'])!,
       sortOrder: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}sort_order'])!,
+      totalValue: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}total_value'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -3720,6 +3738,7 @@ class Binder extends DataClass implements Insertable<Binder> {
   final int columnsPerPage;
   final String type;
   final String sortOrder;
+  final double totalValue;
   final DateTime createdAt;
   final DateTime? updatedAt;
   const Binder(
@@ -3731,6 +3750,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       required this.columnsPerPage,
       required this.type,
       required this.sortOrder,
+      required this.totalValue,
       required this.createdAt,
       this.updatedAt});
   @override
@@ -3746,6 +3766,7 @@ class Binder extends DataClass implements Insertable<Binder> {
     map['columns_per_page'] = Variable<int>(columnsPerPage);
     map['type'] = Variable<String>(type);
     map['sort_order'] = Variable<String>(sortOrder);
+    map['total_value'] = Variable<double>(totalValue);
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || updatedAt != null) {
       map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -3763,6 +3784,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       columnsPerPage: Value(columnsPerPage),
       type: Value(type),
       sortOrder: Value(sortOrder),
+      totalValue: Value(totalValue),
       createdAt: Value(createdAt),
       updatedAt: updatedAt == null && nullToAbsent
           ? const Value.absent()
@@ -3782,6 +3804,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       columnsPerPage: serializer.fromJson<int>(json['columnsPerPage']),
       type: serializer.fromJson<String>(json['type']),
       sortOrder: serializer.fromJson<String>(json['sortOrder']),
+      totalValue: serializer.fromJson<double>(json['totalValue']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
     );
@@ -3798,6 +3821,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       'columnsPerPage': serializer.toJson<int>(columnsPerPage),
       'type': serializer.toJson<String>(type),
       'sortOrder': serializer.toJson<String>(sortOrder),
+      'totalValue': serializer.toJson<double>(totalValue),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
     };
@@ -3812,6 +3836,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           int? columnsPerPage,
           String? type,
           String? sortOrder,
+          double? totalValue,
           DateTime? createdAt,
           Value<DateTime?> updatedAt = const Value.absent()}) =>
       Binder(
@@ -3823,6 +3848,7 @@ class Binder extends DataClass implements Insertable<Binder> {
         columnsPerPage: columnsPerPage ?? this.columnsPerPage,
         type: type ?? this.type,
         sortOrder: sortOrder ?? this.sortOrder,
+        totalValue: totalValue ?? this.totalValue,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
       );
@@ -3839,6 +3865,8 @@ class Binder extends DataClass implements Insertable<Binder> {
           : this.columnsPerPage,
       type: data.type.present ? data.type.value : this.type,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      totalValue:
+          data.totalValue.present ? data.totalValue.value : this.totalValue,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -3855,6 +3883,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           ..write('columnsPerPage: $columnsPerPage, ')
           ..write('type: $type, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('totalValue: $totalValue, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -3863,7 +3892,7 @@ class Binder extends DataClass implements Insertable<Binder> {
 
   @override
   int get hashCode => Object.hash(id, name, color, icon, rowsPerPage,
-      columnsPerPage, type, sortOrder, createdAt, updatedAt);
+      columnsPerPage, type, sortOrder, totalValue, createdAt, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3876,6 +3905,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           other.columnsPerPage == this.columnsPerPage &&
           other.type == this.type &&
           other.sortOrder == this.sortOrder &&
+          other.totalValue == this.totalValue &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -3889,6 +3919,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
   final Value<int> columnsPerPage;
   final Value<String> type;
   final Value<String> sortOrder;
+  final Value<double> totalValue;
   final Value<DateTime> createdAt;
   final Value<DateTime?> updatedAt;
   const BindersCompanion({
@@ -3900,6 +3931,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     this.columnsPerPage = const Value.absent(),
     this.type = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.totalValue = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -3912,6 +3944,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     this.columnsPerPage = const Value.absent(),
     this.type = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.totalValue = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   })  : name = Value(name),
@@ -3925,6 +3958,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     Expression<int>? columnsPerPage,
     Expression<String>? type,
     Expression<String>? sortOrder,
+    Expression<double>? totalValue,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -3937,6 +3971,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
       if (columnsPerPage != null) 'columns_per_page': columnsPerPage,
       if (type != null) 'type': type,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (totalValue != null) 'total_value': totalValue,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -3951,6 +3986,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
       Value<int>? columnsPerPage,
       Value<String>? type,
       Value<String>? sortOrder,
+      Value<double>? totalValue,
       Value<DateTime>? createdAt,
       Value<DateTime?>? updatedAt}) {
     return BindersCompanion(
@@ -3962,6 +3998,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
       columnsPerPage: columnsPerPage ?? this.columnsPerPage,
       type: type ?? this.type,
       sortOrder: sortOrder ?? this.sortOrder,
+      totalValue: totalValue ?? this.totalValue,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -3994,6 +4031,9 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     if (sortOrder.present) {
       map['sort_order'] = Variable<String>(sortOrder.value);
     }
+    if (totalValue.present) {
+      map['total_value'] = Variable<double>(totalValue.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4014,6 +4054,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
           ..write('columnsPerPage: $columnsPerPage, ')
           ..write('type: $type, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('totalValue: $totalValue, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -4081,6 +4122,12 @@ class $BinderCardsTable extends BinderCards
   late final GeneratedColumn<String> placeholderLabel = GeneratedColumn<String>(
       'placeholder_label', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _variantMeta =
+      const VerificationMeta('variant');
+  @override
+  late final GeneratedColumn<String> variant = GeneratedColumn<String>(
+      'variant', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -4089,7 +4136,8 @@ class $BinderCardsTable extends BinderCards
         slotIndex,
         cardId,
         isPlaceholder,
-        placeholderLabel
+        placeholderLabel,
+        variant
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4138,6 +4186,10 @@ class $BinderCardsTable extends BinderCards
           placeholderLabel.isAcceptableOrUnknown(
               data['placeholder_label']!, _placeholderLabelMeta));
     }
+    if (data.containsKey('variant')) {
+      context.handle(_variantMeta,
+          variant.isAcceptableOrUnknown(data['variant']!, _variantMeta));
+    }
     return context;
   }
 
@@ -4161,6 +4213,8 @@ class $BinderCardsTable extends BinderCards
           .read(DriftSqlType.bool, data['${effectivePrefix}is_placeholder'])!,
       placeholderLabel: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}placeholder_label']),
+      variant: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}variant']),
     );
   }
 
@@ -4178,6 +4232,7 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
   final String? cardId;
   final bool isPlaceholder;
   final String? placeholderLabel;
+  final String? variant;
   const BinderCard(
       {required this.id,
       required this.binderId,
@@ -4185,7 +4240,8 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
       required this.slotIndex,
       this.cardId,
       required this.isPlaceholder,
-      this.placeholderLabel});
+      this.placeholderLabel,
+      this.variant});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -4199,6 +4255,9 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
     map['is_placeholder'] = Variable<bool>(isPlaceholder);
     if (!nullToAbsent || placeholderLabel != null) {
       map['placeholder_label'] = Variable<String>(placeholderLabel);
+    }
+    if (!nullToAbsent || variant != null) {
+      map['variant'] = Variable<String>(variant);
     }
     return map;
   }
@@ -4215,6 +4274,9 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
       placeholderLabel: placeholderLabel == null && nullToAbsent
           ? const Value.absent()
           : Value(placeholderLabel),
+      variant: variant == null && nullToAbsent
+          ? const Value.absent()
+          : Value(variant),
     );
   }
 
@@ -4229,6 +4291,7 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
       cardId: serializer.fromJson<String?>(json['cardId']),
       isPlaceholder: serializer.fromJson<bool>(json['isPlaceholder']),
       placeholderLabel: serializer.fromJson<String?>(json['placeholderLabel']),
+      variant: serializer.fromJson<String?>(json['variant']),
     );
   }
   @override
@@ -4242,6 +4305,7 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
       'cardId': serializer.toJson<String?>(cardId),
       'isPlaceholder': serializer.toJson<bool>(isPlaceholder),
       'placeholderLabel': serializer.toJson<String?>(placeholderLabel),
+      'variant': serializer.toJson<String?>(variant),
     };
   }
 
@@ -4252,7 +4316,8 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
           int? slotIndex,
           Value<String?> cardId = const Value.absent(),
           bool? isPlaceholder,
-          Value<String?> placeholderLabel = const Value.absent()}) =>
+          Value<String?> placeholderLabel = const Value.absent(),
+          Value<String?> variant = const Value.absent()}) =>
       BinderCard(
         id: id ?? this.id,
         binderId: binderId ?? this.binderId,
@@ -4263,6 +4328,7 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
         placeholderLabel: placeholderLabel.present
             ? placeholderLabel.value
             : this.placeholderLabel,
+        variant: variant.present ? variant.value : this.variant,
       );
   BinderCard copyWithCompanion(BinderCardsCompanion data) {
     return BinderCard(
@@ -4277,6 +4343,7 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
       placeholderLabel: data.placeholderLabel.present
           ? data.placeholderLabel.value
           : this.placeholderLabel,
+      variant: data.variant.present ? data.variant.value : this.variant,
     );
   }
 
@@ -4289,14 +4356,15 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
           ..write('slotIndex: $slotIndex, ')
           ..write('cardId: $cardId, ')
           ..write('isPlaceholder: $isPlaceholder, ')
-          ..write('placeholderLabel: $placeholderLabel')
+          ..write('placeholderLabel: $placeholderLabel, ')
+          ..write('variant: $variant')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, binderId, pageIndex, slotIndex, cardId,
-      isPlaceholder, placeholderLabel);
+      isPlaceholder, placeholderLabel, variant);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4307,7 +4375,8 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
           other.slotIndex == this.slotIndex &&
           other.cardId == this.cardId &&
           other.isPlaceholder == this.isPlaceholder &&
-          other.placeholderLabel == this.placeholderLabel);
+          other.placeholderLabel == this.placeholderLabel &&
+          other.variant == this.variant);
 }
 
 class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
@@ -4318,6 +4387,7 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
   final Value<String?> cardId;
   final Value<bool> isPlaceholder;
   final Value<String?> placeholderLabel;
+  final Value<String?> variant;
   const BinderCardsCompanion({
     this.id = const Value.absent(),
     this.binderId = const Value.absent(),
@@ -4326,6 +4396,7 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
     this.cardId = const Value.absent(),
     this.isPlaceholder = const Value.absent(),
     this.placeholderLabel = const Value.absent(),
+    this.variant = const Value.absent(),
   });
   BinderCardsCompanion.insert({
     this.id = const Value.absent(),
@@ -4335,6 +4406,7 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
     this.cardId = const Value.absent(),
     this.isPlaceholder = const Value.absent(),
     this.placeholderLabel = const Value.absent(),
+    this.variant = const Value.absent(),
   })  : binderId = Value(binderId),
         pageIndex = Value(pageIndex),
         slotIndex = Value(slotIndex);
@@ -4346,6 +4418,7 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
     Expression<String>? cardId,
     Expression<bool>? isPlaceholder,
     Expression<String>? placeholderLabel,
+    Expression<String>? variant,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4355,6 +4428,7 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
       if (cardId != null) 'card_id': cardId,
       if (isPlaceholder != null) 'is_placeholder': isPlaceholder,
       if (placeholderLabel != null) 'placeholder_label': placeholderLabel,
+      if (variant != null) 'variant': variant,
     });
   }
 
@@ -4365,7 +4439,8 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
       Value<int>? slotIndex,
       Value<String?>? cardId,
       Value<bool>? isPlaceholder,
-      Value<String?>? placeholderLabel}) {
+      Value<String?>? placeholderLabel,
+      Value<String?>? variant}) {
     return BinderCardsCompanion(
       id: id ?? this.id,
       binderId: binderId ?? this.binderId,
@@ -4374,6 +4449,7 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
       cardId: cardId ?? this.cardId,
       isPlaceholder: isPlaceholder ?? this.isPlaceholder,
       placeholderLabel: placeholderLabel ?? this.placeholderLabel,
+      variant: variant ?? this.variant,
     );
   }
 
@@ -4401,6 +4477,9 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
     if (placeholderLabel.present) {
       map['placeholder_label'] = Variable<String>(placeholderLabel.value);
     }
+    if (variant.present) {
+      map['variant'] = Variable<String>(variant.value);
+    }
     return map;
   }
 
@@ -4413,7 +4492,268 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
           ..write('slotIndex: $slotIndex, ')
           ..write('cardId: $cardId, ')
           ..write('isPlaceholder: $isPlaceholder, ')
-          ..write('placeholderLabel: $placeholderLabel')
+          ..write('placeholderLabel: $placeholderLabel, ')
+          ..write('variant: $variant')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $BinderHistoryTable extends BinderHistory
+    with TableInfo<$BinderHistoryTable, BinderHistoryData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BinderHistoryTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _binderIdMeta =
+      const VerificationMeta('binderId');
+  @override
+  late final GeneratedColumn<int> binderId = GeneratedColumn<int>(
+      'binder_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES binders (id) ON DELETE CASCADE'));
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
+      'date', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<double> value = GeneratedColumn<double>(
+      'value', aliasedName, false,
+      type: DriftSqlType.double, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [id, binderId, date, value];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'binder_history';
+  @override
+  VerificationContext validateIntegrity(Insertable<BinderHistoryData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('binder_id')) {
+      context.handle(_binderIdMeta,
+          binderId.isAcceptableOrUnknown(data['binder_id']!, _binderIdMeta));
+    } else if (isInserting) {
+      context.missing(_binderIdMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+          _dateMeta, date.isAcceptableOrUnknown(data['date']!, _dateMeta));
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+          _valueMeta, value.isAcceptableOrUnknown(data['value']!, _valueMeta));
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BinderHistoryData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BinderHistoryData(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      binderId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}binder_id'])!,
+      date: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}date'])!,
+      value: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}value'])!,
+    );
+  }
+
+  @override
+  $BinderHistoryTable createAlias(String alias) {
+    return $BinderHistoryTable(attachedDatabase, alias);
+  }
+}
+
+class BinderHistoryData extends DataClass
+    implements Insertable<BinderHistoryData> {
+  final int id;
+  final int binderId;
+  final DateTime date;
+  final double value;
+  const BinderHistoryData(
+      {required this.id,
+      required this.binderId,
+      required this.date,
+      required this.value});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['binder_id'] = Variable<int>(binderId);
+    map['date'] = Variable<DateTime>(date);
+    map['value'] = Variable<double>(value);
+    return map;
+  }
+
+  BinderHistoryCompanion toCompanion(bool nullToAbsent) {
+    return BinderHistoryCompanion(
+      id: Value(id),
+      binderId: Value(binderId),
+      date: Value(date),
+      value: Value(value),
+    );
+  }
+
+  factory BinderHistoryData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BinderHistoryData(
+      id: serializer.fromJson<int>(json['id']),
+      binderId: serializer.fromJson<int>(json['binderId']),
+      date: serializer.fromJson<DateTime>(json['date']),
+      value: serializer.fromJson<double>(json['value']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'binderId': serializer.toJson<int>(binderId),
+      'date': serializer.toJson<DateTime>(date),
+      'value': serializer.toJson<double>(value),
+    };
+  }
+
+  BinderHistoryData copyWith(
+          {int? id, int? binderId, DateTime? date, double? value}) =>
+      BinderHistoryData(
+        id: id ?? this.id,
+        binderId: binderId ?? this.binderId,
+        date: date ?? this.date,
+        value: value ?? this.value,
+      );
+  BinderHistoryData copyWithCompanion(BinderHistoryCompanion data) {
+    return BinderHistoryData(
+      id: data.id.present ? data.id.value : this.id,
+      binderId: data.binderId.present ? data.binderId.value : this.binderId,
+      date: data.date.present ? data.date.value : this.date,
+      value: data.value.present ? data.value.value : this.value,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BinderHistoryData(')
+          ..write('id: $id, ')
+          ..write('binderId: $binderId, ')
+          ..write('date: $date, ')
+          ..write('value: $value')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, binderId, date, value);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BinderHistoryData &&
+          other.id == this.id &&
+          other.binderId == this.binderId &&
+          other.date == this.date &&
+          other.value == this.value);
+}
+
+class BinderHistoryCompanion extends UpdateCompanion<BinderHistoryData> {
+  final Value<int> id;
+  final Value<int> binderId;
+  final Value<DateTime> date;
+  final Value<double> value;
+  const BinderHistoryCompanion({
+    this.id = const Value.absent(),
+    this.binderId = const Value.absent(),
+    this.date = const Value.absent(),
+    this.value = const Value.absent(),
+  });
+  BinderHistoryCompanion.insert({
+    this.id = const Value.absent(),
+    required int binderId,
+    required DateTime date,
+    required double value,
+  })  : binderId = Value(binderId),
+        date = Value(date),
+        value = Value(value);
+  static Insertable<BinderHistoryData> custom({
+    Expression<int>? id,
+    Expression<int>? binderId,
+    Expression<DateTime>? date,
+    Expression<double>? value,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (binderId != null) 'binder_id': binderId,
+      if (date != null) 'date': date,
+      if (value != null) 'value': value,
+    });
+  }
+
+  BinderHistoryCompanion copyWith(
+      {Value<int>? id,
+      Value<int>? binderId,
+      Value<DateTime>? date,
+      Value<double>? value}) {
+    return BinderHistoryCompanion(
+      id: id ?? this.id,
+      binderId: binderId ?? this.binderId,
+      date: date ?? this.date,
+      value: value ?? this.value,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (binderId.present) {
+      map['binder_id'] = Variable<int>(binderId.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<DateTime>(date.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<double>(value.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BinderHistoryCompanion(')
+          ..write('id: $id, ')
+          ..write('binderId: $binderId, ')
+          ..write('date: $date, ')
+          ..write('value: $value')
           ..write(')'))
         .toString();
   }
@@ -4605,6 +4945,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $PortfolioHistoryTable(this);
   late final $BindersTable binders = $BindersTable(this);
   late final $BinderCardsTable binderCards = $BinderCardsTable(this);
+  late final $BinderHistoryTable binderHistory = $BinderHistoryTable(this);
   late final $PokedexTable pokedex = $PokedexTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -4619,6 +4960,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         portfolioHistory,
         binders,
         binderCards,
+        binderHistory,
         pokedex
       ];
   @override
@@ -4629,6 +4971,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
                 limitUpdateKind: UpdateKind.delete),
             result: [
               TableUpdate('binder_cards', kind: UpdateKind.delete),
+            ],
+          ),
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('binders',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
+              TableUpdate('binder_history', kind: UpdateKind.delete),
             ],
           ),
         ],
@@ -4877,7 +5226,7 @@ typedef $$CardsTableCreateCompanionBuilder = CardsCompanion Function({
   Value<String?> nameDe,
   required String number,
   required String imageUrl,
-  required String imageUrlDe,
+  Value<String?> imageUrlDe,
   Value<String?> artist,
   Value<String?> rarity,
   Value<String?> flavorText,
@@ -4897,7 +5246,7 @@ typedef $$CardsTableUpdateCompanionBuilder = CardsCompanion Function({
   Value<String?> nameDe,
   Value<String> number,
   Value<String> imageUrl,
-  Value<String> imageUrlDe,
+  Value<String?> imageUrlDe,
   Value<String?> artist,
   Value<String?> rarity,
   Value<String?> flavorText,
@@ -4934,7 +5283,7 @@ class $$CardsTableTableManager extends RootTableManager<
             Value<String?> nameDe = const Value.absent(),
             Value<String> number = const Value.absent(),
             Value<String> imageUrl = const Value.absent(),
-            Value<String> imageUrlDe = const Value.absent(),
+            Value<String?> imageUrlDe = const Value.absent(),
             Value<String?> artist = const Value.absent(),
             Value<String?> rarity = const Value.absent(),
             Value<String?> flavorText = const Value.absent(),
@@ -4974,7 +5323,7 @@ class $$CardsTableTableManager extends RootTableManager<
             Value<String?> nameDe = const Value.absent(),
             required String number,
             required String imageUrl,
-            required String imageUrlDe,
+            Value<String?> imageUrlDe = const Value.absent(),
             Value<String?> artist = const Value.absent(),
             Value<String?> rarity = const Value.absent(),
             Value<String?> flavorText = const Value.absent(),
@@ -6164,6 +6513,7 @@ typedef $$BindersTableCreateCompanionBuilder = BindersCompanion Function({
   Value<int> columnsPerPage,
   Value<String> type,
   Value<String> sortOrder,
+  Value<double> totalValue,
   Value<DateTime> createdAt,
   Value<DateTime?> updatedAt,
 });
@@ -6176,6 +6526,7 @@ typedef $$BindersTableUpdateCompanionBuilder = BindersCompanion Function({
   Value<int> columnsPerPage,
   Value<String> type,
   Value<String> sortOrder,
+  Value<double> totalValue,
   Value<DateTime> createdAt,
   Value<DateTime?> updatedAt,
 });
@@ -6205,6 +6556,7 @@ class $$BindersTableTableManager extends RootTableManager<
             Value<int> columnsPerPage = const Value.absent(),
             Value<String> type = const Value.absent(),
             Value<String> sortOrder = const Value.absent(),
+            Value<double> totalValue = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> updatedAt = const Value.absent(),
           }) =>
@@ -6217,6 +6569,7 @@ class $$BindersTableTableManager extends RootTableManager<
             columnsPerPage: columnsPerPage,
             type: type,
             sortOrder: sortOrder,
+            totalValue: totalValue,
             createdAt: createdAt,
             updatedAt: updatedAt,
           ),
@@ -6229,6 +6582,7 @@ class $$BindersTableTableManager extends RootTableManager<
             Value<int> columnsPerPage = const Value.absent(),
             Value<String> type = const Value.absent(),
             Value<String> sortOrder = const Value.absent(),
+            Value<double> totalValue = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> updatedAt = const Value.absent(),
           }) =>
@@ -6241,6 +6595,7 @@ class $$BindersTableTableManager extends RootTableManager<
             columnsPerPage: columnsPerPage,
             type: type,
             sortOrder: sortOrder,
+            totalValue: totalValue,
             createdAt: createdAt,
             updatedAt: updatedAt,
           ),
@@ -6290,6 +6645,11 @@ class $$BindersTableFilterComposer
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
+  ColumnFilters<double> get totalValue => $state.composableBuilder(
+      column: $state.table.totalValue,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
   ColumnFilters<DateTime> get createdAt => $state.composableBuilder(
       column: $state.table.createdAt,
       builder: (column, joinBuilders) =>
@@ -6310,6 +6670,19 @@ class $$BindersTableFilterComposer
         builder: (joinBuilder, parentComposers) =>
             $$BinderCardsTableFilterComposer(ComposerState($state.db,
                 $state.db.binderCards, joinBuilder, parentComposers)));
+    return f(composer);
+  }
+
+  ComposableFilter binderHistoryRefs(
+      ComposableFilter Function($$BinderHistoryTableFilterComposer f) f) {
+    final $$BinderHistoryTableFilterComposer composer = $state.composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $state.db.binderHistory,
+        getReferencedColumn: (t) => t.binderId,
+        builder: (joinBuilder, parentComposers) =>
+            $$BinderHistoryTableFilterComposer(ComposerState($state.db,
+                $state.db.binderHistory, joinBuilder, parentComposers)));
     return f(composer);
   }
 }
@@ -6357,6 +6730,11 @@ class $$BindersTableOrderingComposer
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
+  ColumnOrderings<double> get totalValue => $state.composableBuilder(
+      column: $state.table.totalValue,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
   ColumnOrderings<DateTime> get createdAt => $state.composableBuilder(
       column: $state.table.createdAt,
       builder: (column, joinBuilders) =>
@@ -6377,6 +6755,7 @@ typedef $$BinderCardsTableCreateCompanionBuilder = BinderCardsCompanion
   Value<String?> cardId,
   Value<bool> isPlaceholder,
   Value<String?> placeholderLabel,
+  Value<String?> variant,
 });
 typedef $$BinderCardsTableUpdateCompanionBuilder = BinderCardsCompanion
     Function({
@@ -6387,6 +6766,7 @@ typedef $$BinderCardsTableUpdateCompanionBuilder = BinderCardsCompanion
   Value<String?> cardId,
   Value<bool> isPlaceholder,
   Value<String?> placeholderLabel,
+  Value<String?> variant,
 });
 
 class $$BinderCardsTableTableManager extends RootTableManager<
@@ -6413,6 +6793,7 @@ class $$BinderCardsTableTableManager extends RootTableManager<
             Value<String?> cardId = const Value.absent(),
             Value<bool> isPlaceholder = const Value.absent(),
             Value<String?> placeholderLabel = const Value.absent(),
+            Value<String?> variant = const Value.absent(),
           }) =>
               BinderCardsCompanion(
             id: id,
@@ -6422,6 +6803,7 @@ class $$BinderCardsTableTableManager extends RootTableManager<
             cardId: cardId,
             isPlaceholder: isPlaceholder,
             placeholderLabel: placeholderLabel,
+            variant: variant,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -6431,6 +6813,7 @@ class $$BinderCardsTableTableManager extends RootTableManager<
             Value<String?> cardId = const Value.absent(),
             Value<bool> isPlaceholder = const Value.absent(),
             Value<String?> placeholderLabel = const Value.absent(),
+            Value<String?> variant = const Value.absent(),
           }) =>
               BinderCardsCompanion.insert(
             id: id,
@@ -6440,6 +6823,7 @@ class $$BinderCardsTableTableManager extends RootTableManager<
             cardId: cardId,
             isPlaceholder: isPlaceholder,
             placeholderLabel: placeholderLabel,
+            variant: variant,
           ),
         ));
 }
@@ -6469,6 +6853,11 @@ class $$BinderCardsTableFilterComposer
 
   ColumnFilters<String> get placeholderLabel => $state.composableBuilder(
       column: $state.table.placeholderLabel,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get variant => $state.composableBuilder(
+      column: $state.table.variant,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -6525,6 +6914,11 @@ class $$BinderCardsTableOrderingComposer
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
+  ColumnOrderings<String> get variant => $state.composableBuilder(
+      column: $state.table.variant,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
   $$BindersTableOrderingComposer get binderId {
     final $$BindersTableOrderingComposer composer = $state.composerBuilder(
         composer: this,
@@ -6546,6 +6940,126 @@ class $$BinderCardsTableOrderingComposer
         builder: (joinBuilder, parentComposers) => $$CardsTableOrderingComposer(
             ComposerState(
                 $state.db, $state.db.cards, joinBuilder, parentComposers)));
+    return composer;
+  }
+}
+
+typedef $$BinderHistoryTableCreateCompanionBuilder = BinderHistoryCompanion
+    Function({
+  Value<int> id,
+  required int binderId,
+  required DateTime date,
+  required double value,
+});
+typedef $$BinderHistoryTableUpdateCompanionBuilder = BinderHistoryCompanion
+    Function({
+  Value<int> id,
+  Value<int> binderId,
+  Value<DateTime> date,
+  Value<double> value,
+});
+
+class $$BinderHistoryTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $BinderHistoryTable,
+    BinderHistoryData,
+    $$BinderHistoryTableFilterComposer,
+    $$BinderHistoryTableOrderingComposer,
+    $$BinderHistoryTableCreateCompanionBuilder,
+    $$BinderHistoryTableUpdateCompanionBuilder> {
+  $$BinderHistoryTableTableManager(_$AppDatabase db, $BinderHistoryTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          filteringComposer:
+              $$BinderHistoryTableFilterComposer(ComposerState(db, table)),
+          orderingComposer:
+              $$BinderHistoryTableOrderingComposer(ComposerState(db, table)),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<int> binderId = const Value.absent(),
+            Value<DateTime> date = const Value.absent(),
+            Value<double> value = const Value.absent(),
+          }) =>
+              BinderHistoryCompanion(
+            id: id,
+            binderId: binderId,
+            date: date,
+            value: value,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required int binderId,
+            required DateTime date,
+            required double value,
+          }) =>
+              BinderHistoryCompanion.insert(
+            id: id,
+            binderId: binderId,
+            date: date,
+            value: value,
+          ),
+        ));
+}
+
+class $$BinderHistoryTableFilterComposer
+    extends FilterComposer<_$AppDatabase, $BinderHistoryTable> {
+  $$BinderHistoryTableFilterComposer(super.$state);
+  ColumnFilters<int> get id => $state.composableBuilder(
+      column: $state.table.id,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<DateTime> get date => $state.composableBuilder(
+      column: $state.table.date,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get value => $state.composableBuilder(
+      column: $state.table.value,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  $$BindersTableFilterComposer get binderId {
+    final $$BindersTableFilterComposer composer = $state.composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.binderId,
+        referencedTable: $state.db.binders,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder, parentComposers) => $$BindersTableFilterComposer(
+            ComposerState(
+                $state.db, $state.db.binders, joinBuilder, parentComposers)));
+    return composer;
+  }
+}
+
+class $$BinderHistoryTableOrderingComposer
+    extends OrderingComposer<_$AppDatabase, $BinderHistoryTable> {
+  $$BinderHistoryTableOrderingComposer(super.$state);
+  ColumnOrderings<int> get id => $state.composableBuilder(
+      column: $state.table.id,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<DateTime> get date => $state.composableBuilder(
+      column: $state.table.date,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get value => $state.composableBuilder(
+      column: $state.table.value,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  $$BindersTableOrderingComposer get binderId {
+    final $$BindersTableOrderingComposer composer = $state.composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.binderId,
+        referencedTable: $state.db.binders,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder, parentComposers) =>
+            $$BindersTableOrderingComposer(ComposerState(
+                $state.db, $state.db.binders, joinBuilder, parentComposers)));
     return composer;
   }
 }
@@ -6641,6 +7155,8 @@ class $AppDatabaseManager {
       $$BindersTableTableManager(_db, _db.binders);
   $$BinderCardsTableTableManager get binderCards =>
       $$BinderCardsTableTableManager(_db, _db.binderCards);
+  $$BinderHistoryTableTableManager get binderHistory =>
+      $$BinderHistoryTableTableManager(_db, _db.binderHistory);
   $$PokedexTableTableManager get pokedex =>
       $$PokedexTableTableManager(_db, _db.pokedex);
 }

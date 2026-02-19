@@ -22,6 +22,7 @@ class MainScreen extends ConsumerStatefulWidget {
 
 class _MainScreenState extends ConsumerState<MainScreen> {
   int _currentIndex = 0;
+  final List<int> _activeTabs = [0];
 
   @override
   void initState() {
@@ -96,13 +97,17 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       child: Scaffold(
         body: IndexedStack(
           index: _currentIndex,
-          children: _tabs,
+          children: [
+            // NEU: Tabs werden erst gerendert, wenn sie in _activeTabs stehen
+            _activeTabs.contains(0) ? _tabs[0] : const SizedBox.shrink(),
+            _activeTabs.contains(1) ? _tabs[1] : const SizedBox.shrink(),
+            _activeTabs.contains(2) ? _tabs[2] : const SizedBox.shrink(),
+            _activeTabs.contains(3) ? _tabs[3] : const SizedBox.shrink(),
+          ],
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _currentIndex,
           onDestinationSelected: (index) {
-            // Wenn man auf den Tab klickt, in dem man schon ist,
-            // gehen wir zurück zum Anfang
             if (_currentIndex == index) {
               final nav = index == 0 ? _searchNavigatorKey.currentState 
                         : index == 1 ? _setsNavigatorKey.currentState 
@@ -112,6 +117,10 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             } else {
               setState(() {
                 _currentIndex = index;
+                // NEU: Wenn der Tab noch nie besucht wurde, fügen wir ihn hinzu
+                if (!_activeTabs.contains(index)) {
+                  _activeTabs.add(index);
+                }
               });
             }
           },

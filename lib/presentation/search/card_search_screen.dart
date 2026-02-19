@@ -8,6 +8,7 @@ import '../../data/database/app_database.dart' as db;
 import '../../data/api/search_provider.dart'; 
 import '../cards/card_detail_screen.dart';
 import '../inventory/inventory_bottom_sheet.dart';
+import 'dart:async';
 
 
 enum ChartFilter { week, month, year, all }
@@ -32,32 +33,26 @@ class CardSearchScreen extends ConsumerStatefulWidget {
 
 class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
   late TextEditingController _searchController;
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
 
-    // 1. Controller initialisieren
-    _searchController = TextEditingController();
+    // 1. Initial Query setzen (entweder vom Parameter oder Provider)
+    final startQuery = widget.initialQuery ?? ref.read(searchQueryProvider);
+    _searchController = TextEditingController(text: startQuery);
 
-    // 2. Zustand synchron setzen, BEVOR das UI gebaut wird
-    // Wir nutzen ref.read innerhalb von initState ist erlaubt, 
-    // solange wir kein setState oder Build triggern.
-    if (!widget.pickerMode && widget.initialQuery == null) {
-        // Normale Suche -> Alles auf Null setzen
-        ref.read(searchQueryProvider.notifier).state = '';
-    } else if (widget.initialQuery != null) {
-        // Wir haben eine Initiale Anfrage (z.B. aus Binder)
-        ref.read(searchQueryProvider.notifier).state = widget.initialQuery!;
-        _searchController.text = widget.initialQuery!;
-    } else {
-        // Picker Mode ohne initial Query -> Behalte aktuellen State (falls vorhanden)
-        _searchController.text = ref.read(searchQueryProvider);
+    // 2. Wenn Parameter übergeben wurde, Suche sofort starten
+    if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
+       Future.delayed(Duration.zero, () {
+         ref.read(searchQueryProvider.notifier).state = widget.initialQuery!;
+       });
     }
 
-    // 3. Snapshot generieren (im Hintergrund)
+    // Snapshot nur erstellen, wenn wir NICHT im Picker Modus sind (Performance)
     if (!widget.pickerMode) {
-      Future.microtask(() {
+      Future.delayed(Duration.zero, () {
         createPortfolioSnapshot(ref);
       });
     }
@@ -128,11 +123,28 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                         : null,
                   ),
                   onChanged: (val) {
-                    // Update Provider bei Eingabe (Debounce wäre besser, aber so gehts für jetzt)
-                    ref.read(searchQueryProvider.notifier).state = val;
+                    // Wenn der User tippt, löschen wir den alten Timer...
+                    if (_debounce?.isActive ?? false) _debounce!.cancel();
+                    
+                    // ... und starten einen neuen. Erst wenn 500ms lang NICHTS getippt wurde,
+                    // wird der Provider aktualisiert und die API angefragt.
+                    _debounce = Timer(const Duration(milliseconds: 500), () {
+                      if (mounted) {
+                        ref.read(searchQueryProvider.notifier).state = val;
+                      }
+                    });
                   },
                   onSubmitted: (val) {
-                    ref.read(searchQueryProvider.notifier).state = val;
+                    // Wenn der User tippt, löschen wir den alten Timer...
+                    if (_debounce?.isActive ?? false) _debounce!.cancel();
+                    
+                    // ... und starten einen neuen. Erst wenn 500ms lang NICHTS getippt wurde,
+                    // wird der Provider aktualisiert und die API angefragt.
+                    _debounce = Timer(const Duration(milliseconds: 500), () {
+                      if (mounted) {
+                        ref.read(searchQueryProvider.notifier).state = val;
+                      }
+                    });
                   },
                 ),
                 
@@ -373,7 +385,12 @@ class _DashboardView extends ConsumerWidget {
                             tag: "top10_${item.card.id}",
                             child: CachedNetworkImage(
                               imageUrl: displayImage,
-                              placeholder: (_,__) => Container(color: Colors.grey[200]),
+                              // Optimierung: Bildgröße im Speicher begrenzen (Da 3 Spalten, reichen ca. 300px)
+                              memCacheWidth: 300, 
+                              fadeOutDuration: const Duration(milliseconds: 100), // Schnelleres Einblenden
+                              fadeInDuration: const Duration(milliseconds: 100),
+                              placeholder: (context, url) => Container(color: Colors.grey[200]),
+                              errorWidget: (context, url, error) => const Icon(Icons.broken_image),
                             ),
                           ),
                           Positioned(
@@ -646,7 +663,9 @@ class _SearchResultsView extends ConsumerWidget {
           );
         }
         
-        return GridView.builder(
+return GridView.builder(
+          // Puffer reduzieren, damit nicht unsichtbare Bilder sofort geladen werden
+          cacheExtent: 100, 
           padding: const EdgeInsets.all(10),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
@@ -659,7 +678,6 @@ class _SearchResultsView extends ConsumerWidget {
             final card = cards[index];
             final bool isOwned = card.isOwned;
 
-            // Preisberechnung
             double? displayPrice = card.cardmarket?.trendPrice;
             if (displayPrice == null || displayPrice == 0) {
               displayPrice = card.tcgplayer?.prices?.normal?.market ?? 
@@ -672,7 +690,6 @@ class _SearchResultsView extends ConsumerWidget {
             return InkWell(
               onTap: () {
                 if (pickerMode) {
-                  // --- FIX: Wir geben das GANZE Karten-Objekt zurück, nicht nur die ID ---
                   Navigator.pop(context, card); 
                 } else {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => CardDetailScreen(card: card)))
@@ -680,7 +697,6 @@ class _SearchResultsView extends ConsumerWidget {
                 }
               },
               onLongPress: () {
-                // Inventar Menü nur im Normalmodus oder wenn gewollt
                 showModalBottomSheet(
                   context: context,
                   isScrollControlled: true,
@@ -690,7 +706,6 @@ class _SearchResultsView extends ConsumerWidget {
               child: Card(
                 elevation: 2,
                 clipBehavior: Clip.antiAlias,
-                // Visuelles Feedback im Picker Mode (z.B. grüner Rahmen wenn owned)
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(4),
                   side: (pickerMode && isOwned) ? const BorderSide(color: Colors.green, width: 2) : BorderSide.none
@@ -698,13 +713,13 @@ class _SearchResultsView extends ConsumerWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Hero(
-                      tag: card.id, // Tag beachten bei Picker Mode könnte Hero conflict machen, aber meist ok
-                      child: CachedNetworkImage(
-                        imageUrl: displayImage,
-                        placeholder: (context, url) => Container(color: Colors.grey[200]),
-                        errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
-                      ),
+                    // HERO ENTFERNT IM GRID: Hero-Tags in Listen mit 100 Items verursachen MASSIVE Lags beim Aufbau!
+                    CachedNetworkImage(
+                      imageUrl: displayImage,
+                      memCacheWidth: 200, // Noch kleiner für die Übersicht
+                      placeholder: (context, url) => Container(color: Colors.grey[200]),
+                      errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
+                      fadeInDuration: const Duration(milliseconds: 150),
                     ),
                     Positioned(
                       bottom: 0, left: 0, right: 0,
@@ -727,7 +742,6 @@ class _SearchResultsView extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    // Im Picker Mode Overlay, wenn nicht owned aber onlyOwned gefordert (sollte durch Filter weg sein, aber sicher ist sicher)
                   ],
                 ),
               ),

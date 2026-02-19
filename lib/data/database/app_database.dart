@@ -19,6 +19,7 @@ part 'app_database.g.dart';
   // NEU:
   Binders,
   BinderCards,
+  BinderHistory,
   Pokedex
 ])
 class AppDatabase extends _$AppDatabase {
@@ -26,13 +27,23 @@ class AppDatabase extends _$AppDatabase {
 
   // Wir springen auf Version 20 für den "Hard Reset"
   @override
-  int get schemaVersion => 32; 
+  int get schemaVersion => 36; 
 
 @override
   MigrationStrategy get migration {
     return MigrationStrategy(
       onCreate: (Migrator m) async {
         await m.createAll();
+      },
+      onUpgrade: (Migrator m, int from, int to) async {
+        if (from < 35) {
+          await m.addColumn(binderCards, binderCards.variant);
+          await m.addColumn(binders, binders.totalValue);
+          await m.createTable(binderHistory);
+        }
+      },
+      beforeOpen: (details) async {
+        await customStatement('PRAGMA foreign_keys = ON');
       },
     );
   }

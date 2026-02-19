@@ -143,12 +143,22 @@ class Binders extends Table {
   // Wir speichern es als Text ('leftToRight' oder 'topToBottom')
   TextColumn get sortOrder => text().withDefault(const Constant('leftToRight'))();
   
+  RealColumn get totalValue => real().withDefault(const Constant(0.0))();
+
   // Metadaten
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().nullable()();
 }
 
+class BinderHistory extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get binderId => integer().references(Binders, #id, onDelete: KeyAction.cascade)();
+  DateTimeColumn get date => dateTime()();
+  RealColumn get value => real()();
+}
+
 // --- NEUE TABELLE: KARTEN IM BINDER ---
+@DataClassName('BinderCard')
 class BinderCards extends Table {
   IntColumn get id => integer().autoIncrement()();
   
@@ -165,6 +175,7 @@ class BinderCards extends Table {
   // Falls es ein Platzhalter ist (z.B. für National Dex Planung, aber Karte fehlt noch)
   BoolColumn get isPlaceholder => boolean().withDefault(const Constant(false))();
   TextColumn get placeholderLabel => text().nullable()(); // z.B. "Glurak #006"
+  TextColumn get variant => text().nullable()();
 }
 
 class Pokedex extends Table {

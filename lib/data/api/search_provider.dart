@@ -72,31 +72,43 @@ final searchResultsProvider = FutureProvider<List<ApiCard>>((ref) async {
   query.limit(100);
 
   final rows = await query.get();
+  if (rows.isEmpty) return [];
+
+  // IDs sammeln für Batch-Abfragen
   final cardIds = rows.map((r) => r.readTable(db.cards).id).toList();
-  final ownedSet = await _fetchOwnedIds(db, cardIds);
 
-  List<ApiCard> results = [];
+  // 2. ALLE nötigen Zusatzdaten PARALLEL in einem Rutsch holen
+  final results = await Future.wait([
+    _fetchOwnedIds(db, cardIds),
+    (db.select(db.cardMarketPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get(),
+    (db.select(db.tcgPlayerPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get(),
+  ]);
 
+  final Set<String> ownedSet = results[0] as Set<String>;
+  final List<CardMarketPrice> allCmPrices = results[1] as List<CardMarketPrice>;
+  final List<TcgPlayerPrice> allTcgPrices = results[2] as List<TcgPlayerPrice>;
+
+  // 3. Mapping für schnellen Zugriff
+  final cmPriceMap = _getLatestCmPrices(allCmPrices);
+  final tcgPriceMap = _getLatestTcgPrices(allTcgPrices);
+
+  List<ApiCard> apiCards = [];
+
+  // 4. Synchrones, schnelles Zusammenbauen
   for (final row in rows) {
     final card = row.readTable(db.cards);
     final set = row.readTable(db.cardSets);
 
-    final cmPrice = await (db.select(db.cardMarketPrices)
-          ..where((tbl) => tbl.cardId.equals(card.id))
-          ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])
-          ..limit(1))
-        .getSingleOrNull();
-
-    final tcgPrice = await (db.select(db.tcgPlayerPrices)
-          ..where((tbl) => tbl.cardId.equals(card.id))
-          ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])
-          ..limit(1))
-        .getSingleOrNull();
-
-    results.add(_mapToApiCard(card, set.printedTotal ?? 0, ownedSet.contains(card.id), cmPrice, tcgPrice));
+    apiCards.add(_mapToApiCard(
+      card, 
+      set.printedTotal ?? 0, 
+      ownedSet.contains(card.id), 
+      cmPriceMap[card.id], 
+      tcgPriceMap[card.id]
+    ));
   }
 
-  return results;
+  return apiCards;
 });
 
 // --- 4. SET LIST PROVIDER ---
@@ -206,7 +218,7 @@ ApiCard _mapToApiCard(
             avg7Holo: cmPrice.avg7Holo,
             avg1Holo: cmPrice.avg1Holo,
             lowHolo: cmPrice.lowHolo,
-            reverseHoloTrend: cmPrice.trendReverse,
+            reverseHoloTrend: cmPrice.trendHolo,
           )
         : null,
     
@@ -331,16 +343,47 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
       );
 
       double singlePrice = 0.0;
+
+      // Wir prüfen, ob die "Basis-Version" der Karte eine Holo ist 
+      // (trifft auf Glurak zu, weil es keine Normal-Version davon gibt)
+      bool baseIsHolo = !apiCard.hasNormal && apiCard.hasHolo;
+
       if (userCard.variant == 'Reverse Holo') {
+        // Reverse Holo steht bei Cardmarket fast immer in 'trendHolo'
+        // TCGPlayer hat dafür extra 'reverseHolofoil'
         singlePrice = apiCard.tcgplayer?.prices?.reverseHolofoil?.market 
-                   ?? apiCard.cardmarket?.reverseHoloTrend ?? 0.0;
+                   ?? apiCard.cardmarket?.trendHolo 
+                   ?? apiCard.cardmarket?.reverseHoloTrend 
+                   ?? 0.0;
+                   
       } else if (userCard.variant == 'Holo') {
-         singlePrice = apiCard.cardmarket?.trendHolo
-                    ?? apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
-         if (singlePrice == 0) singlePrice = apiCard.cardmarket?.trendPrice ?? 0.0;
+        if (baseIsHolo) {
+          // GLURAK-FALL: Es gibt kein 'Normal'. Holo IST die Standardkarte!
+          // Daher steht der Preis bei Cardmarket im normalen 'trendPrice'.
+          singlePrice = apiCard.cardmarket?.trendPrice 
+                     ?? apiCard.tcgplayer?.prices?.holofoil?.market 
+                     ?? 0.0;
+        } else {
+          // ALTER FALL (z.B. alte Wizards of the Coast Sets): 
+          // Es gibt Normal UND Holo. Dann ist Holo die besondere Variante.
+          singlePrice = apiCard.cardmarket?.trendHolo 
+                     ?? apiCard.tcgplayer?.prices?.holofoil?.market 
+                     ?? 0.0;
+        }
+        
       } else {
+        // BISASAM-FALL (Normal) oder Fallbacks (1st Edition, etc.)
+        // Die absolute Standard-Version der Karte.
         singlePrice = apiCard.cardmarket?.trendPrice 
-                   ?? apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
+                   ?? apiCard.tcgplayer?.prices?.normal?.market 
+                   ?? 0.0;
+      }
+
+      // Falls immer noch 0€ rauskam, nehmen wir irgendeinen Preis als Notlösung
+      if (singlePrice == 0.0) {
+        singlePrice = apiCard.cardmarket?.trendPrice 
+                   ?? apiCard.tcgplayer?.prices?.normal?.market 
+                   ?? 0.0;
       }
 
       items.add(InventoryItem(
