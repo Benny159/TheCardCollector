@@ -160,9 +160,7 @@ class BinderService {
       'nidoran-f': 'Nidoran♀',
       'nidoran-m': 'Nidoran♂',
       'farfetchd': "Farfetch'd",
-      'sirfetchd': "Sirfetch'd",
       'mr-mime': 'Mr. Mime',
-      'mr-rime': 'Mr. Rime',
       'mime-jr': 'Mime Jr.',
       'ho-oh': 'Ho-Oh',
       'porygon-z': 'Porygon-Z',
@@ -177,6 +175,8 @@ class BinderService {
       'ting-lu': "Ting-Lu",
       'chi-yu': "Chi-Yu",
       'Ogerpon': "Cornerstone Mask Ogerpon",
+      'sirfetchd': "Galarian Sirfetch'd",
+      'mr-rime': "Galarian Mr. Rime",
     };
 
     if (exceptions.containsKey(cleanInput)) {
@@ -215,8 +215,6 @@ class BinderService {
       'obstagoon': 'Galarian',
       'perrserker': 'Galarian',
       'cursola': 'Galarian',
-      'sirfetchd': 'Galarian',
-      'mr-rime': 'Galarian',
       'runerigus': 'Galarian',
       'darmanitan': 'Galarian', // Oft Galarian
       'basculegion': 'Hisuian',
@@ -318,7 +316,7 @@ class BinderService {
       ),
     );
   }
-
+  
   // Slot befüllen (Echte Karte reinlegen)
   Future<void> fillSlot(int slotId, String cardId) async {
     // Sicherheitscheck: Haben wir die Karte?
@@ -344,3 +342,4 @@ class BinderService {
     );
   }
 }
+

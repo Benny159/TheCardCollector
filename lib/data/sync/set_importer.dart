@@ -108,7 +108,7 @@ class SetImporter {
     final deList = await dexClient.fetchCardsOfSet(setId, lang: 'de');
     final deMap = { for (var c in deList) c['id']: c };
 
-    int chunkSize = 100;
+    int chunkSize = 200;
     
     for (var i = 0; i < enList.length; i += chunkSize) {
       await Future.delayed(Duration.zero);

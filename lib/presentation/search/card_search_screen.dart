@@ -37,20 +37,27 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
   void initState() {
     super.initState();
 
-    // 1. Initial Query setzen (entweder vom Parameter oder Provider)
-    final startQuery = widget.initialQuery ?? ref.read(searchQueryProvider);
-    _searchController = TextEditingController(text: startQuery);
+    // 1. Controller initialisieren
+    _searchController = TextEditingController();
 
-    // 2. Wenn Parameter übergeben wurde, Suche sofort starten
-    if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
-       Future.delayed(Duration.zero, () {
-         ref.read(searchQueryProvider.notifier).state = widget.initialQuery!;
-       });
+    // 2. Zustand synchron setzen, BEVOR das UI gebaut wird
+    // Wir nutzen ref.read innerhalb von initState ist erlaubt, 
+    // solange wir kein setState oder Build triggern.
+    if (!widget.pickerMode && widget.initialQuery == null) {
+        // Normale Suche -> Alles auf Null setzen
+        ref.read(searchQueryProvider.notifier).state = '';
+    } else if (widget.initialQuery != null) {
+        // Wir haben eine Initiale Anfrage (z.B. aus Binder)
+        ref.read(searchQueryProvider.notifier).state = widget.initialQuery!;
+        _searchController.text = widget.initialQuery!;
+    } else {
+        // Picker Mode ohne initial Query -> Behalte aktuellen State (falls vorhanden)
+        _searchController.text = ref.read(searchQueryProvider);
     }
 
-    // Snapshot nur erstellen, wenn wir NICHT im Picker Modus sind (Performance)
+    // 3. Snapshot generieren (im Hintergrund)
     if (!widget.pickerMode) {
-      Future.delayed(Duration.zero, () {
+      Future.microtask(() {
         createPortfolioSnapshot(ref);
       });
     }
@@ -74,6 +81,19 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.pickerMode ? 'Karte auswählen' : (isSearching ? 'Suche' : 'Dashboard')),
+        actions: [
+          // HOME BUTTON NEU:
+          if (isSearching && !widget.pickerMode)
+            IconButton(
+              icon: const Icon(Icons.home),
+              tooltip: "Zurück zum Start (Suche leeren)",
+              onPressed: () {
+                ref.read(searchQueryProvider.notifier).state = '';
+                _searchController.clear();
+                FocusScope.of(context).unfocus();
+              },
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -107,6 +127,10 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                           )
                         : null,
                   ),
+                  onChanged: (val) {
+                    // Update Provider bei Eingabe (Debounce wäre besser, aber so gehts für jetzt)
+                    ref.read(searchQueryProvider.notifier).state = val;
+                  },
                   onSubmitted: (val) {
                     ref.read(searchQueryProvider.notifier).state = val;
                   },
