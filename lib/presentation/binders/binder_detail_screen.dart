@@ -268,15 +268,56 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         );
 
         if (onlyOwned) {
-           if (await service.isCardAvailable(pickedCard.id)) {
-             await service.fillSlot(slot.binderCard.id, pickedCard.id);
-             if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Karte hinzugefügt!")));
-             _forceRefresh();
-           } else {
+           // 1. Abfragen, welche Varianten wirklich noch frei sind!
+           final availableVariants = await service.getAvailableVariantsForCard(pickedCard.id);
+
+           if (availableVariants.isEmpty) {
+             // Karte komplett vergriffen
              _showSwapDialog(slot.binderCard.id, pickedCard.id); 
              return; 
            }
+
+           String? selectedVariant;
+           
+           if (availableVariants.length == 1) {
+             // 2a. Nur eine Variante übrig -> Automatisch nehmen!
+             selectedVariant = availableVariants.first;
+           } else {
+             // 2b. Mehrere Varianten übrig -> User fragen!
+             if (!mounted) return;
+             selectedVariant = await showDialog<String>(
+               context: context,
+               builder: (ctx) => AlertDialog(
+                 title: const Text("Welche Variante?"),
+                 content: Column(
+                   mainAxisSize: MainAxisSize.min,
+                   children: availableVariants.map((variant) => ListTile(
+                     leading: const Icon(Icons.style, color: Colors.blueAccent),
+                     title: Text(variant, style: const TextStyle(fontWeight: FontWeight.bold)),
+                     onTap: () => Navigator.pop(ctx, variant), // Gibt den Namen zurück
+                   )).toList(),
+                 ),
+                 actions: [
+                   TextButton(
+                     onPressed: () => Navigator.pop(ctx, null),
+                     child: const Text("Abbrechen"),
+                   ),
+                 ],
+               ),
+             );
+
+             // Wenn der User außerhalb klickt oder abbricht
+             if (selectedVariant == null) return; 
+           }
+
+           // 3. Slot mit der ausgewählten Variante füllen
+           await service.fillSlot(slot.binderCard.id, pickedCard.id, variant: selectedVariant);
+           
+           if (mounted) {
+             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$selectedVariant Karte hinzugefügt!")));
+           }
         } else {
+           // ... (Restlicher else-Block für Platzhalter ändern)
            String label = pickedCard.nameDe ?? pickedCard.name;
            await service.configureSlot(slot.binderCard.id, pickedCard.id, label);
         }
@@ -305,7 +346,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
 
   void _showStats(BuildContext context, BinderDetailState? state) {
     if (state == null) return;
-    
+    ref.invalidate(binderHistoryProvider(widget.binder.id));
     showModalBottomSheet(
       context: context,
       isScrollControlled: true, // Wichtig für mehr Platz
@@ -443,13 +484,17 @@ class _BinderStatsContent extends ConsumerWidget {
              
              // Änderung zum Vortag (oder letztem Datenpunkt)
              if (history.length >= 2) {
-               // Der letzte Punkt ist "heute" (oder der aktuellste), der vorletzte ist "gestern"
-               // Wir müssen sicherstellen, dass wir nicht den gleichen Tag vergleichen
-               final last = history.last.value;
-               final prev = history[history.length - 2].value;
-               change = last - prev;
-               if (prev > 0) percent = (change / prev) * 100;
-             }
+                 final last = history.last.value;
+                 final prev = history[history.length - 2].value;
+                 change = last - prev;
+                 
+                 // NEUE LOGIK:
+                 if (prev > 0) {
+                   percent = (change / prev) * 100;
+                 } else if (change > 0) {
+                   percent = 100.0; // Von 0 auf was anderes ist 100% Anstieg
+                 }
+               }
 
              final isPositive = change >= -0.01;
              final color = isPositive ? Colors.green : Colors.red;
@@ -536,19 +581,63 @@ class _BinderHistoryChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Spots erstellen
-    final spots = history.map((e) => FlSpot(e.date.millisecondsSinceEpoch.toDouble(), e.value)).toList();
+    // 1. Sichere Datenbasis erstellen
+    List<FlSpot> spots = [];
     
-    // Min/Max für Achsen
+    // Wir iterieren und verhindern, dass zwei Punkte exakt denselben X-Wert (Tag) haben
+    Set<double> seenX = {};
+    for (var p in history) {
+      double x = p.date.millisecondsSinceEpoch.toDouble();
+      if (!seenX.contains(x)) {
+        spots.add(FlSpot(x, p.value));
+        seenX.add(x);
+      }
+    }
+
+    // Fallback: Wenn wir zu wenig Punkte haben, machen wir künstlich welche dazu
+    if (spots.isEmpty) {
+      final now = DateTime.now().millisecondsSinceEpoch.toDouble();
+      spots = [FlSpot(now - 86400000, 0), FlSpot(now, 0)]; // Gestern und Heute
+    } else if (spots.length == 1) {
+      final alone = spots.first;
+      spots = [FlSpot(alone.x - 86400000, 0), alone]; // Einen Tag vorher auf 0
+    }
+
+    // 2. Achsen-Min/Max berechnen (Crash-sicher)
+    double minX = spots.first.x;
+    double maxX = spots.last.x;
+    
+    // Falls minX und maxX identisch sind (sollte durch Fallback oben nicht passieren)
+    if (minX == maxX) {
+      minX -= 86400000; // - 1 Tag
+      maxX += 86400000; // + 1 Tag
+    }
+
     double minY = spots.map((e) => e.y).reduce((a, b) => a < b ? a : b);
     double maxY = spots.map((e) => e.y).reduce((a, b) => a > b ? a : b);
-    if (minY == maxY) { minY *= 0.9; maxY = (maxY == 0 ? 10 : maxY * 1.1); }
+
+    // Wenn der Graph komplett flach ist (z.B. alles 0€ oder alles konstant 10€)
+    if (minY == maxY) { 
+      if (minY == 0) {
+        maxY = 10; // Gib ihm einfach eine Skala bis 10
+      } else {
+        minY = minY * 0.8;
+        maxY = maxY * 1.2;
+      }
+    }
     
-    // Puffer
-    final delta = maxY - minY;
-    minY -= delta * 0.1;
-    maxY += delta * 0.1;
+    // Puffer für Y-Achse
+    final deltaY = maxY - minY;
+    minY -= deltaY * 0.1;
+    maxY += deltaY * 0.1;
     if (minY < 0) minY = 0;
+
+    // 3. Sichere Intervalle berechnen
+    double xInterval = (maxX - minX) / 3;
+    if (xInterval <= 0) xInterval = 86400000; // Mindestens 1 Tag Abstand
+
+    double yInterval = (maxY - minY) / 4;
+    if (yInterval <= 0) yInterval = 1.0; // Verhindert Y-Achsen Crash
 
     return LineChart(
       LineChartData(
@@ -561,22 +650,31 @@ class _BinderHistoryChart extends StatelessWidget {
           show: true,
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          
+          // Y-Achse (Links)
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 40,
-              getTitlesWidget: (val, _) => Text(
-                "${val.toInt()}€", 
-                style: TextStyle(color: Colors.grey[400], fontSize: 10),
-                textAlign: TextAlign.right,
-              ),
+              interval: yInterval, // Crash-sicheres Intervall
+              getTitlesWidget: (val, _) {
+                // Wir zeichnen keine unschönen negativen Werte oder krummen Zwischenschritte
+                if (val < 0) return const SizedBox();
+                return Text(
+                  "${val.toInt()}€", 
+                  style: TextStyle(color: Colors.grey[400], fontSize: 10),
+                  textAlign: TextAlign.right,
+                );
+              },
             ),
           ),
+          
+          // X-Achse (Unten)
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 22,
-              interval: (spots.last.x - spots.first.x) / 3, // Max 3-4 Labels
+              interval: xInterval, // Crash-sicheres Intervall
               getTitlesWidget: (val, _) {
                 final date = DateTime.fromMillisecondsSinceEpoch(val.toInt());
                 return Padding(
@@ -588,8 +686,8 @@ class _BinderHistoryChart extends StatelessWidget {
           ),
         ),
         borderData: FlBorderData(show: false),
-        minX: spots.first.x,
-        maxX: spots.last.x,
+        minX: minX,
+        maxX: maxX,
         minY: minY,
         maxY: maxY,
         lineBarsData: [

@@ -26,6 +26,15 @@ class BinderPageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // --- NEU: Seitenwert berechnen ---
+    // Wir zählen nur die Preise von echten Karten (keine Platzhalter) zusammen
+    final double pageTotal = slots.fold(0.0, (sum, slot) {
+      if (!slot.binderCard.isPlaceholder) {
+        return sum + slot.marketPrice;
+      }
+      return sum;
+    });
+
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFFFDFDFD),
@@ -37,29 +46,20 @@ class BinderPageWidget extends StatelessWidget {
           )
         ]
       ),
-      // Weniger Padding, damit mehr Platz für Karten ist
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       child: Column(
         children: [
-          // FIX: Expanded + LayoutBuilder garantiert, dass ALLES sichtbar ist
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                // Wir berechnen das optimale Verhältnis dynamisch
-                // Verfügbare Breite / Anzahl Spalten
                 final itemWidth = constraints.maxWidth / cols;
-                // Verfügbare Höhe / Anzahl Reihen
                 final itemHeight = constraints.maxHeight / rows;
-                
-                // Verhältnis berechnen
                 final ratio = itemWidth / itemHeight;
 
                 return GridView.builder(
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: cols,
-                    // Hier nutzen wir das berechnete Verhältnis!
-                    // Das zwingt das Grid dazu, exakt in die Box zu passen.
                     childAspectRatio: ratio, 
                   ),
                   itemCount: slots.length,
@@ -75,42 +75,76 @@ class BinderPageWidget extends StatelessWidget {
           ),
           
           const SizedBox(height: 8),
-          // --- NEUE NAVIGATION ---
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Zurück Button (nur wenn nicht Seite 0)
-              if (pageNumber > 0)
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios, size: 16, color: Colors.grey),
-                  onPressed: onPrevPage,
-                  tooltip: "Vorherige Seite",
-                  constraints: const BoxConstraints(), // Kompakt
-                  padding: EdgeInsets.zero,
-                )
-              else
-                const SizedBox(width: 24), // Platzhalter damit die Zahl mittig bleibt
+          
+          // --- NAVIGATION UND WERT ---
+          // Ein Stack eignet sich hier super, um die Seitenzahl exakt in der Mitte
+          // zu halten, während der Preis unabhängig davon rechts am Rand klebt.
+          // --- NAVIGATION UND WERT ---
+          SizedBox(
+            width: double.infinity, // FIX: Nimmt jetzt die volle Bildschirmbreite!
+            height: 30, // Etwas mehr Platz
+            child: Stack(
+              children: [
+                // 1. In der Mitte die Seitenzahl mit Pfeilen
+                Align(
+                  alignment: Alignment.center,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (pageNumber > 0)
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back_ios, size: 16, color: Colors.grey),
+                          onPressed: onPrevPage,
+                          tooltip: "Vorherige Seite",
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
+                        )
+                      else
+                        const SizedBox(width: 16),
 
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text(
-                  "- ${pageNumber + 1} -", 
-                  style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.bold, fontSize: 12)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Text(
+                          "- ${pageNumber + 1} -", 
+                          style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.bold, fontSize: 12)
+                        ),
+                      ),
+
+                      if (pageNumber < totalPages - 1)
+                        IconButton(
+                          icon: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                          onPressed: onNextPage,
+                          tooltip: "Nächste Seite",
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
+                        )
+                      else
+                         const SizedBox(width: 16),
+                    ],
+                  ),
                 ),
-              ),
-
-              // Vor Button (nur wenn nicht letzte Seite)
-              if (pageNumber < totalPages - 1)
-                IconButton(
-                  icon: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                  onPressed: onNextPage,
-                  tooltip: "Nächste Seite",
-                  constraints: const BoxConstraints(),
-                  padding: EdgeInsets.zero,
-                )
-              else
-                 const SizedBox(width: 24),
-            ],
+                
+                // 2. Rechts in der Ecke der Seitenwert
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.greenAccent.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      "${pageTotal.toStringAsFixed(2)} €",
+                      style: const TextStyle(
+                        color: Colors.green, 
+                        fontWeight: FontWeight.bold, 
+                        fontSize: 10
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

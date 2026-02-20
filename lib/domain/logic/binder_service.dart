@@ -13,7 +13,7 @@ class BinderService {
     required int rows,
     required int cols,
     required BinderType type,
-    required BinderSortOrder sortOrder, // <--- NEU
+    required BinderSortOrder sortOrder, 
   }) async {
     return db.transaction(() async {
       // 1. Binder erstellen
@@ -24,14 +24,39 @@ class BinderService {
           rowsPerPage: Value(rows),
           columnsPerPage: Value(cols),
           type: Value(type.name),
-          sortOrder: Value(sortOrder.name), // <--- Speichern
+          sortOrder: Value(sortOrder.name), 
         ),
       );
 
-      // 2. Slots generieren
+      // 2. Slots generieren (falls Theme-Binder)
       if (type != BinderType.custom) {
         await _generateSmartSlots(binderId, type, rows, cols, sortOrder);
       }
+
+      // --- NEU: 3. FAKE-HISTORIE FÜR DEN GRAPHEN ANLEGEN ---
+      final now = DateTime.now();
+      
+      // Punkt 1: "Vorgestern" (0.0 €)
+      final twoDaysAgo = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 2));
+      await db.into(db.binderHistory).insert(
+        BinderHistoryCompanion.insert(
+          binderId: binderId,
+          date: twoDaysAgo,
+          value: 0.0,
+        )
+      );
+
+      // Punkt 2: "Heute" (0.0 €) - Das braucht der Graph, damit er eine Linie zeichnen kann (min 2 Punkte)
+      final today = DateTime(now.year, now.month, now.day);
+      await db.into(db.binderHistory).insert(
+        BinderHistoryCompanion.insert(
+          binderId: binderId,
+          date: today,
+          value: 0.0,
+        )
+      );
+      // -----------------------------------------------------
+      
     });
   }
 
@@ -275,12 +300,18 @@ class BinderService {
     });
   }
 
-  // Prüft, ob wir noch ein Exemplar dieser Karte übrig haben
+ // Prüft, ob wir noch ein Exemplar dieser Karte übrig haben
   Future<bool> isCardAvailable(String cardId) async {
-    // 1. Wie viele besitzen wir?
-    final userCard = await (db.select(db.userCards)..where((t) => t.cardId.equals(cardId))).getSingleOrNull();
-    final int ownedQty = userCard?.quantity ?? 0;
+    // FIX: Da wir jetzt mehrere Varianten (Normal, Holo) in separaten Zeilen 
+    // haben können, laden wir ALLE Zeilen dieser Karte und summieren die Menge!
+    final userCards = await (db.select(db.userCards)..where((t) => t.cardId.equals(cardId))).get();
+    
+    int ownedQty = 0;
+    for (var uc in userCards) {
+      ownedQty += uc.quantity;
+    }
 
+    // Wenn wir gar keine haben, abbruch
     if (ownedQty == 0) return false;
 
     // 2. Wie viele stecken schon in Bindern (als echte Karte, nicht Platzhalter)?
@@ -290,7 +321,37 @@ class BinderService {
     
     final int usedQty = usedCountList.length;
 
+    // Haben wir mehr im Besitz, als wir in Bindern verwenden?
     return ownedQty > usedQty;
+  }
+
+  // Zählt, welche Varianten einer Karte noch NICHT in einem Binder sind
+  Future<List<String>> getAvailableVariantsForCard(String cardId) async {
+    // 1. Zähle, wie viele wir JE Variante im Inventar besitzen
+    final userCards = await (db.select(db.userCards)..where((t) => t.cardId.equals(cardId))).get();
+    Map<String, int> inventoryCounts = {};
+    for (var uc in userCards) {
+      inventoryCounts[uc.variant] = (inventoryCounts[uc.variant] ?? 0) + uc.quantity;
+    }
+
+    // 2. Zähle, welche Varianten schon in Bindern belegt sind
+    final binderCards = await (db.select(db.binderCards)
+      ..where((t) => t.cardId.equals(cardId))
+      ..where((t) => t.isPlaceholder.equals(false))
+    ).get();
+
+    for (var bc in binderCards) {
+      final v = bc.variant ?? 'Normal'; // Fallback falls leer
+      if (inventoryCounts.containsKey(v)) {
+        inventoryCounts[v] = inventoryCounts[v]! - 1;
+      }
+    }
+
+    // 3. Filtern: Welche Varianten haben noch > 0 Stück übrig?
+    return inventoryCounts.entries
+        .where((e) => e.value > 0)
+        .map((e) => e.key)
+        .toList();
   }
 
   // Findet heraus, in welchen Bindern eine Karte steckt
@@ -298,11 +359,8 @@ class BinderService {
     final query = db.select(db.binderCards).join([
       innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
     ]);
-    
     query.where(db.binderCards.cardId.equals(cardId) & db.binderCards.isPlaceholder.equals(false));
-    
     final rows = await query.get();
-    // Gibt Liste von Binder-Namen zurück (oder ganze Binder-Objekte, wenn du willst)
     return rows.map((r) => r.readTable(db.binders).name).toSet().toList(); 
   }
 
@@ -311,96 +369,148 @@ class BinderService {
     await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
       BinderCardsCompanion(
         cardId: Value(newCardId),
-        placeholderLabel: Value(labelName), // Update Label passend zur Karte
-        isPlaceholder: const Value(true), // Bleibt grau
+        placeholderLabel: Value(labelName),
+        isPlaceholder: const Value(true),
+        variant: const Value.absent(), // Variante leeren, da Platzhalter
       ),
     );
   }
   
-  // Slot befüllen (Echte Karte reinlegen)
-  Future<void> fillSlot(int slotId, String cardId) async {
-    // Sicherheitscheck: Haben wir die Karte?
+  // Slot befüllen (Echte Karte reinlegen) MIT VARIANTE
+  Future<void> fillSlot(int slotId, String cardId, {String? variant}) async {
     if (!await isCardAvailable(cardId)) {
       throw Exception("Keine Karte mehr verfügbar!");
     }
 
     await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
-    BinderCardsCompanion(
-      cardId: Value(cardId),
-      isPlaceholder: const Value(false),
-      // label resetten oder behalten? Meistens resetten oder Name der Karte
-    )
-  );
+      BinderCardsCompanion(
+        cardId: Value(cardId),
+        isPlaceholder: const Value(false),
+        variant: variant != null ? Value(variant) : const Value.absent(), // Variante speichern
+      )
+    );
   
-  // NEU: Wert neu berechnen!
-  final slot = await (db.select(db.binderCards)..where((t) => t.id.equals(slotId))).getSingle();
-  await recalculateBinderValue(slot.binderId);
+    final slot = await (db.select(db.binderCards)..where((t) => t.id.equals(slotId))).getSingle();
+    await recalculateBinderValue(slot.binderId);
   }
 
   // Karte entfernen (Zurücksetzen auf Platzhalter)
   Future<void> clearSlot(int slotId) async {
-    // Wir lassen cardId drin (damit das graue Bild bleibt), setzen aber isPlaceholder auf true
     await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
       const BinderCardsCompanion(
         isPlaceholder: Value(true),
+        variant: Value(null), // Variante löschen
       ),
     );
     final slot = await (db.select(db.binderCards)..where((t) => t.id.equals(slotId))).getSingle();
     await recalculateBinderValue(slot.binderId);
   }
 
-  // Füge diese Methode zur BinderService Klasse hinzu:
-Future<void> recalculateBinderValue(int binderId) async {
-  // 1. Alle belegten Slots holen
-  final slots = await (db.select(db.binderCards)
-    ..where((t) => t.binderId.equals(binderId))
-    ..where((t) => t.isPlaceholder.equals(false))
-  ).get();
+// Wert EINES Binders neu berechnen (mit perfekter Preis-Logik)
+  Future<void> recalculateBinderValue(int binderId) async {
+    final slots = await (db.select(db.binderCards)
+      ..where((t) => t.binderId.equals(binderId))
+      ..where((t) => t.isPlaceholder.equals(false))
+    ).get();
 
-  double total = 0.0;
+    double total = 0.0;
 
-  for (var slot in slots) {
-    // Preis ermitteln (Hier nehmen wir vereinfacht den Marktpreis, 
-    // idealerweise würden wir die Variante aus dem Slot prüfen, wenn gespeichert)
-    final cardId = slot.cardId;
-    if (cardId == null) continue;
+    for (var slot in slots) {
+      final cardId = slot.cardId;
+      if (cardId == null) continue;
 
-    // Wir schauen in die Preis-Tabellen
-    final cmPrice = await (db.select(db.cardMarketPrices)
-      ..where((t) => t.cardId.equals(cardId))
-      ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])
-      ..limit(1)
+      // Karte holen (um hasNormal / hasHolo und hasFirstEdition zu prüfen)
+      final card = await (db.select(db.cards)..where((t) => t.id.equals(cardId))).getSingleOrNull();
+      if (card == null) continue;
+
+      final cmPrice = await (db.select(db.cardMarketPrices)
+        ..where((t) => t.cardId.equals(cardId))
+        ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])
+        ..limit(1)
+      ).getSingleOrNull();
+
+      final tcgPrice = await (db.select(db.tcgPlayerPrices)
+        ..where((t) => t.cardId.equals(cardId))
+        ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])
+        ..limit(1)
+      ).getSingleOrNull();
+
+      double singlePrice = 0.0;
+      bool baseIsHolo = !card.hasNormal && card.hasHolo;
+      final variant = slot.variant ?? 'Normal'; // Fallback, falls keine gespeichert wurde
+      
+      // Prüfen, ob die gewählte Variante "1st Edition" / "First Edition" heißt
+      final isFirstEdVariant = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
+
+      // --- 1. EDITION LOGIK ZUERST ---
+      if (card.hasFirstEdition) {
+        if (isFirstEdVariant) {
+          // 1. Edition -> Ist auf Cardmarket die Hauptkarte = 'trend'
+          singlePrice = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
+        } else {
+          // Unlimited (Egal ob Normal oder Holo) -> Ist auf Cardmarket die 2. Variante = 'trendHolo'
+          singlePrice = cmPrice?.trendHolo ?? tcgPrice?.normalMarket ?? tcgPrice?.holoMarket ?? 0.0;
+        }
+        
+      // --- NORMALE LOGIK FÜR AKTUELLE SETS ---
+      } else if (variant == 'Reverse Holo') {
+        // HIER DER FIX: cmPrice VOR tcgPrice!
+        singlePrice = cmPrice?.trendHolo 
+                   ?? cmPrice?.trendReverse 
+                   ?? tcgPrice?.reverseMarket 
+                   ?? 0.0;
+      } else if (variant == 'Holo') {
+        if (baseIsHolo) {
+          singlePrice = cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0;
+        } else {
+          singlePrice = cmPrice?.trendHolo ?? tcgPrice?.holoMarket ?? 0.0;
+        }
+      } else {
+        singlePrice = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
+      }
+
+      if (singlePrice == 0.0) {
+        singlePrice = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
+      }
+
+      total += singlePrice;
+    }
+
+    await (db.update(db.binders)..where((t) => t.id.equals(binderId))).write(
+      BindersCompanion(totalValue: Value(total))
+    );
+    
+    // --- GRAPH HISTORIE UPDATEN ---
+    final today = DateTime.now();
+    final dateOnly = DateTime(today.year, today.month, today.day);
+    
+    final existingEntry = await (db.select(db.binderHistory)
+      ..where((t) => t.binderId.equals(binderId) & t.date.equals(dateOnly))
     ).getSingleOrNull();
 
-    final tcgPrice = await (db.select(db.tcgPlayerPrices)
-      ..where((t) => t.cardId.equals(cardId))
-      ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])
-      ..limit(1)
-    ).getSingleOrNull();
-
-    // Priorität: Cardmarket Trend -> TCG Market
-    // HIER FIXEN WIR AUCH TEIL C (Preis-Logik Basis):
-    // Aktuell nehmen wir pauschal Trend. Später können wir hier Variant-Logik einbauen.
-    double price = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
-    total += price;
+    if (existingEntry != null) {
+      // Existiert heute schon? -> Update
+      await (db.update(db.binderHistory)..where((t) => t.id.equals(existingEntry.id))).write(
+        BinderHistoryCompanion(value: Value(total))
+      );
+    } else {
+      // Noch kein Punkt für heute? -> NEU ANLEGEN (Hier ist dein gesuchter Teil!)
+      await db.into(db.binderHistory).insert(
+        BinderHistoryCompanion.insert(
+          binderId: binderId,
+          date: dateOnly,
+          value: total,
+        )
+      );
+    }
   }
 
-  // 2. Binder updaten
-  await (db.update(db.binders)..where((t) => t.id.equals(binderId))).write(
-    BindersCompanion(totalValue: Value(total))
-  );
-  
-  // 3. Historien-Eintrag für den Graphen erstellen (Fix für A)
-  final today = DateTime.now();
-  final dateOnly = DateTime(today.year, today.month, today.day);
-  
-  await db.into(db.binderHistory).insertOnConflictUpdate(
-    BinderHistoryCompanion.insert(
-      binderId: binderId,
-      date: dateOnly,
-      value: total,
-    )
-  );
-}
+  // --- NEU: Alle Binder aktualisieren (Nach einem API Sync) ---
+  Future<void> recalculateAllBinders() async {
+    final allBinders = await db.select(db.binders).get();
+    for (var binder in allBinders) {
+      await recalculateBinderValue(binder.id);
+    }
+  }
 }
 

@@ -6,6 +6,7 @@ import '../../domain/models/api_card.dart';
 import '../../domain/models/api_set.dart';
 import '../sync/set_importer.dart';
 import '../database/database_provider.dart';
+import '../../domain/logic/binder_service.dart';
 import '../../data/api/tcgdex_api_client.dart';
 
 // --- 1. CONFIG ---
@@ -218,7 +219,7 @@ ApiCard _mapToApiCard(
             avg7Holo: cmPrice.avg7Holo,
             avg1Holo: cmPrice.avg1Holo,
             lowHolo: cmPrice.lowHolo,
-            reverseHoloTrend: cmPrice.trendHolo,
+            reverseHoloTrend: cmPrice.trendReverse,
           )
         : null,
     
@@ -344,36 +345,51 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
 
       double singlePrice = 0.0;
 
-      // Wir prüfen, ob die "Basis-Version" der Karte eine Holo ist 
-      // (trifft auf Glurak zu, weil es keine Normal-Version davon gibt)
-      bool baseIsHolo = !apiCard.hasNormal && apiCard.hasHolo;
+      // Wir holen das Flag direkt aus der dbCard
+      bool baseIsHolo = !dbCard.hasNormal && dbCard.hasHolo;
+      final variant = userCard.variant;
+      
+      // Prüft, ob die Variante "1st Edition" oder ähnlich heißt
+      final isFirstEdVariant = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
 
-      if (userCard.variant == 'Reverse Holo') {
+      // --- 1. EDITION LOGIK ZUERST ---
+      if (dbCard.hasFirstEdition) {
+        if (isFirstEdVariant) {
+          // 1. Edition -> Ist auf Cardmarket die Hauptkarte = 'trendPrice'
+          singlePrice = apiCard.cardmarket?.trendPrice 
+                     ?? apiCard.tcgplayer?.prices?.normal?.market 
+                     ?? 0.0;
+        } else {
+          // Unlimited (Egal ob Normal oder Holo) -> Ist auf Cardmarket die 2. Variante = 'trendHolo'
+          singlePrice = apiCard.cardmarket?.trendHolo 
+                     ?? apiCard.tcgplayer?.prices?.normal?.market 
+                     ?? apiCard.tcgplayer?.prices?.holofoil?.market 
+                     ?? 0.0;
+        }
+        
+      // --- NORMALE LOGIK FÜR AKTUELLE SETS ---
+      } else if (variant == 'Reverse Holo') {
         // Reverse Holo steht bei Cardmarket fast immer in 'trendHolo'
-        // TCGPlayer hat dafür extra 'reverseHolofoil'
-        singlePrice = apiCard.tcgplayer?.prices?.reverseHolofoil?.market 
-                   ?? apiCard.cardmarket?.trendHolo 
+        singlePrice = apiCard.cardmarket?.trendHolo 
+                   ?? apiCard.tcgplayer?.prices?.reverseHolofoil?.market 
                    ?? apiCard.cardmarket?.reverseHoloTrend 
                    ?? 0.0;
                    
-      } else if (userCard.variant == 'Holo') {
+      } else if (variant == 'Holo') {
         if (baseIsHolo) {
           // GLURAK-FALL: Es gibt kein 'Normal'. Holo IST die Standardkarte!
-          // Daher steht der Preis bei Cardmarket im normalen 'trendPrice'.
           singlePrice = apiCard.cardmarket?.trendPrice 
                      ?? apiCard.tcgplayer?.prices?.holofoil?.market 
                      ?? 0.0;
         } else {
-          // ALTER FALL (z.B. alte Wizards of the Coast Sets): 
-          // Es gibt Normal UND Holo. Dann ist Holo die besondere Variante.
+          // ALTER FALL: Es gibt Normal UND Holo.
           singlePrice = apiCard.cardmarket?.trendHolo 
                      ?? apiCard.tcgplayer?.prices?.holofoil?.market 
                      ?? 0.0;
         }
         
       } else {
-        // BISASAM-FALL (Normal) oder Fallbacks (1st Edition, etc.)
-        // Die absolute Standard-Version der Karte.
+        // BISASAM-FALL (Normal)
         singlePrice = apiCard.cardmarket?.trendPrice 
                    ?? apiCard.tcgplayer?.prices?.normal?.market 
                    ?? 0.0;
@@ -448,7 +464,7 @@ Future<void> createPortfolioSnapshot(WidgetRef ref) async {
       ),
     );
   }
-  
+  await BinderService(db).recalculateAllBinders();
   // UI für den Graphen aktualisieren
   ref.invalidate(portfolioHistoryProvider);
 }

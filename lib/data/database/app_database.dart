@@ -27,7 +27,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Wir springen auf Version 20 für den "Hard Reset"
   @override
-  int get schemaVersion => 36; 
+  int get schemaVersion => 37; 
 
 @override
   MigrationStrategy get migration {

@@ -35,100 +35,127 @@ class BinderStats {
   BinderStats(this.value, this.filled, this.total);
 }
 
+// =========================================================================
+// 1. STATS PROVIDER (Für die Listen-Ansicht) - NEU & CRASH-SICHER
+// =========================================================================
 final binderStatsProvider = StreamProvider.family<BinderStats, int>((ref, binderId) {
   final db = ref.watch(databaseProvider);
 
-  // Wir nutzen .watch() statt .get(), damit es live bleibt
-  final query = db.select(db.binderCards).join([
-    leftOuterJoin(db.cards, db.cards.id.equalsExp(db.binderCards.cardId)),
-    leftOuterJoin(db.cardMarketPrices, db.cardMarketPrices.cardId.equalsExp(db.cards.id)),
-  ]);
-
-  query.where(db.binderCards.binderId.equals(binderId));
+  // Wir überwachen die Binder-Tabelle (für totalValue)
+  // und die BinderCards-Tabelle (für die Anzahl der gefüllten Slots)
   
-  // Mappen des Streams
-  return query.watch().map((rows) {
-    final Set<int> processedSlots = {};
-    double totalValue = 0;
+  final slotsQuery = db.select(db.binderCards)..where((t) => t.binderId.equals(binderId));
+  
+  return slotsQuery.watch().asyncMap((slots) async {
+    // 1. Wert holen (Jetzt ganz sicher ohne Ausrufezeichen)
+    final binder = await (db.select(db.binders)..where((t) => t.id.equals(binderId))).getSingleOrNull();
+    final double value = binder?.totalValue ?? 0.0;
+
+    // 2. Slots zählen
+    int total = slots.length;
     int filled = 0;
-    int total = 0;
-
-    for (final row in rows) {
-      final bc = row.readTable(db.binderCards);
-      if (processedSlots.contains(bc.id)) continue;
-      processedSlots.add(bc.id);
-
-      total++;
-      if (!bc.isPlaceholder && bc.cardId != null) {
+    
+    for (var slot in slots) {
+      if (slot.isPlaceholder == false && slot.cardId != null) {
          filled++;
-         final price = row.readTableOrNull(db.cardMarketPrices)?.trend ?? 0.0;
-         totalValue += price;
       }
     }
-    return BinderStats(totalValue, filled, total);
+    
+    return BinderStats(value, filled, total);
   });
 });
 
+// =========================================================================
+// 2. DETAIL PROVIDER (Für die Einzel-Ansicht) - OPTIMIERT
+// =========================================================================
 final binderDetailProvider = FutureProvider.family<BinderDetailState, int>((ref, binderId) async {
   final db = ref.watch(databaseProvider);
 
-  // 1. Query bleibt gleich
   final query = db.select(db.binderCards).join([
     leftOuterJoin(db.cards, db.cards.id.equalsExp(db.binderCards.cardId)),
-    leftOuterJoin(db.cardMarketPrices, db.cardMarketPrices.cardId.equalsExp(db.cards.id)),
   ]);
 
   query.where(db.binderCards.binderId.equals(binderId));
-  
-  // Wichtig: Sortierung beibehalten
   query.orderBy([OrderingTerm(expression: db.binderCards.pageIndex), OrderingTerm(expression: db.binderCards.slotIndex)]);
 
   final rows = await query.get();
+  
+  // --- NEU: PREISE LADEN OHNE ABSTURZ ---
+  final cardIds = rows.map((r) => r.readTableOrNull(db.cards)?.id).whereType<String>().toSet().toList();
+  
+  List<CardMarketPrice> cmPrices = [];
+  List<TcgPlayerPrice> tcgPrices = [];
+  
+  if (cardIds.isNotEmpty) {
+    cmPrices = await (db.select(db.cardMarketPrices)..where((t) => t.cardId.isIn(cardIds))).get();
+    tcgPrices = await (db.select(db.tcgPlayerPrices)..where((t) => t.cardId.isIn(cardIds))).get();
+  }
 
-  // --- FIX: Deduplizierung mit einer Map ---
-  // Wir mappen BinderCard.id -> SlotData. 
-  // Wenn durch den Join Duplikate entstehen, werden sie hier überschrieben/ignoriert.
+  // Nur den aktuellsten Preis für schnelles Laden zwischenspeichern
+  final cmMap = <String, CardMarketPrice>{};
+  for (var p in cmPrices) {
+    if (!cmMap.containsKey(p.cardId) || p.fetchedAt.isAfter(cmMap[p.cardId]!.fetchedAt)) cmMap[p.cardId] = p;
+  }
+  
+  final tcgMap = <String, TcgPlayerPrice>{};
+  for (var p in tcgPrices) {
+    if (!tcgMap.containsKey(p.cardId) || p.fetchedAt.isAfter(tcgMap[p.cardId]!.fetchedAt)) tcgMap[p.cardId] = p;
+  }
+
   final Map<int, BinderSlotData> uniqueSlotsMap = {};
 
   for (final row in rows) {
     final bc = row.readTable(db.binderCards);
-    
-    // Wenn wir diesen Slot schon haben, überspringen wir weitere Einträge (z.B. alte Preise)
     if (uniqueSlotsMap.containsKey(bc.id)) continue;
 
     final card = row.readTableOrNull(db.cards);
-    final prices = row.readTableOrNull(db.cardMarketPrices);
-
     double price = 0.0;
-    if (!bc.isPlaceholder && card != null) {
-      price = prices?.trend ?? 0.0; 
+
+    // --- LOGIK FÜR EINZELSLOTS ---
+    if (card != null && !bc.isPlaceholder) {
+      final cmPrice = cmMap[card.id];
+      final tcgPrice = tcgMap[card.id];
+      final variant = bc.variant ?? 'Normal';
+      bool baseIsHolo = !card.hasNormal && card.hasHolo;
+
+      if (variant == 'Reverse Holo') {
+        price = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? tcgPrice?.reverseMarket ?? 0.0;
+      } else if (variant == 'Holo') {
+        if (baseIsHolo) {
+          price = cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0;
+        } else {
+          price = cmPrice?.trendHolo ?? tcgPrice?.holoMarket ?? 0.0;
+        }
+      } else {
+        price = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
+      }
+      
+      if (price == 0.0) price = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
     }
 
     uniqueSlotsMap[bc.id] = BinderSlotData(binderCard: bc, card: card, marketPrice: price);
   }
 
-  // Jetzt bauen wir die Liste aus den bereinigten Werten
   final slots = uniqueSlotsMap.values.toList();
   
-  // Werte berechnen (jetzt stimmt die Summe auch wieder!)
-  double totalVal = 0;
   int filled = 0;
-  
   for (var slot in slots) {
-    if (!slot.binderCard.isPlaceholder && slot.card != null) {
-      filled++;
-      totalVal += slot.marketPrice;
-    }
+    if (slot.binderCard.isPlaceholder == false && slot.card != null) filled++;
   }
 
+  final binder = await (db.select(db.binders)..where((t) => t.id.equals(binderId))).getSingleOrNull();
+  
   return BinderDetailState(
     slots: slots,
-    totalValue: totalVal,
+    totalValue: binder?.totalValue ?? 0.0,
     totalSlots: slots.length,
     filledSlots: filled,
   );
 });
 
+// =========================================================================
+// 3. HISTORY PROVIDER (Für den Graphen) - NUTZT JETZT DIE NEUE TABELLE
+// =========================================================================
 class BinderHistoryPoint {
   final DateTime date;
   final double value;
@@ -138,73 +165,13 @@ class BinderHistoryPoint {
 final binderHistoryProvider = FutureProvider.family<List<BinderHistoryPoint>, int>((ref, binderId) async {
   final db = ref.read(databaseProvider);
   
-  // 1. Hole alle Karten-IDs, die aktuell im Binder stecken (keine Platzhalter)
-  final binderCards = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
-  final cardIds = binderCards
-      .where((bc) => !bc.isPlaceholder && bc.cardId != null)
-      .map((bc) => bc.cardId!)
-      .toList();
-
-  if (cardIds.isEmpty) return [];
-
-  // 2. Hole die gesamte Preishistorie für diese Karten
-  // Wir laden nur das Datum (fetchedAt) und den Trend-Preis
-  final prices = await (db.select(db.cardMarketPrices)
-    ..where((t) => t.cardId.isIn(cardIds))
-    ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt)])
+  // Da wir jetzt extra eine BinderHistory Tabelle haben, ist das extrem einfach und schnell!
+  final historyRows = await (db.select(db.binderHistory)
+    ..where((t) => t.binderId.equals(binderId))
+    ..orderBy([(t) => OrderingTerm(expression: t.date)])
   ).get();
 
-  if (prices.isEmpty) return [];
+  if (historyRows.isEmpty) return [];
 
-  // 3. Daten aggregieren (Tag -> {CardId -> Preis})
-  final Map<DateTime, Map<String, double>> dailyPrices = {};
-  
-  for (var p in prices) {
-    // Datum normalisieren (Uhrzeit entfernen)
-    final date = DateTime(p.fetchedAt.year, p.fetchedAt.month, p.fetchedAt.day);
-    
-    if (!dailyPrices.containsKey(date)) {
-      dailyPrices[date] = {};
-    }
-    // Wir speichern den Preis. Falls es mehrere Einträge pro Tag gibt, gewinnt der letzte.
-    if (p.trend != null) {
-       dailyPrices[date]![p.cardId] = p.trend!;
-    }
-  }
-
-  // 4. Historie aufbauen (Forward Fill)
-  // Wir gehen alle Tage durch und summieren den Wert des Binders
-  if (dailyPrices.isEmpty) return [];
-  
-  final sortedDates = dailyPrices.keys.toList()..sort();
-  final start = sortedDates.first;
-  final end = DateTime.now(); // Bis heute
-  
-  final List<BinderHistoryPoint> history = [];
-  final Map<String, double> currentCardValues = {}; // Letzter bekannter Wert jeder Karte
-
-  // Schleife über jeden Tag vom ersten Datenpunkt bis heute
-  for (var d = start; d.isBefore(end) || d.isAtSameMomentAs(end); d = d.add(const Duration(days: 1))) {
-    final today = DateTime(d.year, d.month, d.day);
-    
-    // Updates für heute einpflegen
-    if (dailyPrices.containsKey(today)) {
-      currentCardValues.addAll(dailyPrices[today]!);
-    }
-    
-    // Gesamtwert berechnen (Summe aller aktuellen Kartenwerte)
-    double dailyTotal = 0.0;
-    // Wir summieren nur die Karten, die JETZT im Binder sind (cardIds)
-    // Das simuliert: "Was wäre mein jetziger Binder damals wert gewesen?"
-    for (var id in cardIds) {
-      dailyTotal += currentCardValues[id] ?? 0.0;
-    }
-    
-    // Nur speichern, wenn wir > 0 sind (optional)
-    if (dailyTotal > 0) {
-       history.add(BinderHistoryPoint(today, dailyTotal));
-    }
-  }
-
-  return history;
+  return historyRows.map((row) => BinderHistoryPoint(row.date, row.value)).toList();
 });

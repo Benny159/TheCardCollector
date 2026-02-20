@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import '../api/tcgdex_api_client.dart';
+import '../../domain/logic/binder_service.dart';
 import '../database/app_database.dart';
 
 // Helper Klasse um Daten zwischenzuspeichern
@@ -72,6 +73,8 @@ class SetImporter {
     }
     
     onProgress?.call('✅ Sync fertig! $current Sets geladen.');
+    onProgress?.call('Aktualisiere Binder-Werte...');
+    await BinderService(database).recalculateAllBinders();
   }
 
   Future<void> _saveSetMetadata(dynamic en, dynamic de) async {
