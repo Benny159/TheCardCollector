@@ -437,29 +437,34 @@ class BinderService {
 
       double singlePrice = 0.0;
       bool baseIsHolo = !card.hasNormal && card.hasHolo;
-      final variant = slot.variant ?? 'Normal'; // Fallback, falls keine gespeichert wurde
+      final variant = slot.variant ?? 'Normal'; 
       
-      // Prüfen, ob die gewählte Variante "1st Edition" / "First Edition" heißt
-      final isFirstEdVariant = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
+      final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
+      final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
+      final isReverse = variant == 'Reverse Holo';
 
-      // --- 1. EDITION LOGIK ZUERST ---
+      // --- NEUE 1. EDITION LOGIK ---
       if (card.hasFirstEdition) {
-        if (isFirstEdVariant) {
-          // 1. Edition -> Ist auf Cardmarket die Hauptkarte = 'trend'
-          singlePrice = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
+        if (isHolo) {
+          // Für Holo-Karten
+          if (isFirstEd) {
+            singlePrice = cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0;
+          } else {
+            singlePrice = cmPrice?.trendHolo ?? tcgPrice?.holoMarket ?? 0.0;
+          }
         } else {
-          // Unlimited (Egal ob Normal oder Holo) -> Ist auf Cardmarket die 2. Variante = 'trendHolo'
-          singlePrice = cmPrice?.trendHolo ?? tcgPrice?.normalMarket ?? tcgPrice?.holoMarket ?? 0.0;
+          // Für Non-Holo Karten
+          if (isFirstEd) {
+            singlePrice = cmPrice?.trendHolo ?? tcgPrice?.normalMarket ?? 0.0;
+          } else {
+            singlePrice = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
+          }
         }
-        
-      // --- NORMALE LOGIK FÜR AKTUELLE SETS ---
-      } else if (variant == 'Reverse Holo') {
-        // HIER DER FIX: cmPrice VOR tcgPrice!
-        singlePrice = cmPrice?.trendHolo 
-                   ?? cmPrice?.trendReverse 
-                   ?? tcgPrice?.reverseMarket 
-                   ?? 0.0;
-      } else if (variant == 'Holo') {
+      } 
+      // --- NORMALE LOGIK ---
+      else if (isReverse) {
+        singlePrice = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? tcgPrice?.reverseMarket ?? 0.0;
+      } else if (isHolo) {
         if (baseIsHolo) {
           singlePrice = cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0;
         } else {
@@ -470,7 +475,7 @@ class BinderService {
       }
 
       if (singlePrice == 0.0) {
-        singlePrice = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
+        singlePrice = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? 0.0;
       }
 
       total += singlePrice;

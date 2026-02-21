@@ -282,6 +282,9 @@ class InventoryItem {
   final int quantity;
   final String variant;
   final double totalValue;
+  
+  // NEU: In welchem Binder steckt diese spezifische Karte?
+  final String? binderName; 
 
   InventoryItem({
     required this.card,
@@ -289,15 +292,16 @@ class InventoryItem {
     required this.quantity,
     required this.variant,
     required this.totalValue,
+    this.binderName, // NEU
   });
 }
-
 enum InventorySort { value, name, rarity }
 final inventorySortProvider = StateProvider<InventorySort>((ref) => InventorySort.value);
 
 final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
-  final db = ref.read(databaseProvider);
+  final db = ref.watch(databaseProvider); // Live-Updates aktivieren
 
+  // 1. Hole alle User-Karten (ohne die Binder in SQL zu joinen)
   final query = db.select(db.userCards).join([
     innerJoin(db.cards, db.cards.id.equalsExp(db.userCards.cardId)),
     innerJoin(db.cardSets, db.cardSets.id.equalsExp(db.cards.setId)),
@@ -308,107 +312,125 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
 
     final cardIds = rows.map((r) => r.readTable(db.userCards).cardId).toList();
     
+    // 2. Preise laden
     final allCmPrices = await (db.select(db.cardMarketPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
     final allTcgPrices = await (db.select(db.tcgPlayerPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
-    
     final cmPriceMap = _getLatestCmPrices(allCmPrices);
     final tcgPriceMap = _getLatestTcgPrices(allTcgPrices);
 
+    // 3. ALLE Binder-Zuweisungen für die Karten des Users laden
+    final binderCardsQuery = db.select(db.binderCards).join([
+      innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
+    ]);
+    binderCardsQuery.where(db.binderCards.cardId.isIn(cardIds) & db.binderCards.isPlaceholder.equals(false));
+    final binderRows = await binderCardsQuery.get();
+
+    // 4. Zählen: Welche Karte (ID + Variante) steckt wie oft in welchem Binder?
+    // Struktur: "cardId_variant" -> { "Kanto-Binder": 1, "Glurak-Binder": 1 }
+    final Map<String, Map<String, int>> binderCounts = {};
+    for (final bRow in binderRows) {
+      final bc = bRow.readTable(db.binderCards);
+      final b = bRow.readTable(db.binders);
+      final key = "${bc.cardId}_${bc.variant ?? 'Normal'}";
+      
+      binderCounts.putIfAbsent(key, () => {});
+      binderCounts[key]![b.name] = (binderCounts[key]![b.name] ?? 0) + 1;
+    }
+
     List<InventoryItem> items = [];
 
+    // 5. Karten durchgehen und aufteilen
     for (final row in rows) {
       final userCard = row.readTable(db.userCards);
       final dbCard = row.readTable(db.cards);
       final dbSet = row.readTable(db.cardSets);
 
-      final apiCard = _mapToApiCard(
-        dbCard, 
-        dbSet.printedTotal ?? 0, 
-        true, 
-        cmPriceMap[dbCard.id], 
-        tcgPriceMap[dbCard.id]
-      );
-
+      final apiCard = _mapToApiCard(dbCard, dbSet.printedTotal ?? 0, true, cmPriceMap[dbCard.id], tcgPriceMap[dbCard.id]);
       final apiSet = ApiSet(
-        id: dbSet.id,
-        name: dbSet.name,
-        nameDe: dbSet.nameDe,
-        series: dbSet.series,
-        printedTotal: dbSet.printedTotal ?? 0,
-        total: dbSet.total ?? 0,
-        releaseDate: dbSet.releaseDate ?? '',
-        updatedAt: dbSet.updatedAt,
-        logoUrl: dbSet.logoUrl,
-        logoUrlDe: dbSet.logoUrlDe,
-        symbolUrl: dbSet.symbolUrl,
+        id: dbSet.id, name: dbSet.name, nameDe: dbSet.nameDe, series: dbSet.series, 
+        printedTotal: dbSet.printedTotal ?? 0, total: dbSet.total ?? 0, 
+        releaseDate: dbSet.releaseDate ?? '', updatedAt: dbSet.updatedAt, 
+        logoUrl: dbSet.logoUrl, logoUrlDe: dbSet.logoUrlDe, symbolUrl: dbSet.symbolUrl,
       );
 
+      // --- PREIS LOGIK ---
       double singlePrice = 0.0;
-
-      // Wir holen das Flag direkt aus der dbCard
       bool baseIsHolo = !dbCard.hasNormal && dbCard.hasHolo;
       final variant = userCard.variant;
       
-      // Prüft, ob die Variante "1st Edition" oder ähnlich heißt
-      final isFirstEdVariant = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
+      final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
+      final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
+      final isReverse = variant == 'Reverse Holo';
 
-      // --- 1. EDITION LOGIK ZUERST ---
+      // --- NEUE 1. EDITION LOGIK (Mit Holo/Non-Holo Unterscheidung) ---
       if (dbCard.hasFirstEdition) {
-        if (isFirstEdVariant) {
-          // 1. Edition -> Ist auf Cardmarket die Hauptkarte = 'trendPrice'
-          singlePrice = apiCard.cardmarket?.trendPrice 
-                     ?? apiCard.tcgplayer?.prices?.normal?.market 
-                     ?? 0.0;
+        if (isHolo) {
+          // Für Holo-Karten (z.B. Glurak Base Set)
+          if (isFirstEd) {
+            singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
+          } else {
+            singlePrice = apiCard.cardmarket?.trendHolo ?? apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
+          }
         } else {
-          // Unlimited (Egal ob Normal oder Holo) -> Ist auf Cardmarket die 2. Variante = 'trendHolo'
-          singlePrice = apiCard.cardmarket?.trendHolo 
-                     ?? apiCard.tcgplayer?.prices?.normal?.market 
-                     ?? apiCard.tcgplayer?.prices?.holofoil?.market 
-                     ?? 0.0;
+          // Für Non-Holo Karten (z.B. Bisasam Base Set)
+          if (isFirstEd) {
+            singlePrice = apiCard.cardmarket?.trendHolo ?? apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
+          } else {
+            singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
+          }
         }
-        
-      // --- NORMALE LOGIK FÜR AKTUELLE SETS ---
-      } else if (variant == 'Reverse Holo') {
-        // Reverse Holo steht bei Cardmarket fast immer in 'trendHolo'
-        singlePrice = apiCard.cardmarket?.trendHolo 
-                   ?? apiCard.tcgplayer?.prices?.reverseHolofoil?.market 
-                   ?? apiCard.cardmarket?.reverseHoloTrend 
-                   ?? 0.0;
-                   
-      } else if (variant == 'Holo') {
+      } 
+      // --- NORMALE LOGIK ---
+      else if (isReverse) {
+        singlePrice = apiCard.cardmarket?.trendHolo ?? apiCard.cardmarket?.reverseHoloTrend ?? apiCard.tcgplayer?.prices?.reverseHolofoil?.market ?? 0.0;
+      } else if (isHolo) {
         if (baseIsHolo) {
-          // GLURAK-FALL: Es gibt kein 'Normal'. Holo IST die Standardkarte!
-          singlePrice = apiCard.cardmarket?.trendPrice 
-                     ?? apiCard.tcgplayer?.prices?.holofoil?.market 
-                     ?? 0.0;
+          singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
         } else {
-          // ALTER FALL: Es gibt Normal UND Holo.
-          singlePrice = apiCard.cardmarket?.trendHolo 
-                     ?? apiCard.tcgplayer?.prices?.holofoil?.market 
-                     ?? 0.0;
+          singlePrice = apiCard.cardmarket?.trendHolo ?? apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
         }
-        
       } else {
-        // BISASAM-FALL (Normal)
-        singlePrice = apiCard.cardmarket?.trendPrice 
-                   ?? apiCard.tcgplayer?.prices?.normal?.market 
-                   ?? 0.0;
+        singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
       }
 
-      // Falls immer noch 0€ rauskam, nehmen wir irgendeinen Preis als Notlösung
       if (singlePrice == 0.0) {
-        singlePrice = apiCard.cardmarket?.trendPrice 
-                   ?? apiCard.tcgplayer?.prices?.normal?.market 
-                   ?? 0.0;
+        singlePrice = (isHolo ? apiCard.tcgplayer?.prices?.holofoil?.market : apiCard.tcgplayer?.prices?.normal?.market) ?? apiCard.cardmarket?.trendPrice ?? 0.0;
       }
 
-      items.add(InventoryItem(
-        card: apiCard,
-        set: apiSet,
-        quantity: userCard.quantity,
-        variant: userCard.variant,
-        totalValue: singlePrice * userCard.quantity,
-      ));
+      // --- SPLITTING LOGIK ---
+      final key = "${userCard.cardId}_${userCard.variant}";
+      final bindersForThisCard = binderCounts[key] ?? {};
+
+      int totalInBinders = 0;
+
+      // a) Ein Item für jeden Binder erstellen, in dem die Karte liegt
+      for (final entry in bindersForThisCard.entries) {
+        final binderName = entry.key;
+        final qtyInBinder = entry.value;
+        
+        // Verhindern, dass mehr Karten angezeigt werden, als du eigentlich besitzt
+        int assignedQty = qtyInBinder;
+        if (totalInBinders + assignedQty > userCard.quantity) {
+           assignedQty = userCard.quantity - totalInBinders;
+        }
+        if (assignedQty <= 0) continue;
+
+        totalInBinders += assignedQty;
+
+        items.add(InventoryItem(
+          card: apiCard, set: apiSet, quantity: assignedQty, variant: userCard.variant,
+          totalValue: singlePrice * assignedQty, binderName: binderName, 
+        ));
+      }
+
+      // b) Falls noch Karten übrig sind (Lose im Inventar)
+      final looseQty = userCard.quantity - totalInBinders;
+      if (looseQty > 0) {
+        items.add(InventoryItem(
+          card: apiCard, set: apiSet, quantity: looseQty, variant: userCard.variant,
+          totalValue: singlePrice * looseQty, binderName: null, 
+        ));
+      }
     }
 
     return items;
@@ -489,4 +511,27 @@ final cardPriceHistoryProvider = FutureProvider.family<Map<String, List<dynamic>
     'cm': cmHistory,
     'tcg': tcgHistory,
   };
+});
+
+// -----------------------------------------------------------------------------
+// BINDER LOCATION PROVIDER
+// -----------------------------------------------------------------------------
+// Sucht extrem schnell und LIVE heraus, in welchen Bindern eine spezifische Karte aktuell steckt.
+final cardBinderLocationProvider = StreamProvider.autoDispose.family<List<String>, String>((ref, cardId) {
+  final db = ref.watch(databaseProvider); // WICHTIG: watch statt read!
+  
+  // Wir suchen alle Slots, in denen die Karte steckt UND die keine Platzhalter sind
+  final query = db.select(db.binderCards).join([
+    innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
+  ]);
+  
+  query.where(db.binderCards.cardId.equals(cardId) & db.binderCards.isPlaceholder.equals(false));
+  
+  // .watch() statt .get() macht daraus einen Live-Stream
+  return query.watch().map((rows) {
+    if (rows.isEmpty) return [];
+    
+    // Namen der Binder sammeln (und Duplikate entfernen)
+    return rows.map((r) => r.readTable(db.binders).name).toSet().toList();
+  });
 });

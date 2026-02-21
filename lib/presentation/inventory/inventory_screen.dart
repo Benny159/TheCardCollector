@@ -2,15 +2,17 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
-import 'dart:math' as math; // Wichtig für PI
+import 'dart:math' as math; 
 
 import '../../data/api/search_provider.dart';
-// Falls InventoryItem hier definiert ist, sonst anpassen
 import '../cards/card_detail_screen.dart';
 import 'inventory_bottom_sheet.dart';
 
-// Provider für den Suchtext im Inventar
 final inventorySearchProvider = StateProvider<String>((ref) => '');
+
+// --- NEU: Ein Enum für die Gruppierung ---
+enum InventoryGroupMode { none, bySet, byBinder }
+final inventoryGroupModeProvider = StateProvider<InventoryGroupMode>((ref) => InventoryGroupMode.none);
 
 class InventoryScreen extends ConsumerWidget {
   const InventoryScreen({super.key});
@@ -19,7 +21,7 @@ class InventoryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final inventoryAsync = ref.watch(inventoryProvider);
     final sortMode = ref.watch(inventorySortProvider);
-    final groupBySet = ref.watch(inventoryGroupBySetProvider); // Achtung: Dieser Provider muss in search_provider.dart existieren (habe ihn unten ergänzt)
+    final groupMode = ref.watch(inventoryGroupModeProvider); 
     final searchText = ref.watch(inventorySearchProvider);
 
     return Scaffold(
@@ -31,18 +33,6 @@ class InventoryScreen extends ConsumerWidget {
         error: (err, stack) => Center(child: Text('Fehler: $err')),
         data: (allItems) {
           
-          // 1. FILTERN (Suche)
-          var filteredItems = allItems;
-          if (searchText.isNotEmpty) {
-            filteredItems = allItems.where((item) {
-              final nameMatch = item.card.name.toLowerCase().contains(searchText.toLowerCase());
-              final nameDeMatch = item.card.nameDe?.toLowerCase().contains(searchText.toLowerCase()) ?? false;
-              final setMatch = item.set.name.toLowerCase().contains(searchText.toLowerCase());
-              
-              return nameMatch || nameDeMatch || setMatch;
-            }).toList();
-          }
-
           if (allItems.isEmpty) {
             return const Center(
               child: Column(
@@ -56,9 +46,59 @@ class InventoryScreen extends ConsumerWidget {
             );
           }
 
+          // 1. FILTERN (Suche)
+          var filteredItems = allItems;
+          if (searchText.isNotEmpty) {
+            filteredItems = allItems.where((item) {
+              final nameMatch = item.card.name.toLowerCase().contains(searchText.toLowerCase());
+              final nameDeMatch = item.card.nameDe?.toLowerCase().contains(searchText.toLowerCase()) ?? false;
+              final setMatch = item.set.name.toLowerCase().contains(searchText.toLowerCase());
+              final binderMatch = (item.binderName ?? '').toLowerCase().contains(searchText.toLowerCase());
+              
+              return nameMatch || nameDeMatch || setMatch || binderMatch;
+            }).toList();
+          }
+
+          // --- NEU: KARTEN WIEDER ZUSAMMENFASSEN ---
+          // Wenn wir NICHT nach Binder sortieren, verschmelzen wir gesplittete 
+          // Karten wieder zu einem einzigen Eintrag.
+          if (groupMode != InventoryGroupMode.byBinder) {
+            final Map<String, InventoryItem> mergedMap = {};
+            
+            for (final item in filteredItems) {
+              // Der Schlüssel ist Karte + Variante (z.B. Schiggy_Reverse Holo)
+              final key = "${item.card.id}_${item.variant}";
+              
+              if (mergedMap.containsKey(key)) {
+                // Karte existiert schon -> Menge und Wert addieren!
+                final existing = mergedMap[key]!;
+                mergedMap[key] = InventoryItem(
+                  card: existing.card,
+                  set: existing.set,
+                  quantity: existing.quantity + item.quantity,
+                  variant: existing.variant,
+                  totalValue: existing.totalValue + item.totalValue,
+                  binderName: null, // Bindername ist hier egal
+                );
+              } else {
+                // Erste Karte dieser Art -> Einfügen
+                mergedMap[key] = InventoryItem(
+                  card: item.card,
+                  set: item.set,
+                  quantity: item.quantity,
+                  variant: item.variant,
+                  totalValue: item.totalValue,
+                  binderName: null, 
+                );
+              }
+            }
+            // Wir überschreiben unsere Liste mit den zusammengefassten Karten
+            filteredItems = mergedMap.values.toList();
+          }
+
           // 2. STATISTIK (Gesamt)
-          final int totalCards = allItems.fold(0, (sum, item) => sum + item.quantity);
-          final double totalValue = allItems.fold(0.0, (sum, item) => sum + item.totalValue);
+          final int totalCards = filteredItems.fold(0, (sum, item) => sum + item.quantity);
+          final double totalValue = filteredItems.fold(0.0, (sum, item) => sum + item.totalValue);
 
           // 3. SORTIEREN
           final sortedItems = List<InventoryItem>.from(filteredItems);
@@ -70,8 +110,6 @@ class InventoryScreen extends ConsumerWidget {
                 return (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
               case InventorySort.rarity:
                 return (b.card.rarity).compareTo(a.card.rarity); 
-              // case InventorySort.type: und .number habe ich entfernt, da sie im Enum oben nicht mehr waren.
-              // Falls du sie willst, musst du sie im Enum InventorySort in search_provider.dart wieder einfügen.
               default:
                 return 0;
             }
@@ -79,24 +117,16 @@ class InventoryScreen extends ConsumerWidget {
 
           return Column(
             children: [
-              // Header Stats
               _buildHeaderStats(context, totalCards, totalValue),
-              
-              // Suchleiste
               _buildSearchBar(context, ref, searchText),
-
-              // Filter Leiste
-              _buildFilterBar(context, ref, sortMode, groupBySet),
-              
+              _buildFilterBar(context, ref, sortMode, groupMode),
               const Divider(height: 1),
 
-              // Inhalt
+              // 4. ANZEIGEN JE NACH MODUS
               Expanded(
                 child: sortedItems.isEmpty 
                   ? const Center(child: Text("Keine Ergebnisse für deine Suche."))
-                  : groupBySet 
-                    ? _buildGroupedList(sortedItems)
-                    : _buildGrid(sortedItems),
+                  : _buildContent(sortedItems, groupMode),
               ),
             ],
           );
@@ -106,6 +136,12 @@ class InventoryScreen extends ConsumerWidget {
   }
 
   // --- WIDGETS ---
+
+  Widget _buildContent(List<InventoryItem> items, InventoryGroupMode mode) {
+    if (mode == InventoryGroupMode.bySet) return _buildGroupedBySet(items);
+    if (mode == InventoryGroupMode.byBinder) return _buildGroupedByBinder(items);
+    return _buildGrid(items); // Flache Liste
+  }
 
   Widget _buildHeaderStats(BuildContext context, int count, double value) {
     return Container(
@@ -138,7 +174,7 @@ class InventoryScreen extends ConsumerWidget {
       child: TextField(
         controller: TextEditingController(text: currentText)..selection = TextSelection.fromPosition(TextPosition(offset: currentText.length)),
         decoration: InputDecoration(
-          hintText: 'Inventar durchsuchen...',
+          hintText: 'Suche (Name, Set, Binder)...',
           prefixIcon: const Icon(Icons.search),
           suffixIcon: currentText.isNotEmpty 
             ? IconButton(icon: const Icon(Icons.clear), onPressed: () => ref.read(inventorySearchProvider.notifier).state = '')
@@ -153,17 +189,17 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildFilterBar(BuildContext context, WidgetRef ref, InventorySort currentSort, bool groupBySet) {
+  Widget _buildFilterBar(BuildContext context, WidgetRef ref, InventorySort currentSort, InventoryGroupMode currentGroup) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          const Icon(Icons.sort, size: 20, color: Colors.grey),
-          const SizedBox(width: 8),
+          const Icon(Icons.sort, size: 18, color: Colors.grey),
+          const SizedBox(width: 4),
           DropdownButton<InventorySort>(
             value: currentSort,
             underline: const SizedBox(),
-            style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500),
+            style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500, fontSize: 13),
             items: const [
               DropdownMenuItem(value: InventorySort.value, child: Text("Wert")),
               DropdownMenuItem(value: InventorySort.name, child: Text("Name")),
@@ -174,11 +210,23 @@ class InventoryScreen extends ConsumerWidget {
             },
           ),
           const Spacer(),
-          const Text("Nach Sets: ", style: TextStyle(fontSize: 13)),
-          Switch(
-            value: groupBySet,
-            activeThumbColor: Colors.blueAccent,
-            onChanged: (val) => ref.read(inventoryGroupBySetProvider.notifier).state = val,
+          
+          // NEU: Segmented Button für 3 Ansichten
+          SegmentedButton<InventoryGroupMode>(
+            segments: const [
+              ButtonSegment(value: InventoryGroupMode.none, icon: Icon(Icons.grid_view, size: 16)),
+              ButtonSegment(value: InventoryGroupMode.bySet, icon: Icon(Icons.layers, size: 16)),
+              ButtonSegment(value: InventoryGroupMode.byBinder, icon: Icon(Icons.folder_special, size: 16)),
+            ],
+            selected: {currentGroup},
+            onSelectionChanged: (Set<InventoryGroupMode> newSelection) {
+              ref.read(inventoryGroupModeProvider.notifier).state = newSelection.first;
+            },
+            showSelectedIcon: false,
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
           ),
         ],
       ),
@@ -190,7 +238,7 @@ class InventoryScreen extends ConsumerWidget {
       padding: const EdgeInsets.all(10),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        childAspectRatio: 0.70, // Standard TCG Format
+        childAspectRatio: 0.70, 
         crossAxisSpacing: 8,
         mainAxisSpacing: 8,
       ),
@@ -199,10 +247,9 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildGroupedList(List<InventoryItem> items) {
+  Widget _buildGroupedBySet(List<InventoryItem> items) {
     final grouped = groupBy(items, (item) => item.set.id);
     
-    // Sortieren nach Release Date (neu oben)
     final sortedKeys = grouped.keys.toList()..sort((a, b) {
       final dateA = grouped[a]!.first.set.releaseDate;
       final dateB = grouped[b]!.first.set.releaseDate;
@@ -262,6 +309,74 @@ class InventoryScreen extends ConsumerWidget {
       },
     );
   }
+
+  // --- NEU: NACH BINDERN GRUPPIERT ---
+  Widget _buildGroupedByBinder(List<InventoryItem> items) {
+    // Gruppiere nach Binder-Name (null bedeutet "Lose im Inventar")
+    final grouped = groupBy(items, (item) => item.binderName ?? "Nicht im Binder");
+    
+    // Wir sortieren alphabetisch, aber "Nicht im Binder" ganz ans Ende!
+    final sortedKeys = grouped.keys.toList()..sort((a, b) {
+      if (a == "Nicht im Binder") return 1;
+      if (b == "Nicht im Binder") return -1;
+      return a.compareTo(b);
+    });
+
+    return ListView.builder(
+      itemCount: sortedKeys.length,
+      padding: const EdgeInsets.only(bottom: 20),
+      itemBuilder: (context, index) {
+        final binderName = sortedKeys[index];
+        final binderCards = grouped[binderName]!;
+
+        final totalCount = binderCards.fold(0, (sum, i) => sum + i.quantity);
+        final totalValue = binderCards.fold(0.0, (sum, i) => sum + i.totalValue);
+        
+        final isLoose = binderName == "Nicht im Binder";
+
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          elevation: isLoose ? 0 : 2, // Binder etwas hervorheben
+          color: isLoose ? Colors.grey[50] : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: isLoose ? BorderSide(color: Colors.grey[300]!) : BorderSide.none,
+          ),
+          child: ExpansionTile(
+            initiallyExpanded: !isLoose, // Binder standardmäßig aufklappen
+            leading: CircleAvatar(
+              backgroundColor: isLoose ? Colors.grey[300] : Colors.blueAccent.withOpacity(0.2),
+              child: Icon(
+                isLoose ? Icons.inventory_2 : Icons.menu_book, 
+                color: isLoose ? Colors.grey[600] : Colors.blueAccent,
+                size: 20,
+              ),
+            ),
+            title: Text(binderName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            subtitle: Text("$totalCount Karten • ${totalValue.toStringAsFixed(2)} €", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            childrenPadding: const EdgeInsets.only(bottom: 12),
+            children: [
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 0.70,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                ),
+                itemCount: binderCards.length,
+                itemBuilder: (context, cardIndex) {
+                  return _InventoryCardTile(item: binderCards[cardIndex]);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
 // --- DAS KARTEN-TILE (Mit Holo Effekt) ---
@@ -277,7 +392,6 @@ class _InventoryCardTile extends ConsumerWidget {
     final bool isHolo = item.variant == 'Holo';
     final bool showEffect = isReverseHolo || isHolo;
 
-    // Bild-URL (bevorzugt Deutsch)
     final displayImage = item.card.displayImage;
 
     return InkWell(
@@ -297,42 +411,30 @@ class _InventoryCardTile extends ConsumerWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 1. BILD & EFFEKT
             Builder(
               builder: (context) {
-                // Basis-Bild
                 Widget imageWidget = CachedNetworkImage(
                   imageUrl: displayImage,
                   placeholder: (context, url) => Container(color: Colors.grey[200]),
                   errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
                 );
-
-                // Holo Overlay
-                if (showEffect) {
-                  return HoloEffect(
-                    isReverse: isReverseHolo,
-                    child: imageWidget,
-                  );
-                }
-                
+                if (showEffect) return HoloEffect(isReverse: isReverseHolo, child: imageWidget);
                 return imageWidget;
               },
             ),
             
-            // 2. MENGE BADGE (Oben rechts)
-             Positioned(
-                top: 4, right: 4,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: Colors.blue[800], borderRadius: BorderRadius.circular(10)),
-                  child: Text(
-                    "${item.quantity}x", 
-                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
-                  ),
+            Positioned(
+              top: 4, right: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: Colors.blue[800], borderRadius: BorderRadius.circular(10)),
+                child: Text(
+                  "${item.quantity}x", 
+                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
                 ),
               ),
+            ),
 
-            // 3. INFO LEISTE (Unten)
             Positioned(
               bottom: 0, left: 0, right: 0,
               child: Container(
@@ -341,22 +443,19 @@ class _InventoryCardTile extends ConsumerWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Links: Variante
                     Row(
                       children: [
-                        if (showEffect) 
-                          const Padding(padding: EdgeInsets.only(right: 2.0)),
+                        if (showEffect) const Padding(padding: EdgeInsets.only(right: 2.0)),
                         Text(
                           _getVariantAbbreviation(item.variant),
                           style: TextStyle(
-                            color: showEffect ? Colors.amberAccent : Colors.white70, // Goldener Text bei Holo
+                            color: showEffect ? Colors.amberAccent : Colors.white70,
                             fontSize: 9,
                             fontWeight: showEffect ? FontWeight.bold : FontWeight.normal,
                           ),
                         ),
                       ],
                     ),
-                    // Rechts: Preis
                     Text(
                       "${item.totalValue.toStringAsFixed(2)}€",
                       style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold),
@@ -397,11 +496,7 @@ class _HoloEffectState extends State<HoloEffect> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    // Langsame Animation
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat();
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
   }
 
   @override
@@ -415,10 +510,7 @@ class _HoloEffectState extends State<HoloEffect> with SingleTickerProviderStateM
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 1. Original
         widget.child,
-
-        // 2. Schimmer-Effekt (Overlay)
         AnimatedBuilder(
           animation: _controller,
           builder: (context, _) {
@@ -427,25 +519,22 @@ class _HoloEffectState extends State<HoloEffect> with SingleTickerProviderStateM
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  // Rotierender Gradient
                   transform: GradientRotation(_controller.value * 2 * math.pi), 
                   colors: [
                     Colors.transparent,
                     Colors.white.withOpacity(0.1),
-                    Colors.purple.withOpacity(0.15), // Lila
-                    Colors.blue.withOpacity(0.15),   // Blau
-                    Colors.white.withOpacity(0.25),  // Highlight
+                    Colors.purple.withOpacity(0.15), 
+                    Colors.blue.withOpacity(0.15),   
+                    Colors.white.withOpacity(0.25),  
                     Colors.transparent,
                   ],
                   stops: const [0.0, 0.3, 0.45, 0.55, 0.7, 1.0],
                 ),
-                backgroundBlendMode: BlendMode.overlay, // Macht das Licht "weich"
+                backgroundBlendMode: BlendMode.overlay, 
               ),
             );
           },
         ),
-        
-        // 3. Reverse Holo Muster (Optional: Statisches Rauschen/Kreise)
         if (widget.isReverse)
           Opacity(
             opacity: 0.1,
@@ -473,7 +562,3 @@ class GradientRotation extends GradientTransform {
     return Matrix4.rotationZ(radians);
   }
 }
-
-// --- FEHLENDER PROVIDER (falls nicht in search_provider.dart) ---
-// Falls er dort fehlt, füge ihn hier ein oder in search_provider.dart
-final inventoryGroupBySetProvider = StateProvider<bool>((ref) => false);

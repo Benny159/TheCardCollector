@@ -111,16 +111,36 @@ final binderDetailProvider = FutureProvider.family<BinderDetailState, int>((ref,
     final card = row.readTableOrNull(db.cards);
     double price = 0.0;
 
-    // --- LOGIK FÜR EINZELSLOTS ---
     if (card != null && !bc.isPlaceholder) {
       final cmPrice = cmMap[card.id];
       final tcgPrice = tcgMap[card.id];
       final variant = bc.variant ?? 'Normal';
       bool baseIsHolo = !card.hasNormal && card.hasHolo;
+      
+      final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
+      final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
+      final isReverse = variant == 'Reverse Holo';
 
-      if (variant == 'Reverse Holo') {
+      // --- NEUE 1. EDITION LOGIK ---
+      if (card.hasFirstEdition) {
+        if (isHolo) {
+          if (isFirstEd) {
+            price = cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0;
+          } else {
+            price = cmPrice?.trendHolo ?? tcgPrice?.holoMarket ?? 0.0;
+          }
+        } else {
+          if (isFirstEd) {
+            price = cmPrice?.trendHolo ?? tcgPrice?.normalMarket ?? 0.0;
+          } else {
+            price = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
+          }
+        }
+      } 
+      // --- NORMALE LOGIK ---
+      else if (isReverse) {
         price = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? tcgPrice?.reverseMarket ?? 0.0;
-      } else if (variant == 'Holo') {
+      } else if (isHolo) {
         if (baseIsHolo) {
           price = cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0;
         } else {
@@ -130,7 +150,9 @@ final binderDetailProvider = FutureProvider.family<BinderDetailState, int>((ref,
         price = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
       }
       
-      if (price == 0.0) price = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
+      if (price == 0.0) {
+        price = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? 0.0;
+      }
     }
 
     uniqueSlotsMap[bc.id] = BinderSlotData(binderCard: bc, card: card, marketPrice: price);

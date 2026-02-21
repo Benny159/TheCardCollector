@@ -687,64 +687,117 @@ return GridView.builder(
             
             final displayImage = card.displayImage;
 
-            return InkWell(
-              onTap: () {
-                if (pickerMode) {
-                  Navigator.pop(context, card); 
-                } else {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => CardDetailScreen(card: card)))
-                    .then((_) => ref.invalidate(searchResultsProvider));
-                }
-              },
-              onLongPress: () {
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (context) => InventoryBottomSheet(card: card),
-                ).then((_) => ref.invalidate(searchResultsProvider));
-              },
-              child: Card(
-                elevation: 2,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  side: (pickerMode && isOwned) ? const BorderSide(color: Colors.green, width: 2) : BorderSide.none
-                ),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // HERO ENTFERNT IM GRID: Hero-Tags in Listen mit 100 Items verursachen MASSIVE Lags beim Aufbau!
-                    CachedNetworkImage(
-                      imageUrl: displayImage,
-                      memCacheWidth: 200, // Noch kleiner für die Übersicht
-                      placeholder: (context, url) => Container(color: Colors.grey[200]),
-                      errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
-                      fadeInDuration: const Duration(milliseconds: 150),
+            return Consumer(
+              builder: (context, cardRef, child) {
+                // Wir fragen für jede Karte ab, ob sie in einem Binder steckt
+                final binderLocationsAsync = cardRef.watch(cardBinderLocationProvider(card.id));
+                
+                return InkWell(
+                  onTap: () {
+                    if (pickerMode) {
+                      Navigator.pop(context, card); 
+                    } else {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => CardDetailScreen(card: card)))
+                        .then((_) {
+                          ref.invalidate(searchResultsProvider);
+                          // Auch die Location invalidieren, falls die Karte verschoben wurde
+                          ref.invalidate(cardBinderLocationProvider(card.id)); 
+                        });
+                    }
+                  },
+                  onLongPress: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (context) => InventoryBottomSheet(card: card),
+                    ).then((_) {
+                      ref.invalidate(searchResultsProvider);
+                      ref.invalidate(cardBinderLocationProvider(card.id));
+                    });
+                  },
+                  child: Card(
+                    elevation: 2,
+                    clipBehavior: Clip.antiAlias,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      side: (pickerMode && isOwned) ? const BorderSide(color: Colors.green, width: 2) : BorderSide.none
                     ),
-                    Positioned(
-                      bottom: 0, left: 0, right: 0,
-                      child: Container(
-                        color: Colors.black.withOpacity(0.7),
-                        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              card.number,
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
-                            if (displayPrice != null && displayPrice > 0)
-                              Text(
-                                '${displayPrice.toStringAsFixed(2)}€',
-                                style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                              ),
-                          ],
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        CachedNetworkImage(
+                          imageUrl: displayImage,
+                          memCacheWidth: 200, 
+                          placeholder: (context, url) => Container(color: Colors.grey[200]),
+                          errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
+                          fadeInDuration: const Duration(milliseconds: 150),
                         ),
-                      ),
+                        
+                        // --- NEU: BINDER BADGE (OBEN LINKS) ---
+                        binderLocationsAsync.when(
+                          data: (binders) {
+                            if (binders.isEmpty) return const SizedBox();
+                            
+                            // Zeigt den ersten Binder an (und falls es mehrere sind, ein "+1")
+                            final badgeText = binders.length > 1 
+                                ? "${binders.first} (+${binders.length - 1})" 
+                                : binders.first;
+                                
+                            return Positioned(
+                              top: 4, left: 4,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blueAccent.withOpacity(0.9),
+                                  borderRadius: BorderRadius.circular(4),
+                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 2)],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.folder_special, color: Colors.white, size: 10),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      badgeText,
+                                      style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                      maxLines: 1,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                          loading: () => const SizedBox(),
+                          error: (_,__) => const SizedBox(),
+                        ),
+
+                        // --- UNTERE LEISTE (PREIS & NUMMER) ---
+                        Positioned(
+                          bottom: 0, left: 0, right: 0,
+                          child: Container(
+                            color: Colors.black.withOpacity(0.7),
+                            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  card.number,
+                                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                                if (displayPrice != null && displayPrice > 0)
+                                  Text(
+                                    '${displayPrice.toStringAsFixed(2)}€',
+                                    style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              }
             );
           },
         );

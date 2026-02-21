@@ -24,11 +24,21 @@ final cardInventoryProvider = StreamProvider.family<List<UserCard>, String>((ref
   return (db.select(db.userCards)..where((tbl) => tbl.cardId.equals(cardId))).watch();
 });
 
-// Wir nutzen FutureProvider in Kombination mit dem "Force Refresh" Key Trick
-final cardBindersProvider = FutureProvider.family<List<String>, String>((ref, cardId) async {
+// NEU: Live-Stream statt Future!
+final cardBindersProvider = StreamProvider.family<List<String>, String>((ref, cardId) {
   final db = ref.watch(databaseProvider);
-  // Hole die Binder, in denen die Karte ECHT drin steckt (kein Platzhalter)
-  return BinderService(db).getBindersForCard(cardId);
+  
+  final query = db.select(db.binderCards).join([
+    drift.innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
+  ]);
+  
+  query.where(db.binderCards.cardId.equals(cardId) & db.binderCards.isPlaceholder.equals(false));
+  
+  // .watch() sorgt für Live-Updates
+  return query.watch().map((rows) {
+    if (rows.isEmpty) return [];
+    return rows.map((r) => r.readTable(db.binders).name).toSet().toList();
+  });
 });
 
 // --- SCREEN (Jetzt Stateful für den Refresh-Trick) ---
@@ -142,8 +152,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: BinderLocationWidget(
-                key: ValueKey(_refreshId), // <--- DAS IST DIE MAGIE
-                cardId: widget.card.id
+                cardId: widget.card.id // Key wurde entfernt
               ),
             ),
 
