@@ -7,6 +7,7 @@ import '../../domain/models/api_set.dart';
 import '../sync/set_importer.dart';
 import '../database/database_provider.dart';
 import '../../domain/logic/binder_service.dart';
+import 'package:flutter/foundation.dart';
 import '../../data/api/tcgdex_api_client.dart';
 
 // --- 1. CONFIG ---
@@ -196,7 +197,6 @@ ApiCard _mapToApiCard(
     smallImageUrl: dbCard.imageUrl, 
     largeImageUrl: dbCard.imageUrl,
     imageUrlDe: dbCard.imageUrlDe,
-    
     hasNormal: dbCard.hasNormal,
     hasHolo: dbCard.hasHolo,
     hasReverse: dbCard.hasReverse,
@@ -456,39 +456,49 @@ final portfolioHistoryProvider = StreamProvider<List<PortfolioHistoryData>>((ref
 });
 
 Future<void> createPortfolioSnapshot(WidgetRef ref) async {
-  final db = ref.read(databaseProvider);
-  
-  // WICHTIG: Wir nutzen refresh statt read, um sicherzustellen, dass wir FRISCHE Daten bekommen.
-  // Das zwingt den Provider, die Datenbank neu abzufragen.
-  final items = await ref.refresh(inventoryProvider.future);
-  
-  final double currentTotal = items.fold(0.0, (sum, item) => sum + item.totalValue);
+  try {
+    // 1. Erst checken, ob wir überhaupt noch da sind (verhindert Crash ganz am Anfang)
+    final db = ref.read(databaseProvider);
+    
+    // WICHTIG: Wir nutzen refresh statt read, um sicherzustellen, dass wir FRISCHE Daten bekommen.
+    final items = await ref.refresh(inventoryProvider.future);
+    
+    final double currentTotal = items.fold(0.0, (sum, item) => sum + item.totalValue);
 
-  final today = DateTime.now();
-  final todayDate = DateTime(today.year, today.month, today.day);
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
 
-  // Prüfen, ob für HEUTE schon ein Eintrag existiert
-  final existingEntry = await (db.select(db.portfolioHistory)
-    ..where((t) => t.date.equals(todayDate))
-  ).getSingleOrNull();
+    // Prüfen, ob für HEUTE schon ein Eintrag existiert
+    final existingEntry = await (db.select(db.portfolioHistory)
+      ..where((t) => t.date.equals(todayDate))
+    ).getSingleOrNull();
 
-  if (existingEntry != null) {
-    // Update: Wenn wir heute schon was gespeichert haben, überschreiben wir es mit dem neuen Wert.
-    // Das passiert z.B., wenn man 5 Karten nacheinander löscht/hinzufügt.
-    await (db.update(db.portfolioHistory)..where((t) => t.id.equals(existingEntry.id)))
-      .write(PortfolioHistoryCompanion(totalValue: Value(currentTotal)));
-  } else {
-    // Insert: Der erste Snapshot des Tages
-    await db.into(db.portfolioHistory).insert(
-      PortfolioHistoryCompanion.insert(
-        date: todayDate,
-        totalValue: currentTotal,
-      ),
-    );
+    if (existingEntry != null) {
+      await (db.update(db.portfolioHistory)..where((t) => t.id.equals(existingEntry.id)))
+        .write(PortfolioHistoryCompanion(totalValue: Value(currentTotal)));
+    } else {
+      await db.into(db.portfolioHistory).insert(
+        PortfolioHistoryCompanion.insert(
+          date: todayDate,
+          totalValue: currentTotal,
+        ),
+      );
+    }
+    
+    await BinderService(db).recalculateAllBinders();
+    
+    // 2. UI für den Graphen aktualisieren
+    // Das ist der Teil, der crasht, wenn der Screen schon weg ist.
+    ref.invalidate(portfolioHistoryProvider);
+
+  } on StateError catch (_) {
+    // MAGIE: Wenn der "Bad state: Cannot use 'ref' after widget was disposed" Fehler kommt,
+    // ignorieren wir ihn einfach lautlos! 
+    // Der User hat den Screen verlassen, aber die Berechnungen davor wurden trotzdem gespeichert.
+  } catch (e) {
+    // Falls ein echter anderer Fehler auftritt (z.B. Datenbank kaputt)
+    debugPrint("Fehler beim Portfolio Snapshot: $e");
   }
-  await BinderService(db).recalculateAllBinders();
-  // UI für den Graphen aktualisieren
-  ref.invalidate(portfolioHistoryProvider);
 }
 
 // Holt die Preishistorie für eine Karte (Cardmarket & TCGPlayer)

@@ -50,6 +50,12 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(forceBinderRefreshProvider, (previous, next) {
+      // Wenn der Zähler erhöht wurde, rufen wir DEINE Methode auf!
+      if (next > (previous ?? 0)) {
+        _forceRefresh();
+      }
+    });
     final asyncData = ref.watch(binderDetailProvider(widget.binder.id));
 
     return Scaffold(

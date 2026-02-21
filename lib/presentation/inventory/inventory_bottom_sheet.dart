@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drift/drift.dart' as drift; 
 
 import '../../data/database/database_provider.dart';
 import '../../data/database/app_database.dart'; 
 import '../../domain/models/api_card.dart';
 import '../../data/api/search_provider.dart'; 
+import '../../presentation/binders/binder_detail_provider.dart';
+import '../../domain/logic/binder_service.dart';
+
+// --- NEU: Speichert die letzte Binder-Auswahl für diese App-Session ---
+final lastSelectedBinderProvider = StateProvider<int?>((ref) => -1);
 
 class InventoryBottomSheet extends ConsumerStatefulWidget {
   final ApiCard card;
@@ -21,6 +27,8 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
   String _condition = 'NM';
   String _language = 'Deutsch';
   
+  List<Binder> _availableBinders = [];
+  
   List<String> _availableVariants = [];
   late String _variant; 
 
@@ -31,23 +39,30 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
   void initState() {
     super.initState();
     _initVariants();
+    _loadBinders(); 
   }
 
-  // --- NEUE LOGIK: VARIANTEN AUS DB-FLAGS ---
+  Future<void> _loadBinders() async {
+    final db = ref.read(databaseProvider);
+    final binders = await db.select(db.binders).get();
+    if (mounted) {
+      setState(() {
+        _availableBinders = binders;
+      });
+    }
+  }
+
   void _initVariants() {
     List<String> detected = [];
 
-    // Wir schauen einfach auf die Flags, die wir von TCGdex/DB haben
     if (widget.card.hasNormal) detected.add('Normal');
     if (widget.card.hasHolo) detected.add('Holo');
     if (widget.card.hasReverse) detected.add('Reverse Holo');
     if (widget.card.hasFirstEdition) detected.add('1st Edition');
     if (widget.card.hasWPromo) detected.add('WPromo');
 
-    // Fallback: Wenn gar nichts gesetzt ist (sollte nicht passieren), nehmen wir Normal
     if (detected.isEmpty) detected.add('Normal');
     
-    // Sortierung für schöne UX
     final order = ['Normal', 'Holo', 'Reverse Holo', '1st Edition', 'WPromo'];
     detected.sort((a, b) {
       int indexA = order.indexOf(a);
@@ -59,14 +74,22 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
 
     setState(() {
       _availableVariants = detected;
-      _variant = detected.first; // Standardauswahl: Das erste verfügbare
+      _variant = detected.first; 
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // Padding für Tastatur
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+    
+    // Wir lesen die zuletzt getätigte Auswahl aus dem Provider
+    final selectedBinderId = ref.watch(lastSelectedBinderProvider);
+
+    final bool idExists = selectedBinderId == null || 
+                          selectedBinderId == -1 || 
+                          _availableBinders.any((b) => b.id == selectedBinderId);
+                          
+    final safeBinderId = idExists ? selectedBinderId : -1;
 
     return Container(
       padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomPadding),
@@ -78,7 +101,6 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -96,7 +118,6 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
           Text(widget.card.nameDe ?? widget.card.name, style: const TextStyle(color: Colors.grey)),
           const Divider(),
 
-          // 1. Variante & Sprache
           Row(
             children: [
               Expanded(
@@ -121,7 +142,6 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
           
           const SizedBox(height: 10),
 
-          // 2. Zustand & Anzahl
           Row(
             children: [
               Expanded(
@@ -144,9 +164,54 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
             ],
           ),
 
+          const SizedBox(height: 16),
+          
+          // --- BINDER AUSWAHL (Speichert Auswahl live im Provider) ---
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue.withOpacity(0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.folder_special, color: Colors.blue, size: 16),
+                    SizedBox(width: 6),
+                    Text("In Binder einsortieren", style: TextStyle(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<int?>(
+                    value: safeBinderId, // Aus dem Provider!
+                    isExpanded: true,
+                    isDense: true,
+                    icon: const Icon(Icons.arrow_drop_down, color: Colors.blue),
+                    style: const TextStyle(color: Colors.black87, fontSize: 14),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text("❌ Nicht in Binder einsortieren")),
+                      const DropdownMenuItem(value: -1, child: Text("✨ Automatisch (Beliebiger Binder)")),
+                      ..._availableBinders.map((b) => DropdownMenuItem(
+                        value: b.id, 
+                        child: Text("📂 ${b.name}"),
+                      )),
+                    ],
+                    onChanged: (val) {
+                      // Speichert die Auswahl für das nächste Mal
+                      ref.read(lastSelectedBinderProvider.notifier).state = val;
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           const SizedBox(height: 20),
 
-          // 3. Actions
           Row(
             children: [
               Expanded(
@@ -176,7 +241,6 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
   }
 
   Widget _buildDropdown(String label, List<String> items, String value, Function(String?) onChanged) {
-    // Sicherheit: Falls der aktuell gewählte Wert in der Liste nicht existiert
     final safeValue = items.contains(value) ? value : items.firstOrNull ?? value;
 
     return Column(
@@ -204,7 +268,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
         border: Border.all(color: Colors.grey.shade400),
         borderRadius: BorderRadius.circular(8),
       ),
-      height: 48, // Match dropdown height roughly
+      height: 48,
       child: Row(
         children: [
           IconButton(
@@ -229,11 +293,12 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
     );
   }
 
-  Future<void> _saveToInventory() async {
+Future<void> _saveToInventory() async {
     final db = ref.read(databaseProvider);
+    final binderService = BinderService(db);
+    final selectedBinderId = ref.read(lastSelectedBinderProvider);
     
     try {
-      // 1. DB Operationen (INSERT / UPDATE)
       final existingEntry = await (db.select(db.userCards)
         ..where((tbl) => tbl.cardId.equals(widget.card.id))
         ..where((tbl) => tbl.variant.equals(_variant))
@@ -258,23 +323,204 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
         );
       }
 
-      // --- WICHTIG: ERST INVALIDIEREN, DANN SNAPSHOT ---
-      
-      // 2. Provider Cache leeren, damit der Snapshot frische Daten bekommt
-      ref.invalidate(inventoryProvider); 
-      
-      // 3. Jetzt den Snapshot erstellen (berechnet sich neu aus der DB)
-      await createPortfolioSnapshot(ref);
+      String binderMessage = "";
+      bool showOrangeBanner = false;
 
-      // 4. Restliche UI aktualisieren (Liste, Stats, etc.)
-      _refreshProviders();
+      if (selectedBinderId != null) {
+        final cardNameDe = (widget.card.nameDe ?? "").toLowerCase();
+        final cardNameEn = widget.card.name.toLowerCase();
+        
+        final ignoreWords = [
+          'ex', 'v', 'vmax', 'vstar', 'gx', 'team', 'rocket', "rocket's", 'rockets', 
+          'dark', 'dunkles', 'light', 'helles', 'mega', 'm', 'lv', 'x', 'lvx', 'sp'
+        ];
+
+        List<String> getCoreWords(String text) {
+          if (text.trim().isEmpty) return [];
+          
+          // FIX 1: Bindestriche zu Leerzeichen machen ("Pixi-ex" -> "Pixi ex")
+          String spacedText = text.replaceAll('-', ' ');
+          
+          // Alle restlichen Sonderzeichen entfernen
+          final cleaned = spacedText.replaceAll(RegExp(r'[^a-z0-9äöüß\s]'), '').toLowerCase();
+          final words = cleaned.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+          final coreWords = words.where((w) => !ignoreWords.contains(w)).toList();
+          
+          return coreWords.isNotEmpty ? coreWords : words;
+        }
+
+        final cWordsDe = getCoreWords(cardNameDe);
+        final cWordsEn = getCoreWords(cardNameEn);
+
+        final query = db.select(db.binderCards);
+        if (selectedBinderId != -1) {
+          query.where((tbl) => tbl.binderId.equals(selectedBinderId));
+        }
+        final allSlots = await query.get();
+
+        List<BinderCard> potentialSlots = allSlots.where((slot) {
+          final pLabel = (slot.placeholderLabel ?? '').toLowerCase();
+          if (pLabel.isEmpty) return false;
+          
+          final pWords = getCoreWords(pLabel);
+          if (pWords.isEmpty) return false;
+
+          // FIX 2: Nur matchen, wenn die jeweilige Sprache auch Wörter hat!
+          bool matchDe = false;
+          if (cWordsDe.isNotEmpty) {
+            matchDe = pWords.every((w) => cWordsDe.contains(w)) || cWordsDe.every((w) => pWords.contains(w));
+          }
+          
+          bool matchEn = false;
+          if (cWordsEn.isNotEmpty) {
+            matchEn = pWords.every((w) => cWordsEn.contains(w)) || cWordsEn.every((w) => pWords.contains(w));
+          }
+
+          // Wenn entweder der deutsche oder der englische Kern-Name passt -> MATCH!
+          return matchDe || matchEn;
+        }).toList();
+
+        if (potentialSlots.isNotEmpty) {
+          potentialSlots.sort((a, b) {
+            if (a.isPlaceholder && !b.isPlaceholder) return -1;
+            if (!a.isPlaceholder && b.isPlaceholder) return 1;
+
+            final aLabel = a.placeholderLabel?.toLowerCase() ?? '';
+            final bLabel = b.placeholderLabel?.toLowerCase() ?? '';
+            
+            // FIX 3: Auch hier absichern, dass leere deutsche Namen nicht als "Exact Match" gewertet werden
+            bool aExact = (cardNameDe.isNotEmpty && aLabel == cardNameDe) || aLabel == cardNameEn;
+            bool bExact = (cardNameDe.isNotEmpty && bLabel == cardNameDe) || bLabel == cardNameEn;
+            
+            if (aExact && !bExact) return -1;
+            if (!aExact && bExact) return 1;
+            return 0; 
+          });
+
+          int slotsFilled = 0;
+          
+          for (var i = 0; i < _quantity && i < potentialSlots.length; i++) {
+            final slot = potentialSlots[i];
+
+            if (slot.isPlaceholder) {
+              await binderService.fillSlot(slot.id, widget.card.id, variant: _variant);
+              slotsFilled++;
+            } else {
+              final oldCard = slot.cardId != null 
+                  ? await (db.select(db.cards)..where((tbl) => tbl.id.equals(slot.cardId!))).getSingleOrNull()
+                  : null;
+              final oldVariant = slot.variant ?? "Normal";
+
+              if (!mounted) continue;
+
+              bool? replace = await showDialog<bool>(
+                context: context,
+                barrierDismissible: false,
+                builder: (ctx) => AlertDialog(
+                  title: const Text("Slot bereits belegt!"),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text("In diesem Binder-Slot liegt bereits eine Karte. Möchtest du sie durch die neu gescannte Karte ersetzen?", style: TextStyle(fontSize: 14)),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text("Aktuell ($oldVariant)", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                const SizedBox(height: 4),
+                                if (oldCard != null)
+                                  CachedNetworkImage(
+                                    imageUrl: oldCard.imageUrl ?? '', 
+                                    height: 110,
+                                    placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
+                                    errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),
+                                  )
+                                else
+                                  const Icon(Icons.broken_image, size: 50),
+                              ],
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8.0),
+                            child: Icon(Icons.arrow_forward_rounded, color: Colors.blueAccent, size: 36),
+                          ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text("Neu ($_variant)", style: const TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 4),
+                                CachedNetworkImage(
+                                  imageUrl: widget.card.displayImage, 
+                                  height: 110,
+                                  placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
+                                  errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    ],
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), style: TextButton.styleFrom(foregroundColor: Colors.grey[700]), child: const Text("Nein, behalten")),
+                    FilledButton(onPressed: () => Navigator.pop(ctx, true), style: FilledButton.styleFrom(backgroundColor: Colors.blue[800]), child: const Text("Ja, austauschen")),
+                  ],
+                )
+              );
+
+              if (replace == true) {
+                await binderService.fillSlot(slot.id, widget.card.id, variant: _variant);
+                slotsFilled++;
+                binderService.recalculateBinderValue(slot.binderId);
+              }
+            }
+          }
+          
+          if (slotsFilled > 0) {
+            binderMessage = "\nund in $slotsFilled Binder-Slot(s) einsortiert!";
+          } else {
+            binderMessage = "\n(Karten wurden nur ins Inventar gelegt)";
+            showOrangeBanner = true; 
+          }
+        } else {
+          binderMessage = "\n(Kein passender Platz in der Auswahl gefunden)";
+          showOrangeBanner = true; 
+        }
+      }
+
+      // --- MAGIE: UI SOFORT SCHLIESSEN ---
       
+     // 1. Provider für Listen & Ansichten sofort leeren
+      ref.invalidate(inventoryProvider); 
+      ref.invalidate(searchResultsProvider);
+      ref.invalidate(cardsForSetProvider(widget.card.setId));
+      ref.invalidate(setStatsProvider(widget.card.setId));
+
+      // --- NEU: Den Binder zwingen, sich neu aufzubauen ---
+      ref.read(forceBinderRefreshProvider.notifier).state++;
+
+      // 2. Fenster schließen und Banner zeigen
       if (mounted) {
         Navigator.pop(context, true);
+        final bannerColor = showOrangeBanner ? Colors.orange[800]! : Colors.green;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$_quantity x $_variant hinzugefügt!'), backgroundColor: Colors.green)
+          SnackBar(
+            content: Text('$_quantity x $_variant hinzugefügt!$binderMessage'), 
+            backgroundColor: bannerColor,
+            duration: const Duration(seconds: 4),
+          )
         );
       }
+
+      // 3. Den extrem schweren Portfolio Snapshot im Hintergrund starten.
+      // WICHTIG: Kein 'await' davor! Er läuft einfach leise weiter.
+      createPortfolioSnapshot(ref);
+      _refreshProviders();
+
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red));
     }
