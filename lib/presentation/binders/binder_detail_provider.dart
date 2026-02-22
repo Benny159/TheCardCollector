@@ -36,31 +36,39 @@ class BinderStats {
 }
 
 // =========================================================================
-// 1. STATS PROVIDER (Für die Listen-Ansicht) - NEU & CRASH-SICHER
+// 1. STATS PROVIDER (Für die Listen-Ansicht) - NEU & GANZ LIVE
 // =========================================================================
 final binderStatsProvider = StreamProvider.family<BinderStats, int>((ref, binderId) {
   final db = ref.watch(databaseProvider);
 
-  // Wir überwachen die Binder-Tabelle (für totalValue)
-  // und die BinderCards-Tabelle (für die Anzahl der gefüllten Slots)
-  
-  final slotsQuery = db.select(db.binderCards)..where((t) => t.binderId.equals(binderId));
-  
-  return slotsQuery.watch().asyncMap((slots) async {
-    // 1. Wert holen (Jetzt ganz sicher ohne Ausrufezeichen)
-    final binder = await (db.select(db.binders)..where((t) => t.id.equals(binderId))).getSingleOrNull();
-    final double value = binder?.totalValue ?? 0.0;
+  // WICHTIG: Wir nutzen einen JOIN, um BEIDE Tabellen (Binders UND BinderCards) gleichzeitig zu überwachen!
+  // Wenn sich ein Slot ändert ODER der Preis des Binders fertig berechnet wurde, feuert dieser Stream sofort.
+  final query = db.select(db.binders).join([
+    leftOuterJoin(db.binderCards, db.binderCards.binderId.equalsExp(db.binders.id)),
+  ])..where(db.binders.id.equals(binderId));
 
-    // 2. Slots zählen
-    int total = slots.length;
+  // Wir nutzen .map statt .asyncMap, weil wir jetzt alles direkt in einem Rutsch aus der DB haben!
+  return query.watch().map((rows) {
+    if (rows.isEmpty) return BinderStats(0.0, 0, 0);
+
+    // 1. Den Wert direkt aus der Binders-Tabelle holen
+    final binder = rows.first.readTable(db.binders);
+    final double value = binder.totalValue;
+
+    // 2. Alle verknüpften Slots durchzählen
+    int total = 0;
     int filled = 0;
-    
-    for (var slot in slots) {
-      if (slot.isPlaceholder == false && slot.cardId != null) {
-         filled++;
+
+    for (final row in rows) {
+      final slot = row.readTableOrNull(db.binderCards);
+      if (slot != null) {
+        total++;
+        if (!slot.isPlaceholder && slot.cardId != null) {
+          filled++;
+        }
       }
     }
-    
+
     return BinderStats(value, filled, total);
   });
 });
