@@ -46,8 +46,8 @@ class BinderSlotWidget extends StatelessWidget {
 
                     // --- ÄNDERUNG HIER ---
                     // Wir stellen die Animationen ab. Das Bild soll SOFORT da sein.
-                    fadeInDuration: Duration.zero, 
-                    fadeOutDuration: Duration.zero,
+                    fadeInDuration: const Duration(milliseconds: 250), 
+                    fadeOutDuration: const Duration(milliseconds: 250),
                     
                     // Platzhalter
                     placeholder: (context, url) =>Container(

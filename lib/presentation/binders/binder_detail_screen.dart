@@ -8,6 +8,7 @@ import '../../domain/models/api_card.dart';
 import 'binder_detail_provider.dart'; 
 import 'widgets/binder_page_widget.dart';
 import '../search/card_search_screen.dart';
+import 'package:flutter/gestures.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
@@ -82,32 +83,26 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
             pages.add(
               Container(
                 color: const Color(0xFFFDFDFD), 
-                child: InteractiveViewer(
-                  minScale: 1.0,
-                  maxScale: 3.0,
-                  panEnabled: true, 
-                  child: BinderPageWidget(
-                    slots: pageSlots,
-                    rows: widget.binder.rowsPerPage,
-                    cols: widget.binder.columnsPerPage,
-                    pageNumber: i,
-                    totalPages: totalPages, 
-                    onSlotTap: (slot) => _handleSlotTap(slot),
-                    
-                    // Nativer PageController Slide anstatt PageFlip
-                    onNextPage: () {
-                      FocusScope.of(context).unfocus();
-                      if (_currentIndex < totalPages - 1) {
-                        _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-                      }
-                    },
-                    onPrevPage: () {
-                      FocusScope.of(context).unfocus();
-                      if (_currentIndex > 0) {
-                        _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-                      }
-                    },
-                  ),
+                // --- KEIN INTERACTIVE VIEWER MEHR HIER! PageView übernimmt das Wischen. ---
+                child: BinderPageWidget(
+                  slots: pageSlots,
+                  rows: widget.binder.rowsPerPage,
+                  cols: widget.binder.columnsPerPage,
+                  pageNumber: i,
+                  totalPages: totalPages, 
+                  onSlotTap: (slot) => _handleSlotTap(slot),
+                  onNextPage: () {
+                    FocusScope.of(context).unfocus();
+                    if (_currentIndex < totalPages - 1) {
+                      _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                    }
+                  },
+                  onPrevPage: () {
+                    FocusScope.of(context).unfocus();
+                    if (_currentIndex > 0) {
+                      _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                    }
+                  },
                 ),
               ),
             );
@@ -121,8 +116,12 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                 // --- 3. DAS HERZSTÜCK: FLUTTERS NATIVES PAGEVIEW ---
                 child: PageView(
                   controller: _pageController,
+                  // --- NEU: Erlaubt das Wischen mit der Maus am PC! ---
+                  scrollBehavior: ScrollConfiguration.of(context).copyWith(
+                    dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+                  ),
                   onPageChanged: (index) {
-                    _currentIndex = index; // Merken, wo wir sind
+                    _currentIndex = index;
                   },
                   children: [
                     ...pages,
@@ -203,10 +202,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
 
   Future<void> _pickCardForSlot(BinderSlotData slot, {required bool onlyOwned}) async {
     String initialQuery = slot.binderCard.placeholderLabel ?? "";
-    if (initialQuery.contains(" ")) {
-        final parts = initialQuery.split(" ");
-        if (parts.length > 1) initialQuery = parts.sublist(1).join(" ");
-    }
 
     final result = await Navigator.push(
       context,
