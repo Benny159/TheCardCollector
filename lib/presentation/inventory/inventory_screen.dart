@@ -223,7 +223,7 @@ class InventoryScreen extends ConsumerWidget {
               ref.read(inventoryGroupModeProvider.notifier).state = newSelection.first;
             },
             showSelectedIcon: false,
-            style: ButtonStyle(
+            style: const ButtonStyle(
               visualDensity: VisualDensity.compact,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),

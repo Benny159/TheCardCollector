@@ -29,6 +29,8 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
 
   int _currentIndex = 0;
 
+  bool _isRebuildingBook = false;
+
   @override
   void initState() {
     super.initState();
@@ -150,24 +152,32 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   }
 
   Future<void> _forceRefresh() async {
-    // 1. WICHTIG: Aktuelle Seite JETZT sichern (bevor das Widget verschwindet)
+    int savedPage = 0;
     if (_pageFlipKey.currentState != null) {
-       _currentIndex = _pageFlipKey.currentState!.pageNumber;
+       savedPage = _pageFlipKey.currentState!.pageNumber;
     }
-
-    // 2. Stats Provider invalidieren (für Fortschrittsbalken)
-    ref.invalidate(binderStatsProvider(widget.binder.id));
-    
-    // 3. Daten neu laden und WARTEN
-    // Dadurch geht der Screen kurz in den "Loading" Zustand
-    await ref.refresh(binderDetailProvider(widget.binder.id).future);
 
     if (mounted) {
       setState(() {
-        // 4. Hard Reset: Neuen Key vergeben -> Buch wird neu gebaut
-        _pageFlipKey = GlobalKey<PageFlipWidgetState>();
-        _rebuildCounter++;
+        // 1. Das Buch SOFORT verstecken! Das killt den Screenshot-Bug.
+        _isRebuildingBook = true;
+        _currentIndex = savedPage;
       });
+
+      // 2. Wimpernschlag warten, damit Flutter das Buch wirklich aus dem UI löscht
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // 3. JETZT GANZ SICHER die neuen Daten laden
+      ref.invalidate(binderStatsProvider(widget.binder.id));
+      await ref.refresh(binderDetailProvider(widget.binder.id).future);
+
+      if (mounted) {
+        setState(() {
+          // 4. Frische Daten sind da -> Neues Buch aufbauen
+          _pageFlipKey = GlobalKey<PageFlipWidgetState>();
+          _isRebuildingBook = false; 
+        });
+      }
     }
   }
 
