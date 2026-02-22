@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:page_flip/page_flip.dart'; 
 import 'package:drift/drift.dart' as drift; 
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
 import '../../domain/logic/binder_service.dart';
 import '../../domain/models/api_card.dart'; 
-import 'binder_detail_provider.dart'; // Hier ist jetzt auch der StatsProvider drin
+import 'binder_detail_provider.dart'; 
 import 'widgets/binder_page_widget.dart';
 import '../search/card_search_screen.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -21,43 +20,29 @@ class BinderDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
-  GlobalKey<PageFlipWidgetState> _pageFlipKey = GlobalKey<PageFlipWidgetState>();
+  late PageController _pageController;
   final _searchController = TextEditingController();
   
-  // Rebuild Counter zwingt das Widget zum neu zeichnen
-  int _rebuildCounter = 0;
-
   int _currentIndex = 0;
-
-  bool _isRebuildingBook = false;
 
   @override
   void initState() {
     super.initState();
-    // Wir machen das erst nach dem ersten Frame, damit "ref" sicher verfügbar ist
-    Future.microtask(() {
-      // Löscht den Cache für diesen Binder -> Zwingt zum Neuladen aus der DB
-      _forceRefresh();
-    });
+    // 1. Nativer PageController von Flutter (Bulletproof!)
+    _pageController = PageController(initialPage: _currentIndex);
   }
 
-  // Optional: Falls du von außen auf den Screen navigierst und sich Parameter ändern
   @override
-  void didUpdateWidget(BinderDetailScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.binder.id != widget.binder.id) {
-       _forceRefresh();
-    }
+  void dispose() {
+    _pageController.dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<int>(forceBinderRefreshProvider, (previous, next) {
-      // Wenn der Zähler erhöht wurde, rufen wir DEINE Methode auf!
-      if (next > (previous ?? 0)) {
-        _forceRefresh();
-      }
-    });
+    // 2. WIR BRAUCHEN KEIN SIGNAL MEHR! 
+    // Der Live-Stream (oder Future) aktualisiert sich komplett von selbst.
     final asyncData = ref.watch(binderDetailProvider(widget.binder.id));
 
     return Scaffold(
@@ -95,32 +80,33 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
             final pageSlots = state.slots.sublist(start, end);
 
             pages.add(
-              // WICHTIG: Key enthält _rebuildCounter, damit er bei Änderung ALLES neu baut
-              RepaintBoundary(
-                key: ValueKey('binder_${widget.binder.id}_page_${i}_v$_rebuildCounter'), 
-                child: Container(
-                  color: const Color(0xFFFDFDFD), 
-                  child: InteractiveViewer(
-                    minScale: 1.0,
-                    maxScale: 3.0,
-                    panEnabled: true, 
-                    child: BinderPageWidget(
-                      slots: pageSlots,
-                      rows: widget.binder.rowsPerPage,
-                      cols: widget.binder.columnsPerPage,
-                      pageNumber: i,
-                      totalPages: totalPages, 
-                      onSlotTap: (slot) => _handleSlotTap(slot),
-                      
-                      onNextPage: () {
-                        FocusScope.of(context).unfocus();
-                        _pageFlipKey.currentState?.nextPage();
-                      },
-                      onPrevPage: () {
-                        FocusScope.of(context).unfocus();
-                        _pageFlipKey.currentState?.previousPage();
-                      },
-                    ),
+              Container(
+                color: const Color(0xFFFDFDFD), 
+                child: InteractiveViewer(
+                  minScale: 1.0,
+                  maxScale: 3.0,
+                  panEnabled: true, 
+                  child: BinderPageWidget(
+                    slots: pageSlots,
+                    rows: widget.binder.rowsPerPage,
+                    cols: widget.binder.columnsPerPage,
+                    pageNumber: i,
+                    totalPages: totalPages, 
+                    onSlotTap: (slot) => _handleSlotTap(slot),
+                    
+                    // Nativer PageController Slide anstatt PageFlip
+                    onNextPage: () {
+                      FocusScope.of(context).unfocus();
+                      if (_currentIndex < totalPages - 1) {
+                        _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                      }
+                    },
+                    onPrevPage: () {
+                      FocusScope.of(context).unfocus();
+                      if (_currentIndex > 0) {
+                        _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                      }
+                    },
                   ),
                 ),
               ),
@@ -132,16 +118,19 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
               padding: const EdgeInsets.symmetric(vertical: 20.0), 
               child: AspectRatio(
                 aspectRatio: 0.65, 
-                child: PageFlipWidget(
-                  // Auch hier: Key ändern zwingt zum "Hard Reset"
-                  key: _pageFlipKey, 
-                  backgroundColor: Colors.grey[800]!,
-                  initialIndex: _currentIndex,
-                  lastPage: Container(
+                // --- 3. DAS HERZSTÜCK: FLUTTERS NATIVES PAGEVIEW ---
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: (index) {
+                    _currentIndex = index; // Merken, wo wir sind
+                  },
+                  children: [
+                    ...pages,
+                    Container(
                       color: Colors.white, 
                       child: const Center(child: Text("Ende des Binders"))
-                  ),
-                  children: pages,
+                    )
+                  ],
                 ),
               ),
             ),
@@ -149,36 +138,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         },
       ),
     );
-  }
-
-  Future<void> _forceRefresh() async {
-    int savedPage = 0;
-    if (_pageFlipKey.currentState != null) {
-       savedPage = _pageFlipKey.currentState!.pageNumber;
-    }
-
-    if (mounted) {
-      setState(() {
-        // 1. Das Buch SOFORT verstecken! Das killt den Screenshot-Bug.
-        _isRebuildingBook = true;
-        _currentIndex = savedPage;
-      });
-
-      // 2. Wimpernschlag warten, damit Flutter das Buch wirklich aus dem UI löscht
-      await Future.delayed(const Duration(milliseconds: 50));
-
-      // 3. JETZT GANZ SICHER die neuen Daten laden
-      ref.invalidate(binderStatsProvider(widget.binder.id));
-      await ref.refresh(binderDetailProvider(widget.binder.id).future);
-
-      if (mounted) {
-        setState(() {
-          // 4. Frische Daten sind da -> Neues Buch aufbauen
-          _pageFlipKey = GlobalKey<PageFlipWidgetState>();
-          _isRebuildingBook = false; 
-        });
-      }
-    }
   }
 
   void _handleSlotTap(BinderSlotData slot) {
@@ -228,14 +187,10 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                 onTap: () async {
                   Navigator.pop(ctx);
                   final db = ref.read(databaseProvider);
-                  
-                  // DB Update
                   await BinderService(db).clearSlot(slot.binderCard.id);
-                  
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Karte entfernt.")));
-                    // Hier mit await aufrufen!
-                    await _forceRefresh();
+                    ref.invalidate(binderDetailProvider(widget.binder.id));
                   }
                 },
               ),
@@ -284,11 +239,9 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         );
 
         if (onlyOwned) {
-           // 1. Abfragen, welche Varianten wirklich noch frei sind!
            final availableVariants = await service.getAvailableVariantsForCard(pickedCard.id);
 
            if (availableVariants.isEmpty) {
-             // Karte komplett vergriffen
              _showSwapDialog(slot.binderCard.id, pickedCard.id); 
              return; 
            }
@@ -296,10 +249,8 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
            String? selectedVariant;
            
            if (availableVariants.length == 1) {
-             // 2a. Nur eine Variante übrig -> Automatisch nehmen!
              selectedVariant = availableVariants.first;
            } else {
-             // 2b. Mehrere Varianten übrig -> User fragen!
              if (!mounted) return;
              selectedVariant = await showDialog<String>(
                context: context,
@@ -310,38 +261,24 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                    children: availableVariants.map((variant) => ListTile(
                      leading: const Icon(Icons.style, color: Colors.blueAccent),
                      title: Text(variant, style: const TextStyle(fontWeight: FontWeight.bold)),
-                     onTap: () => Navigator.pop(ctx, variant), // Gibt den Namen zurück
+                     onTap: () => Navigator.pop(ctx, variant),
                    )).toList(),
                  ),
-                 actions: [
-                   TextButton(
-                     onPressed: () => Navigator.pop(ctx, null),
-                     child: const Text("Abbrechen"),
-                   ),
-                 ],
+                 actions: [TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text("Abbrechen"))],
                ),
              );
-
-             // Wenn der User außerhalb klickt oder abbricht
              if (selectedVariant == null) return; 
            }
 
-           // 3. Slot mit der ausgewählten Variante füllen
            await service.fillSlot(slot.binderCard.id, pickedCard.id, variant: selectedVariant);
-           
-           if (mounted) {
-             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$selectedVariant Karte hinzugefügt!")));
-           }
+           if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$selectedVariant Karte hinzugefügt!")));
         } else {
-           // ... (Restlicher else-Block für Platzhalter ändern)
            String label = pickedCard.nameDe ?? pickedCard.name;
            await service.configureSlot(slot.binderCard.id, pickedCard.id, label);
         }
         
-        // Wichtig: await _forceRefresh()
-        if (mounted) {
-          await _forceRefresh();
-        }
+        // Zwingt den Provider einfach zum Neuladen - PageView interessiert das nicht, es rendert einfach das neue Bild!
+        if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
         
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e")));
@@ -365,10 +302,10 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
     ref.invalidate(binderHistoryProvider(widget.binder.id));
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Wichtig für mehr Platz
-      backgroundColor: Colors.transparent, // Für abgerundete Ecken
+      isScrollControlled: true, 
+      backgroundColor: Colors.transparent, 
       builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.65, // 65% Höhe
+        height: MediaQuery.of(context).size.height * 0.65, 
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -395,7 +332,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
             onPressed: () async {
               final db = ref.read(databaseProvider);
               await BinderService(db).deleteBinder(widget.binder.id);
-              // Provider invalidieren, damit Liste sich aktualisiert
               ref.invalidate(binderStatsProvider(widget.binder.id)); 
               if (ctx.mounted) {
                 Navigator.pop(ctx); 
@@ -452,15 +388,13 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
       final int targetPage = (index / itemsPerPage).floor();
 
       FocusScope.of(context).unfocus();
-      await Future.delayed(const Duration(milliseconds: 300));
 
       if (mounted) {
-        _currentIndex = targetPage;
-        _pageFlipKey.currentState?.goToPage(targetPage);
+        // Nativer PageView Slide!
+        _pageController.animateToPage(targetPage, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Gefunden auf Seite ${targetPage + 1}!"), duration: const Duration(seconds: 1))
         );
-        await _forceRefresh();
       }
     } else {
       if (mounted) {
