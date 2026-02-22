@@ -500,9 +500,6 @@ Future<void> _saveToInventory() async {
       ref.invalidate(cardsForSetProvider(widget.card.setId));
       ref.invalidate(setStatsProvider(widget.card.setId));
 
-      // --- NEU: Den Binder zwingen, sich neu aufzubauen ---
-      ref.read(forceBinderRefreshProvider.notifier).state++;
-
       // 2. Fenster schließen und Banner zeigen
       if (mounted) {
         Navigator.pop(context, true);

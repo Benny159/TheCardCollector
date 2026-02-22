@@ -35,8 +35,6 @@ class BinderStats {
   BinderStats(this.value, this.filled, this.total);
 }
 
-final forceBinderRefreshProvider = StateProvider<int>((ref) => 0);
-
 // =========================================================================
 // 1. STATS PROVIDER (Für die Listen-Ansicht) - NEU & CRASH-SICHER
 // =========================================================================

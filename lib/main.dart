@@ -9,7 +9,6 @@ import 'data/database/database_provider.dart';
 // Dein Screen Import
 import 'presentation/main_screen.dart'; // <--- HIER: MainScreen Importieren
 
-final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
 void main() {
   // 1. Datenbank initialisieren
   final database = AppDatabase();
@@ -53,7 +52,6 @@ class TcgCollectorApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.redAccent),
         useMaterial3: true,
       ),
-      navigatorObservers: [routeObserver],
       home: const MainScreen(),
     );
   }
