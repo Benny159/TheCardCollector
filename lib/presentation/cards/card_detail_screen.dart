@@ -282,12 +282,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        const Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            const Text("Preisverlauf", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const Text("Quelle: TCGdex", style: TextStyle(color: Colors.grey, fontSize: 10)),
+            Text("Preisverlauf", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text("Quelle: TCGdex", style: TextStyle(color: Colors.grey, fontSize: 10)),
           ],
         ),
         const SizedBox(height: 6),

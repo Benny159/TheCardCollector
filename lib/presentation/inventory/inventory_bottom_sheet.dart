@@ -7,7 +7,6 @@ import '../../data/database/database_provider.dart';
 import '../../data/database/app_database.dart'; 
 import '../../domain/models/api_card.dart';
 import '../../data/api/search_provider.dart'; 
-import '../../presentation/binders/binder_detail_provider.dart';
 import '../../domain/logic/binder_service.dart';
 
 // --- NEU: Speichert die letzte Binder-Auswahl für diese App-Session ---

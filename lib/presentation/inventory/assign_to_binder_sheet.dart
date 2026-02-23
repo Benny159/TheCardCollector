@@ -91,7 +91,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
           const Text("Welche deiner Karten?", style: TextStyle(fontSize: 12, color: Colors.grey)),
           const SizedBox(height: 4),
           DropdownButtonFormField<String>(
-            value: _selectedVariant,
+            initialValue: _selectedVariant,
             isDense: true,
             decoration: InputDecoration(
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -243,7 +243,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
       } else {
         if (mounted) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kein passender Platz in diesem Binder gefunden!'), backgroundColor: Colors.orange));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kein passender Platz in diesem Binder gefunden!'), backgroundColor: Colors.orange));
         }
       }
     } catch (e) {
