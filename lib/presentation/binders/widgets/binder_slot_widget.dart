@@ -5,8 +5,9 @@ import '../binder_detail_provider.dart';
 class BinderSlotWidget extends StatelessWidget {
   final BinderSlotData slotData;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
-  const BinderSlotWidget({super.key, required this.slotData, required this.onTap});
+  const BinderSlotWidget({super.key, required this.slotData, required this.onTap, this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
@@ -16,6 +17,7 @@ class BinderSlotWidget extends StatelessWidget {
     return GestureDetector(
       key: ValueKey("${slotData.binderCard.id}_${isPlaceholder}_${card?.id ?? 'null'}"),
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
@@ -29,7 +31,6 @@ class BinderSlotWidget extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // --- BILD ANZEIGE ---
             if (card != null)
               Opacity(
                 opacity: isPlaceholder ? 0.4 : 1.0, 
@@ -40,21 +41,10 @@ class BinderSlotWidget extends StatelessWidget {
                   child: CachedNetworkImage(
                     imageUrl: card.imageUrl,
                     fit: BoxFit.contain,
-                    
-                    // Speicher sparen (hast du schon, sehr gut!)
                     memCacheWidth: 250, 
-
-                    // --- ÄNDERUNG HIER ---
-                    // Wir stellen die Animationen ab. Das Bild soll SOFORT da sein.
                     fadeInDuration: const Duration(milliseconds: 250), 
                     fadeOutDuration: const Duration(milliseconds: 250),
-                    
-                    // Platzhalter
-                    placeholder: (context, url) =>Container(
-                      color: Colors.transparent, // Kein Loading Spinner beim schnellen Blättern
-                    ),
-                    
-                    // Error Widget
+                    placeholder: (context, url) => Container(color: Colors.transparent),
                     errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
                   ),
                 ),
@@ -62,7 +52,6 @@ class BinderSlotWidget extends StatelessWidget {
             else
               const Center(child: Icon(Icons.add, color: Colors.grey)),
 
-            // --- LABEL ---
             if (slotData.binderCard.placeholderLabel != null)
               Positioned(
                 bottom: 2, left: 2, right: 2,
@@ -79,24 +68,15 @@ class BinderSlotWidget extends StatelessWidget {
                 ),
               ),
 
-            // --- STATUS ---
             if (!isPlaceholder)
             Positioned(
-              top: 4, 
-              right: 4,
+              top: 4, right: 4,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7), // Halb-transparenter Hintergrund für Lesbarkeit
-                  borderRadius: BorderRadius.circular(4),
-                ),
+                decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(4)),
                 child: Text(
                   "${slotData.marketPrice.toStringAsFixed(2)} €",
-                  style: const TextStyle(
-                    color: Colors.greenAccent, // oder Colors.white
-                    fontSize: 8, // Klein genug, um nicht zu stören
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: const TextStyle(color: Colors.greenAccent, fontSize: 8, fontWeight: FontWeight.bold),
                 ),
               ),
             ),

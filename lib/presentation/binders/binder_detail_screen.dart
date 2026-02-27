@@ -91,6 +91,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                   pageNumber: i,
                   totalPages: totalPages, 
                   onSlotTap: (slot) => _handleSlotTap(slot),
+                  onSlotLongPress: (slot) => _handleSlotLongPress(slot),
                   onNextPage: () {
                     FocusScope.of(context).unfocus();
                     if (_currentIndex < totalPages - 1) {
@@ -407,6 +408,79 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nichts gefunden.")));
       }
     }
+  }
+
+  void _handleSlotLongPress(BinderSlotData slot) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text("Slot Layout bearbeiten", style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(slot.binderCard.placeholderLabel ?? "Leer"),
+            ),
+            const Divider(),
+            
+            // --- NEU: NACH LINKS VERSCHIEBEN ---
+            ListTile(
+              leading: const Icon(Icons.arrow_back, color: Colors.purple),
+              title: const Text("Slot nach links verschieben"),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final db = ref.read(databaseProvider);
+                await BinderService(db).moveSlotLeft(widget.binder.id, slot.binderCard.id);
+                if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
+              },
+            ),
+            
+            // --- NEU: NACH RECHTS VERSCHIEBEN ---
+            ListTile(
+              leading: const Icon(Icons.arrow_forward, color: Colors.purple),
+              title: const Text("Slot nach rechts verschieben"),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final db = ref.read(databaseProvider);
+                await BinderService(db).moveSlotRight(widget.binder.id, slot.binderCard.id);
+                if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
+              },
+            ),
+
+            const Divider(),
+
+            ListTile(
+              leading: const Icon(Icons.add_to_photos, color: Colors.blue),
+              title: const Text("Leeren Slot danach einfügen"),
+              subtitle: const Text("Alle nachfolgenden Slots rücken auf"),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final db = ref.read(databaseProvider);
+                await BinderService(db).addSlotRight(widget.binder.id, slot.binderCard.id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot erfolgreich hinzugefügt.")));
+                  ref.invalidate(binderDetailProvider(widget.binder.id));
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_sweep, color: Colors.red),
+              title: const Text("Diesen Slot löschen", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              subtitle: const Text("Alle nachfolgenden Slots rücken zurück"),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final db = ref.read(databaseProvider);
+                await BinderService(db).deleteSlotAndShift(widget.binder.id, slot.binderCard.id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot komplett gelöscht.")));
+                  ref.invalidate(binderDetailProvider(widget.binder.id));
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
