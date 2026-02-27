@@ -76,7 +76,7 @@ class BinderListScreen extends ConsumerWidget {
   }
 }
 
-// --- BINDER CARD ---
+// --- BINDER CARD (Jetzt mit Box-Look!) ---
 class _BinderCard extends ConsumerWidget {
   final Binder binder;
   const _BinderCard({required this.binder});
@@ -84,16 +84,18 @@ class _BinderCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final color = Color(binder.color);
-    
-    // Hier laden wir jetzt den StreamProvider aus binder_detail_provider.dart
-    // Da es ein Stream ist, aktualisiert er sich automatisch!
     final statsAsync = ref.watch(binderStatsProvider(binder.id));
+    
+    // Erkennung: Hat 0 Spalten/Reihen? Dann ist es eine Bulk Box!
+    final isBulkBox = binder.rowsPerPage == 0 || binder.columnsPerPage == 0;
 
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
+            // HIER KOMMT SPÄTER DEIN ECHTER BULK-SCREEN REIN!
+            // Für den Moment navigieren wir ganz normal zum Binder.
             builder: (context) => BinderDetailScreen(binder: binder),
           ),
         );
@@ -101,37 +103,53 @@ class _BinderCard extends ConsumerWidget {
       child: Container(
         decoration: BoxDecoration(
           color: color,
-          borderRadius: const BorderRadius.only(
-            topRight: Radius.circular(12),
-            bottomRight: Radius.circular(12),
-            bottomLeft: Radius.circular(4),
-            topLeft: Radius.circular(4),
-          ),
+          // Bulk Boxen haben rundum leicht abgerundete Ecken, Binder haben einen Buchrücken!
+          borderRadius: isBulkBox 
+              ? BorderRadius.circular(12) 
+              : const BorderRadius.only(
+                  topRight: Radius.circular(12),
+                  bottomRight: Radius.circular(12),
+                  bottomLeft: Radius.circular(4),
+                  topLeft: Radius.circular(4),
+                ),
           boxShadow: [
             BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 5, offset: const Offset(2, 4))
           ],
           gradient: LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
-            colors: [
-              color.withOpacity(0.8),
-              color,
-              color,
-            ],
-            stops: const [0.05, 0.1, 1.0],
+            colors: isBulkBox 
+                ? [color, color.withOpacity(0.8), color] // Box-Beleuchtung
+                : [color.withOpacity(0.8), color, color], // Buch-Beleuchtung
+            stops: isBulkBox ? const [0.0, 0.5, 1.0] : const [0.05, 0.1, 1.0],
           )
         ),
         child: Stack(
           children: [
-            // Buchrücken Linie
-            Positioned(
-              left: 12, top: 0, bottom: 0,
-              child: Container(width: 2, color: Colors.black12),
-            ),
+            // Buchrücken Linie (Nur bei Büchern!)
+            if (!isBulkBox)
+              Positioned(
+                left: 12, top: 0, bottom: 0,
+                child: Container(width: 2, color: Colors.black12),
+              ),
+
+            // Kisten-Deckel (Nur bei Boxen!)
+            if (isBulkBox)
+              Positioned(
+                left: 0, right: 0, top: 0,
+                child: Container(
+                  height: 15,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                    border: Border(bottom: BorderSide(color: Colors.black.withOpacity(0.2), width: 2))
+                  ),
+                ),
+              ),
             
             // Inhalt
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 12, 12, 12),
+              padding: EdgeInsets.fromLTRB(isBulkBox ? 12 : 24, 12, 12, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -173,7 +191,7 @@ class _BinderCard extends ConsumerWidget {
                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                       ),
                     ),
-                    loading: () => const SizedBox(), // Kein Platzhalter mehr, flackert sonst
+                    loading: () => const SizedBox(), 
                     error: (_,__) => const SizedBox(),
                   ),
 
@@ -183,9 +201,15 @@ class _BinderCard extends ConsumerWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        "${binder.rowsPerPage}x${binder.columnsPerPage} Grid", 
-                        style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10)
+                      Row(
+                        children: [
+                          Icon(isBulkBox ? Icons.inventory_2 : Icons.grid_view, size: 10, color: Colors.white70),
+                          const SizedBox(width: 4),
+                          Text(
+                            isBulkBox ? "Lager-Box" : "${binder.rowsPerPage}x${binder.columnsPerPage} Grid", 
+                            style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10)
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
 
@@ -194,21 +218,23 @@ class _BinderCard extends ConsumerWidget {
                         data: (stats) => Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: stats.progress,
-                                backgroundColor: Colors.black26,
-                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
-                                minHeight: 6,
+                            if (!isBulkBox) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: stats.progress,
+                                  backgroundColor: Colors.black26,
+                                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
+                                  minHeight: 6,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
+                              const SizedBox(height: 2),
+                            ],
                             Align(
                               alignment: Alignment.centerRight,
                               child: Text(
-                                "${stats.filled} / ${stats.total}",
-                                style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 10),
+                                isBulkBox ? "${stats.filled} Karten" : "${stats.filled} / ${stats.total}",
+                                style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 10, fontWeight: isBulkBox ? FontWeight.bold : FontWeight.normal),
                               ),
                             ),
                           ],

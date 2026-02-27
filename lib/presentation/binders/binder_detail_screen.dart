@@ -200,20 +200,18 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
     );
   }
 
-  Future<void> _pickCardForSlot(BinderSlotData slot, {required bool onlyOwned}) async {
+ Future<void> _pickCardForSlot(BinderSlotData slot, {required bool onlyOwned}) async {
     String initialQuery = slot.binderCard.placeholderLabel ?? "";
 
-    // --- DER INTELLIGENTE FIX ---
-    if (initialQuery.contains(" ")) {
+    // --- NEU: Verhindere die Suche nach "Leerer Slot" ---
+    if (initialQuery == "Leerer Slot") {
+      initialQuery = ""; 
+    } else if (initialQuery.contains(" ")) {
+      // --- ALT: (Deine Pokedex-Nummern abschneiden) ---
       final parts = initialQuery.split(" ");
-      
-      // Prüft: Fängt das erste Wort mit '#' an (z.B. "#0448")?
-      if (parts.first.startsWith("#")) {
-        // Ja -> Schmeiß die Nummer weg und nimm den Rest (z.B. "Lucario")
+      if (parts.first.startsWith("#") || parts.first.startsWith("✨")) {
         initialQuery = parts.sublist(1).join(" ");
       } 
-      // Wenn es nicht mit '#' anfängt (z.B. "Bisaflor ex"), passiert gar nichts 
-      // und der komplette Name wird gesucht!
     }
 
     final result = await Navigator.push(

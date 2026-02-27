@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' as drift;
-import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../data/database/database_provider.dart';
 import '../../data/database/app_database.dart';

@@ -12,99 +12,74 @@ class BinderService {
     required int color,
     required int rows,
     required int cols,
-    required BinderType type,
-    required BinderSortOrder sortOrder, 
+    required AdvancedBinderType type,
+    required BinderSortOrder sortOrder,
+    int customPages = 10,
+    Set<int>? selectedGens,
+    bool dexMegas = false,
+    bool dexGmax = false,
+    bool dexRegional = false,
+    DexSortStyle dexSort = DexSortStyle.inline,
+    SetCompletionType setCompletion = SetCompletionType.standard,
+    String? selectedSetName,
+    String? selectedTarget,
   }) async {
-    return db.transaction(() async {
-      // 1. Binder erstellen
-      final binderId = await db.into(db.binders).insert(
-        BindersCompanion.insert(
-          name: name,
-          color: color,
-          rowsPerPage: Value(rows),
-          columnsPerPage: Value(cols),
-          type: Value(type.name),
-          sortOrder: Value(sortOrder.name), 
-        ),
-      );
+    final binderId = await db.into(db.binders).insert(
+      BindersCompanion.insert(
+        name: name,
+        color: color,
+        rowsPerPage: Value(rows),
+        columnsPerPage: Value(cols),
+        type: Value(type.name),
+        sortOrder: Value(sortOrder.name), 
+      ),
+    );
 
-      // 2. Slots generieren (falls Theme-Binder)
-      if (type != BinderType.custom) {
-        await _generateSmartSlots(binderId, type, rows, cols, sortOrder);
-      }
+    await _generateAdvancedSlots(
+      binderId: binderId,
+      type: type,
+      rows: rows,
+      cols: cols,
+      sortOrder: sortOrder,
+      customPages: customPages,
+      selectedGens: selectedGens ?? {1},
+      dexMegas: dexMegas,
+      dexGmax: dexGmax,
+      dexRegional: dexRegional,
+      dexSort: dexSort,
+      setCompletion: setCompletion,
+      selectedSetName: selectedSetName,
+      selectedTarget: selectedTarget,
+    );
 
-      // --- NEU: 3. FAKE-HISTORIE FÜR DEN GRAPHEN ANLEGEN ---
-      final now = DateTime.now();
-      
-      // Punkt 1: "Vorgestern" (0.0 €)
-      final twoDaysAgo = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 2));
-      await db.into(db.binderHistory).insert(
-        BinderHistoryCompanion.insert(
-          binderId: binderId,
-          date: twoDaysAgo,
-          value: 0.0,
-        )
-      );
-
-      // Punkt 2: "Heute" (0.0 €) - Das braucht der Graph, damit er eine Linie zeichnen kann (min 2 Punkte)
-      final today = DateTime(now.year, now.month, now.day);
-      await db.into(db.binderHistory).insert(
-        BinderHistoryCompanion.insert(
-          binderId: binderId,
-          date: today,
-          value: 0.0,
-        )
-      );
-      // -----------------------------------------------------
-      
-    });
+    final now = DateTime.now();
+    final twoDaysAgo = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 2));
+    await db.into(db.binderHistory).insert(BinderHistoryCompanion.insert(binderId: binderId, date: twoDaysAgo, value: 0.0));
+    final today = DateTime(now.year, now.month, now.day);
+    await db.into(db.binderHistory).insert(BinderHistoryCompanion.insert(binderId: binderId, date: today, value: 0.0));
   }
 
-  Future<void> _generateSmartSlots(
-      int binderId, 
-      BinderType type, 
-      int rows, 
-      int cols, 
-      BinderSortOrder sortOrder // <--- NEU
-  ) async {
-    int startId = 0;
-    int endId = 0;
-
-    // --- A) BEREICHE (Unverändert) ---
-    switch (type) {
-      case BinderType.kantoDex:   startId = 1; endId = 151; break;
-      case BinderType.johtoDex:   startId = 152; endId = 251; break;
-      case BinderType.hoennDex:   startId = 252; endId = 386; break;
-      case BinderType.sinnohDex:  startId = 387; endId = 493; break;
-      case BinderType.einallDex:  startId = 494; endId = 649; break;
-      case BinderType.kalosDex:   startId = 650; endId = 721; break;
-      case BinderType.alolaDex:   startId = 722; endId = 809; break;
-      case BinderType.galarDex:   startId = 810; endId = 905; break;
-      case BinderType.paldeaDex:  startId = 906; endId = 1025; break;
-      case BinderType.nationalDex: startId = 1; endId = 1025; break;
-      default: return; 
-    }
-
-    // --- B) DATEN LADEN (Unverändert) ---
-    final List<PokedexData> speciesList = await (db.select(db.pokedex)
-      ..where((tbl) => tbl.id.isBetweenValues(startId, endId))
-      ..orderBy([(t) => OrderingTerm(expression: t.id)])
-    ).get();
-
-    final Map<int, String> nameMap = { for (var s in speciesList) s.id: s.name };
-
-    // --- C) SLOTS BERECHNEN (MIT SORTIERUNG) ---
+  // =====================================================================
+  // DIE MAGISCHE SLOT GENERIERUNG
+  // =====================================================================
+  Future<void> _generateAdvancedSlots({
+    required int binderId, required AdvancedBinderType type, required int rows, required int cols,
+    required BinderSortOrder sortOrder, required int customPages, required Set<int> selectedGens,
+    required bool dexMegas, required bool dexGmax, required bool dexRegional, required DexSortStyle dexSort,
+    required SetCompletionType setCompletion, String? selectedSetName, String? selectedTarget,
+  }) async {
+    
     final int slotsPerPage = rows * cols;
-    final List<BinderCardsCompanion> inserts = [];
-    int indexCounter = 0; 
+    if (slotsPerPage == 0 && type != AdvancedBinderType.custom) return;
+    
+    List<BinderCardsCompanion> inserts = [];
+    int indexCounter = 0;
 
-    for (int id = startId; id <= endId; id++) {
-      final pokeNameEn = nameMap[id] ?? "???"; 
-      
-      // 1. VISUELLEN INDEX BERECHNEN (Bleibt gleich)
+    void addSlot(String label, String? cardId, String? variant) {
       final pageIndex = (indexCounter / slotsPerPage).floor();
       final localIndex = indexCounter % slotsPerPage;
       int visualSlotIndex;
+      
       if (sortOrder == BinderSortOrder.leftToRight) {
         visualSlotIndex = localIndex;
       } else {
@@ -113,327 +88,475 @@ class BinderService {
         visualSlotIndex = targetRow * cols + targetCol;
       }
 
-      // 2. INTELLIGENTE NAMENSUCHE
-      final List<String> candidates = _generateCandidateNames(pokeNameEn);
-
-      // Wir suchen ALLE passenden Karten (statt nur limit(1))
-      final possibleCards = await (db.select(db.cards)
-        ..where((tbl) => tbl.name.isIn(candidates))
-      ).get();
-
-      // SORTIERUNG: Karten mit Bild nach vorne!
-      // Wir sortieren die Liste manuell
-      possibleCards.sort((a, b) {
-        // Prüfen ob A ein Bild hat
-        final bool aHasImg = (a.imageUrl.isNotEmpty) || 
-                             (a.imageUrlDe != null && a.imageUrlDe!.isNotEmpty);
-        // Prüfen ob B ein Bild hat
-        final bool bHasImg = (b.imageUrl.isNotEmpty) || 
-                             (b.imageUrlDe != null && b.imageUrlDe!.isNotEmpty);
-
-        if (aHasImg && !bHasImg) return -1; // A kommt zuerst
-        if (!aHasImg && bHasImg) return 1;  // B kommt zuerst
-        return 0; // Egal
-      });
-
-      // Jetzt nehmen wir die erste (die jetzt hoffentlich ein Bild hat)
-      final matchingCard = possibleCards.isNotEmpty ? possibleCards.first : null;
-
-      // 3. LABEL BAUEN (Deutsch bevorzugt)
-      String displayName = pokeNameEn; // Fallback
-      
-      // Wenn wir eine Karte gefunden haben, nehmen wir deren deutschen Namen
-      if (matchingCard != null && matchingCard.nameDe != null && matchingCard.nameDe!.isNotEmpty) {
-        displayName = matchingCard.nameDe!;
-      } else {
-        // Wenn keine Karte gefunden, versuchen wir den API Namen wenigstens schön zu formatieren
-        // (z.B. "Tapu-koko" -> "Tapu Koko")
-        displayName = candidates.last; // Der letzte Kandidat ist meist der "sauberste" (ohne Bindestriche)
-      }
-
-      final label = "#${id.toString().padLeft(4, '0')} $displayName";
-
       inserts.add(BinderCardsCompanion.insert(
         binderId: binderId,
         pageIndex: pageIndex,
         slotIndex: visualSlotIndex,
         isPlaceholder: const Value(true),
         placeholderLabel: Value(label),
-        cardId: matchingCard != null ? Value(matchingCard.id) : const Value.absent(),
+        cardId: cardId != null ? Value(cardId) : const Value.absent(),
+        variant: variant != null ? Value(variant) : const Value.absent(),
       ));
-
       indexCounter++;
     }
 
+    if (type == AdvancedBinderType.custom) {
+      int totalSlots = slotsPerPage * customPages;
+      for (int i = 0; i < totalSlots; i++) addSlot("Leerer Slot", null, null);
+    } 
+
+    else if (type == AdvancedBinderType.dex) {
+      final allDex = await db.select(db.pokedex).get();
+      List<PokedexData> basePokemon = [];
+      List<PokedexData> specialForms = [];
+
+      int getGen(int id) {
+        if (id <= 151) return 1; if (id <= 251) return 2; if (id <= 386) return 3;
+        if (id <= 493) return 4; if (id <= 649) return 5; if (id <= 721) return 6;
+        if (id <= 809) return 7; if (id <= 905) return 8; return 9;
+      }
+
+      for (var p in allDex) {
+        // --- 1. DER GEISTER-FILTER (Müll aus der API ignorieren) ---
+        if (_isIgnoredForm(p.name)) continue;
+
+        if (p.id <= 1025) {
+          if (selectedGens.contains(getGen(p.id))) basePokemon.add(p);
+        } else {
+          final lowerName = p.name.toLowerCase();
+          bool isMega = lowerName.contains('-mega') || lowerName.contains('-primal');
+          bool isGmax = lowerName.contains('-gmax');
+          bool isRegional = lowerName.contains('-alola') || lowerName.contains('-galar') || lowerName.contains('-hisui') || lowerName.contains('-paldea');
+          
+          if ((isMega && dexMegas) || (isGmax && dexGmax) || (isRegional && dexRegional)) {
+            specialForms.add(p);
+          }
+        }
+      }
+
+      List<PokedexData> finalDex = [];
+      if (dexSort == DexSortStyle.appended) {
+        finalDex.addAll(basePokemon);
+        finalDex.addAll(specialForms);
+      } else {
+        for (var base in basePokemon) {
+          finalDex.add(base);
+          // --- 2. DER MR. MIME FIX (Exakte Zuordnung statt Überschneidung) ---
+          var forms = specialForms.where((f) => _getBaseIdentifier(f.name) == _getBaseIdentifier(base.name));
+          finalDex.addAll(forms);
+        }
+      }
+
+      for (var p in finalDex) {
+        final isBase = p.id <= 1025;
+        final prefix = isBase ? "#${p.id.toString().padLeft(4, '0')} " : "✨ ";
+        
+        final candidates = _getCandidateNames(p.name);
+        
+        // --- DER CASE-SENSITIVITY KILLER: ALLES IN KLEINBUCHSTABEN SUCHEN! ---
+        final lowerCandidates = candidates.map((c) => c.toLowerCase()).toList();
+        
+        final cards = await (db.select(db.cards)
+          ..where((t) => t.name.lower().isIn(lowerCandidates) | t.nameDe.lower().isIn(lowerCandidates))
+        ).get();
+        
+        cards.sort((a, b) {
+          final aHasImg = a.imageUrl.isNotEmpty || (a.imageUrlDe != null && a.imageUrlDe!.isNotEmpty);
+          final bHasImg = b.imageUrl.isNotEmpty || (b.imageUrlDe != null && b.imageUrlDe!.isNotEmpty);
+          if (aHasImg && !bHasImg) return -1;
+          if (!aHasImg && bHasImg) return 1;
+
+          // Prio prüfen (Kleinbuchstaben!)
+          int aPriority = lowerCandidates.indexOf(a.name.toLowerCase());
+          int bPriority = lowerCandidates.indexOf(b.name.toLowerCase());
+          if (aPriority == -1) aPriority = lowerCandidates.indexOf(a.nameDe?.toLowerCase() ?? "");
+          if (bPriority == -1) bPriority = lowerCandidates.indexOf(b.nameDe?.toLowerCase() ?? "");
+          if (aPriority == -1) aPriority = 999;
+          if (bPriority == -1) bPriority = 999;
+
+          return aPriority.compareTo(bPriority);
+        });
+
+        final bestCard = cards.isNotEmpty ? cards.first : null;
+        String cleanName = bestCard?.nameDe ?? bestCard?.name ?? candidates.first;
+        addSlot("$prefix$cleanName", bestCard?.id, null);
+      }
+    }
+
+    else if (type == AdvancedBinderType.set && selectedSetName != null) {
+      final setInfo = await (db.select(db.cardSets)..where((t) => t.name.equals(selectedSetName))).getSingleOrNull();
+      if (setInfo != null) {
+        final cardsInSet = await (db.select(db.cards)..where((t) => t.setId.equals(setInfo.id))).get();
+        cardsInSet.sort((a, b) => a.sortNumber.compareTo(b.sortNumber)); 
+
+        for (var c in cardsInSet) {
+          bool isSecret = false;
+          if (c.number.contains('/') && setInfo.printedTotal != null) {
+             int num = int.tryParse(c.number.split('/').first.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+             if (num > setInfo.printedTotal!) isSecret = true;
+          }
+
+          if (setCompletion == SetCompletionType.standard && isSecret) continue;
+
+          String displayName = "${c.nameDe ?? c.name} (${c.number})";
+
+          if (setCompletion == SetCompletionType.complete) {
+             if (c.hasNormal) addSlot(displayName, c.id, "Normal");
+             if (c.hasHolo) addSlot("$displayName (Holo)", c.id, "Holo");
+             if (c.hasReverse) addSlot("$displayName (Reverse)", c.id, "Reverse Holo");
+          } else {
+             addSlot(displayName, c.id, null);
+          }
+        }
+      }
+    }
+
+    else if ((type == AdvancedBinderType.pokemon || type == AdvancedBinderType.artist) && selectedTarget != null) {
+      final query = db.select(db.cards);
+      if (type == AdvancedBinderType.pokemon) {
+        query.where((t) => t.name.like('%$selectedTarget%') | t.nameDe.like('%$selectedTarget%'));
+      } else {
+        query.where((t) => t.artist.equals(selectedTarget));
+      }
+      
+      final cards = await query.get();
+      cards.sort((a, b) => a.sortNumber.compareTo(b.sortNumber)); 
+      
+      for (var c in cards) {
+        addSlot("${c.nameDe ?? c.name} (${c.number})", c.id, null);
+      }
+    }
+
     if (inserts.isNotEmpty) {
-      await db.batch((batch) {
-        batch.insertAll(db.binderCards, inserts);
+      await db.transaction(() async {
+        for (var i = 0; i < inserts.length; i += 500) {
+          final end = (i + 500 < inserts.length) ? i + 500 : inserts.length;
+          await db.batch((batch) {
+            batch.insertAll(db.binderCards, inserts.sublist(i, end));
+          });
+        }
       });
     }
   }
 
-  // --- DIE NEUE "GEHIRN"-FUNKTION ---
-  List<String> _generateCandidateNames(String apiName) {
-    final Set<String> candidates = {};
-    final String cleanInput = apiName.toLowerCase();
+  // =====================================================================
+  // KANDIDATEN-GENERIERUNG FÜR CHAOTISCHE KARTENNAMEN
+  // =====================================================================
+  List<String> _getCandidateNames(String apiName) {
+    final String workStr = apiName.toLowerCase();
+    final List<String> candidates = [];
 
-    // 1. Das Original (z.B. "Bulbasaur")
-    candidates.add(apiName);
-
-    // 2. Spezielle Mappings (Hardcoded Exceptions)
-    final Map<String, String> exceptions = {
-      'nidoran-f': 'Nidoran♀',
-      'nidoran-m': 'Nidoran♂',
-      'farfetchd': "Farfetch'd",
-      'mr-mime': 'Mr. Mime',
-      'mime-jr': 'Mime Jr.',
-      'ho-oh': 'Ho-Oh',
-      'porygon-z': 'Porygon-Z',
-      'flabebe': 'Flabébé',
-      'type-null': 'Type: Null',
-      'jangmo-o': 'Jangmo-o',
-      'hakamo-o': 'Hakamo-o',
-      'kommo-o': 'Kommo-o',
-      'dudunsparce-two-segments': "Dudunsparce",
-      'wo-chien': "Wo-Chien",
-      'chien-pao': "Chien-Pao",
-      'ting-lu': "Ting-Lu",
-      'chi-yu': "Chi-Yu",
-      'Ogerpon': "Cornerstone Mask Ogerpon",
-      'sirfetchd': "Galarian Sirfetch'd",
-      'mr-rime': "Galarian Mr. Rime",
+    // --- 1. HARDCODED EXCEPTIONS (Exakte Zuordnungen & Ausnahmen) ---
+    final exceptions = {
+      'nidoran-f': ['Nidoran♀'],
+      'nidoran-m': ['Nidoran♂'],
+      'farfetchd': ["Farfetch'd"],
+      'mr-mime': ['Mr. Mime'],
+      'mime-jr': ['Mime Jr.'],
+      'mr-rime': ['Galarian Mr. Rime','Mr. Rime'],
+      'ho-oh': ['Ho-Oh'],
+      'porygon-z': ['Porygon-Z'],
+      'flabebe': ['Flabébé', 'Flabebe'],
+      'type-null': ['Type: Null'],
+      'wo-chien': ['Wo-Chien ex', 'Wo-Chien'],
+      'chien-pao': ['Chien-Pao ex', 'Chien-Pao'],
+      'ting-lu': ['Ting-Lu ex', 'Ting-Lu'],
+      'chi-yu': ['Chi-Yu ex', 'Chi-Yu'],
+      'jangmo-o': ['Jangmo-o'],
+      'hakamo-o': ['Hakamo-o'],
+      'kommo-o': ['Kommo-o'],
+      'sirfetchd': ["Galarian Sirfetch'd", "Sirfetch'd"],
+      'chingling': ['Chingling', "Team Rocket's Chingling"],
+      'arceus': ['Arceus V', 'Arceus VSTAR', 'Arceus'],
+      'giratina-altered': ['Giratina V', 'Giratina VSTAR', 'Giratina'],
+      'deoxys-normal': ['Deoxys'],
+      
+      // Die Toxtricity/Urshifu Fixes (Kein VMAX Diebstahl mehr!)
+      'toxtricity-amped': ['Toxtricity'], 
+      'toxtricity-amped-gmax': ['Toxtricity VMAX'],
+      'urshifu': ['Urshifu', 'Urshifu V'], 
+      'tatsugiri-curly-mega': ['Mega Tatsugiri ex', 'Mega Tatsugiri'], 
+      
+      // Die Galar & Hisui Basis-Entwicklungen
+      'obstagoon': ['Galarian Obstagoon', 'Obstagoon'],
+      'perrserker': ['Galarian Perrserker', 'Perrserker'],
+      'cursola': ['Galarian Cursola', 'Cursola'],
+      'runerigus': ['Galarian Runerigus', 'Runerigus'],
+      'sneasler': ['Hisuian Sneasler', 'Sneasler'],
+      'overqwil': ['Hisuian Overqwil', 'Overqwil'],
+      'basculegion-male': ['Hisuian Basculegion', 'Basculegion'],
+      'basculegion': ['Hisuian Basculegion', 'Basculegion'],
+      'clodsire': ['Paldean Clodsire', 'Clodsire ex', 'Clodsire'],
     };
 
-    if (exceptions.containsKey(cleanInput)) {
-      candidates.add(exceptions[cleanInput]!);
+    if (exceptions.containsKey(workStr)) {
+      candidates.addAll(exceptions[workStr]!);
+      return candidates;
     }
 
-    // 3. Bindestriche zu Leerzeichen (Paradox, Tapus, Legends of Ruin)
-    // "tapu-koko" -> "Tapu Koko", "iron-moth" -> "Iron Moth"
-    if (cleanInput.contains('-')) {
-      final spaced = apiName.replaceAll('-', ' ');
-      candidates.add(_capitalizeWords(spaced));
+    // --- 2. MEGAS ---
+    if (workStr.contains('-mega')) {
+      final isX = workStr.endsWith('-x');
+      final isY = workStr.endsWith('-y');
+      final isZ = workStr.endsWith('-z');
+      final suffix = isX ? ' X' : (isY ? ' Y' : (isZ ? ' Z' : ''));
+      final rawBase = workStr.split('-mega').first;
+      final base = _formatBase(rawBase);
+
+      // Englisch Modern
+      candidates.add('Mega $base$suffix EX');
+      candidates.add('Mega $base$suffix ex');
+      candidates.add('Mega $base$suffix-EX');
+      // Deutsch Modern (mit Bindestrich)
+      candidates.add('Mega-$base$suffix-EX');
+      candidates.add('Mega-$base$suffix-ex'); 
+      candidates.add('Mega-$base-EX'); 
+      candidates.add('Mega-$base-ex');
+      // Englisch Alt
+      candidates.add('M $base$suffix-EX');
+      candidates.add('M $base$suffix EX');
+      candidates.add('M $base$suffix-ex');
+      candidates.add('M $base$suffix ex');
+      
+      // Ohne Suffix
+      if (isX || isY || isZ) {
+        candidates.add('Mega $base EX');
+        candidates.add('Mega $base ex');
+        candidates.add('Mega-$base-ex');
+        candidates.add('M $base-EX');
+        candidates.add('M $base EX');
+      }
+      return candidates.toSet().toList();
     }
 
-    // 4. Suffixe entfernen (Formen, die auf Karten oft nicht stehen)
-    // Liste der Suffixe, die wir einfach abschneiden
-    final List<String> suffixesToRemove = [
-      '-normal', '-average', '-standard', '-altered', '-land', '-plant', 
-      '-ordinary', '-aria', '-midday', '-solo', '-red-striped', '-red-meteor',
-      '-disguised', '-amped', '-ice', '-full-belly', '-male', '-female',
-      '-shield', '-50', '-baile', '-incarnate', '-zero', '-curly', 
-      '-family-of-four', '-green-plumage', '-two-segments'
+    // --- 3. PRIMAL (Proto) ---
+    if (workStr.contains('-primal')) {
+      final rawBase = workStr.split('-primal').first;
+      final base = _formatBase(rawBase);
+      candidates.add('Primal $base EX');
+      candidates.add('Primal $base-EX');
+      candidates.add('Primal $base ex');
+      candidates.add('Proto-$base-EX'); 
+      candidates.add('Proto-$base-ex'); 
+      return candidates;
+    }
+
+    // --- 4. GMAX (Wird VMAX/VSTAR) ---
+    if (workStr.contains('-gmax')) {
+      final rawBase = workStr.split('-gmax').first;
+      final base = _formatBase(rawBase);
+      candidates.add('$base VMAX');
+      candidates.add('$base VSTAR');
+      candidates.add(base);
+      return candidates;
+    }
+
+    // --- 5. URSHIFU SONDERFORMEN ---
+    if (workStr.contains('urshifu')) {
+      if (workStr.contains('single-strike')) {
+        return ['Single Strike Urshifu VMAX', 'Single Strike Urshifu V', 'Single Strike Urshifu'];
+      } else if (workStr.contains('rapid-strike')) {
+        return ['Rapid Strike Urshifu VMAX', 'Rapid Strike Urshifu V', 'Rapid Strike Urshifu'];
+      }
+    }
+
+    // --- 6. REGIONALFORMEN ---
+    if (workStr.contains('-alola') || workStr.contains('-galar') || workStr.contains('-hisui') || workStr.contains('-paldea')) {
+        String cleanedRegion = workStr.replaceAll(RegExp(r'-alola|-galar|-hisui|-paldea|-standard|-combat-breed|-blaze-breed|-aqua-breed'), '');
+        String formattedBase = _formatBase(cleanedRegion);
+        
+        if (workStr.contains('-alola')) candidates.add('Alolan $formattedBase');
+        if (workStr.contains('-galar')) {
+             candidates.add('Galarian $formattedBase');
+             if (workStr.contains('mr-mime')) candidates.add('Galarian Mr. Mime');
+        }
+        if (workStr.contains('-hisui')) candidates.add('Hisuian $formattedBase');
+        if (workStr.contains('-paldea')) {
+             candidates.add('Paldean $formattedBase');
+             if (workStr.contains('tauros')) candidates.add('Paldean Tauros');
+        }
+        candidates.add(formattedBase);
+        return candidates.toSet().toList();
+    }
+    
+    // --- 7. OGERPON ---
+    if (workStr.contains('ogerpon')) {
+      if (workStr.contains('wellspring')) return ['Wellspring Mask Ogerpon ex', 'Ogerpon ex'];
+      if (workStr.contains('hearthflame')) return ['Hearthflame Mask Ogerpon ex', 'Ogerpon ex'];
+      if (workStr.contains('cornerstone')) return ['Cornerstone Mask Ogerpon ex', 'Ogerpon ex'];
+      if (workStr.contains('teal')) return ['Teal Mask Ogerpon ex', 'Ogerpon ex'];
+      return ['Ogerpon ex', 'Ogerpon'];
+    }
+
+    // --- 8. SUFFIX CLEANUP ---
+    final suffixesToRemove = [
+      '-normal', '-plant', '-altered', '-land', '-red-striped', '-standard', 
+      '-incarnate', '-ordinary', '-aria', '-male', '-female', '-shield', '-blade',
+      '-average', '-50', '-10', '-complete', '-baile', '-pom-pom', '-pau', '-sensu',
+      '-midday', '-midnight', '-dusk', '-solo', '-school', '-red-meteor', '-orange-meteor',
+      '-yellow-meteor', '-green-meteor', '-blue-meteor', '-indigo-meteor', '-violet-meteor',
+      '-disguised', '-busted', '-amped', '-low-key', '-ice', '-noice', '-full-belly', '-hangry',
+      '-single-strike', '-rapid-strike', '-zero', '-hero', '-curly', '-droopy', '-stretchy', 
+      '-two-segment', '-three-segment', '-green-plumage', '-blue-plumage', '-yellow-plumage', '-white-plumage',
+      '-family-of-four', '-family-of-three', '-roaming', '-terastal', '-stellar', '-bloodmoon',
+      '-combat-breed', '-blaze-breed', '-aqua-breed'
     ];
 
-    for (final suffix in suffixesToRemove) {
-      if (cleanInput.endsWith(suffix)) {
-        // Schneide Suffix ab und mache den Rest schön
-        final base = cleanInput.substring(0, cleanInput.length - suffix.length);
-        candidates.add(_capitalizeWords(base)); // z.B. "Deoxys"
-        break; // Nur ein Suffix entfernen
+    String cleaned = workStr;
+    for (var suffix in suffixesToRemove) {
+      if (cleaned.endsWith(suffix)) {
+        cleaned = cleaned.substring(0, cleaned.length - suffix.length);
+        break; 
       }
     }
 
-    // 5. Regionalformen (Prefixe hinzufügen)
-    // Wenn die API "Obstagoon" liefert, die Karte aber "Galarian Obstagoon" heißt
-    final Map<String, String> regionalPrefixes = {
-      'obstagoon': 'Galarian',
-      'perrserker': 'Galarian',
-      'cursola': 'Galarian',
-      'runerigus': 'Galarian',
-      'darmanitan': 'Galarian', // Oft Galarian
-      'basculegion': 'Hisuian',
-      'sneasler': 'Hisuian',
-      'overqwil': 'Hisuian',
-      'clodsire': 'Paldean',
-    };
+    // --- 9. STANDARD BEHANDLUNG ---
+    final titleCased = _formatBase(cleaned);
+    
+    candidates.add(titleCased);
+    candidates.add('$titleCased ex');
+    candidates.add('$titleCased EX');
+    candidates.add('$titleCased V');
 
-    // Wir prüfen den Basis-Namen (evtl. nach Suffix-Entfernung)
-    String checkRegional = cleanInput;
-    for (final suffix in suffixesToRemove) {
-      if (checkRegional.endsWith(suffix)) {
-        checkRegional = checkRegional.substring(0, checkRegional.length - suffix.length);
-      }
-    }
-
-    if (regionalPrefixes.containsKey(checkRegional)) {
-      final prefix = regionalPrefixes[checkRegional]!;
-      final base = _capitalizeWords(checkRegional);
-      candidates.add("$prefix $base"); // "Galarian Obstagoon"
-    }
-
-    // 6. Urshifu Sonderfall (Swap)
-    if (cleanInput.contains('urshifu')) {
-      if (cleanInput.contains('single-strike')) candidates.add('Single Strike Urshifu');
-      if (cleanInput.contains('rapid-strike')) candidates.add('Rapid Strike Urshifu');
-    }
-
-    // 7. Arceus & Co (Falls keine normale Karte existiert, V/VSTAR suchen)
-    // Das ist ein "weicher" Fallback.
-    if (cleanInput == 'arceus') {
-      candidates.add('Arceus V');
-      candidates.add('Arceus VSTAR');
-    }
-    if (cleanInput == 'giratina') { // Giratina ist oft V/VSTAR im modernen Kontext
-      candidates.add('Giratina V');
-    }
-
-    return candidates.toList();
+    return candidates.toSet().toList(); 
   }
 
-  // Hilfsfunktion: "tapu koko" -> "Tapu Koko"
-  String _capitalizeWords(String input) {
-    if (input.isEmpty) return input;
-    return input.split(' ').map((word) {
-      if (word.isEmpty) return '';
-      return word[0].toUpperCase() + word.substring(1).toLowerCase();
-    }).join(' ');
+  // --- WICHTIGE HELPER FÜR DEN KORREKTEN BASIS-NAMEN ---
+  String _formatBase(String b) {
+      final n = b.toLowerCase();
+      if (n == 'farfetchd') return "Farfetch'd";
+      if (n == 'sirfetchd') return "Sirfetch'd";
+      if (n == 'mr-mime') return "Mr. Mime";
+      if (n == 'mr-rime') return "Mr. Rime";
+      if (n == 'mime-jr') return "Mime Jr.";
+      if (n == 'ho-oh') return "Ho-Oh";
+      if (n == 'porygon-z') return "Porygon-Z";
+      
+      return n.split('-').map((w) {
+         if(['ex', 'gx', 'v', 'vmax', 'vstar'].contains(w.toLowerCase())) return w.toUpperCase();
+         if(w.isEmpty) return '';
+         return w[0].toUpperCase() + w.substring(1).toLowerCase();
+      }).join(' ');
   }
+
+  // --- Identifiziert den "Stamm" für die saubere Sortierung (Mime vs Rime) ---
+  String _getBaseIdentifier(String name) {
+    final n = name.toLowerCase();
+    if (n.startsWith('mr-mime')) return 'mr-mime';
+    if (n.startsWith('mr-rime')) return 'mr-rime';
+    if (n.startsWith('mime-jr')) return 'mime-jr';
+    if (n.startsWith('ho-oh')) return 'ho-oh';
+    if (n.startsWith('porygon-z')) return 'porygon-z';
+    if (n.startsWith('type-null')) return 'type-null';
+    if (n.startsWith('tapu-')) return n; // Tapu Koko bleibt Tapu Koko
+    return n.split('-').first;
+  }
+
+  // --- DER HARTE GEISTER-FILTER ---
+  bool _isIgnoredForm(String name) {
+      final n = name.toLowerCase();
+      if (n == 'magearna-original-mega') return true;
+      if (n == 'tatsugiri-droopy-mega') return true;
+      if (n == 'tatsugiri-stretchy-mega') return true;
+      if (n == 'tatsugiri-droopy') return true;
+      if (n == 'tatsugiri-stretchy') return true;
+      if (n == 'toxtricity-low-key-gmax') return true;
+      if (n == 'toxtricity-low-key') return true;
+      if (n == 'darmanitan-galar-zen') return true;
+      if (n == 'darmanitan-zen') return true;
+      if (n == 'magearna-original') return true;
+      if (n == 'appletun-gmax') return true;
+      if (n == 'tauros-paldea-blaze-breed') return true;
+      if (n == 'tauros-paldea-aqua-breed') return true;
+      
+      if (n.contains('-totem')) return true;
+      if (n.contains('-cap')) return true;
+      if (n.startsWith('pikachu-') && !n.contains('gmax')) return true;
+      if (n.startsWith('eevee-') && !n.contains('gmax')) return true;
+      // Unsichtbare Formen
+      if (n.contains('-busted') || n.contains('-meteor') || n.contains('-school')) return true;
+      if (n.contains('-noice') || n.contains('-hangry') || n.contains('family-of-three')) return true;
+      if (n.contains('squawkabilly-') && n != 'squawkabilly-green-plumage') return true;
+      if (n.contains('koraidon-') && n != 'koraidon') return true;
+      if (n.contains('miraidon-') && n != 'miraidon') return true;
+      if (n.contains('-crowned') || n.contains('eternamax')) return true;
+      return false;
+  }
+
+  // --- STANDARD HILFSFUNKTIONEN (Bleiben gleich) ---
 
   Future<void> deleteBinder(int binderId) async {
    await db.batch((batch) {
-      // 1. ZUERST alle Karten-Slots dieses Binders löschen
       batch.deleteWhere(db.binderCards, (t) => t.binderId.equals(binderId));
-      
-      // 2. DANN den Binder selbst löschen
       batch.deleteWhere(db.binders, (t) => t.id.equals(binderId));
     });
   }
 
- // Prüft, ob wir noch ein Exemplar dieser Karte übrig haben
   Future<bool> isCardAvailable(String cardId) async {
-    // FIX: Da wir jetzt mehrere Varianten (Normal, Holo) in separaten Zeilen 
-    // haben können, laden wir ALLE Zeilen dieser Karte und summieren die Menge!
     final userCards = await (db.select(db.userCards)..where((t) => t.cardId.equals(cardId))).get();
-    
     int ownedQty = 0;
-    for (var uc in userCards) {
-      ownedQty += uc.quantity;
-    }
-
-    // Wenn wir gar keine haben, abbruch
+    for (var uc in userCards) { ownedQty += uc.quantity; }
     if (ownedQty == 0) return false;
-
-    // 2. Wie viele stecken schon in Bindern (als echte Karte, nicht Platzhalter)?
-    final usedCountList = await (db.select(db.binderCards)
-      ..where((t) => t.cardId.equals(cardId) & t.isPlaceholder.equals(false))
-    ).get();
-    
-    final int usedQty = usedCountList.length;
-
-    // Haben wir mehr im Besitz, als wir in Bindern verwenden?
-    return ownedQty > usedQty;
+    final usedCountList = await (db.select(db.binderCards)..where((t) => t.cardId.equals(cardId) & t.isPlaceholder.equals(false))).get();
+    return ownedQty > usedCountList.length;
   }
 
-  // Zählt, welche Varianten einer Karte noch NICHT in einem Binder sind
   Future<List<String>> getAvailableVariantsForCard(String cardId) async {
-    // 1. Zähle, wie viele wir JE Variante im Inventar besitzen
     final userCards = await (db.select(db.userCards)..where((t) => t.cardId.equals(cardId))).get();
     Map<String, int> inventoryCounts = {};
-    for (var uc in userCards) {
-      inventoryCounts[uc.variant] = (inventoryCounts[uc.variant] ?? 0) + uc.quantity;
-    }
+    for (var uc in userCards) { inventoryCounts[uc.variant] = (inventoryCounts[uc.variant] ?? 0) + uc.quantity; }
 
-    // 2. Zähle, welche Varianten schon in Bindern belegt sind
-    final binderCards = await (db.select(db.binderCards)
-      ..where((t) => t.cardId.equals(cardId))
-      ..where((t) => t.isPlaceholder.equals(false))
-    ).get();
-
+    final binderCards = await (db.select(db.binderCards)..where((t) => t.cardId.equals(cardId) & t.isPlaceholder.equals(false))).get();
     for (var bc in binderCards) {
-      final v = bc.variant ?? 'Normal'; // Fallback falls leer
-      if (inventoryCounts.containsKey(v)) {
-        inventoryCounts[v] = inventoryCounts[v]! - 1;
-      }
+      final v = bc.variant ?? 'Normal'; 
+      if (inventoryCounts.containsKey(v)) inventoryCounts[v] = inventoryCounts[v]! - 1;
     }
-
-    // 3. Filtern: Welche Varianten haben noch > 0 Stück übrig?
-    return inventoryCounts.entries
-        .where((e) => e.value > 0)
-        .map((e) => e.key)
-        .toList();
+    return inventoryCounts.entries.where((e) => e.value > 0).map((e) => e.key).toList();
   }
 
-  // Findet heraus, in welchen Bindern eine Karte steckt
   Future<List<String>> getBindersForCard(String cardId) async {
-    final query = db.select(db.binderCards).join([
-      innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
-    ]);
+    final query = db.select(db.binderCards).join([innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))]);
     query.where(db.binderCards.cardId.equals(cardId) & db.binderCards.isPlaceholder.equals(false));
     final rows = await query.get();
     return rows.map((r) => r.readTable(db.binders).name).toSet().toList(); 
   }
 
-  // Slot konfigurieren (Grauen Platzhalter ändern)
   Future<void> configureSlot(int slotId, String newCardId, String labelName) async {
     await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
-      BinderCardsCompanion(
-        cardId: Value(newCardId),
-        placeholderLabel: Value(labelName),
-        isPlaceholder: const Value(true),
-        variant: const Value.absent(), // Variante leeren, da Platzhalter
-      ),
+      BinderCardsCompanion(cardId: Value(newCardId), placeholderLabel: Value(labelName), isPlaceholder: const Value(true), variant: const Value.absent())
     );
   }
   
-  // Slot befüllen (Echte Karte reinlegen) MIT VARIANTE
   Future<void> fillSlot(int slotId, String cardId, {String? variant}) async {
-    if (!await isCardAvailable(cardId)) {
-      throw Exception("Keine Karte mehr verfügbar!");
-    }
-
+    if (!await isCardAvailable(cardId)) throw Exception("Keine Karte mehr verfügbar!");
     await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
-      BinderCardsCompanion(
-        cardId: Value(cardId),
-        isPlaceholder: const Value(false),
-        variant: variant != null ? Value(variant) : const Value.absent(), // Variante speichern
-      )
+      BinderCardsCompanion(cardId: Value(cardId), isPlaceholder: const Value(false), variant: variant != null ? Value(variant) : const Value.absent())
     );
-  
     final slot = await (db.select(db.binderCards)..where((t) => t.id.equals(slotId))).getSingle();
     await recalculateBinderValue(slot.binderId);
   }
 
-  // Karte entfernen (Zurücksetzen auf Platzhalter)
   Future<void> clearSlot(int slotId) async {
     await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
-      const BinderCardsCompanion(
-        isPlaceholder: Value(true),
-        variant: Value(null), // Variante löschen
-      ),
+      const BinderCardsCompanion(isPlaceholder: Value(true), variant: Value(null)),
     );
     final slot = await (db.select(db.binderCards)..where((t) => t.id.equals(slotId))).getSingle();
     await recalculateBinderValue(slot.binderId);
   }
 
-// Wert EINES Binders neu berechnen (mit perfekter Preis-Logik)
   Future<void> recalculateBinderValue(int binderId) async {
-    final slots = await (db.select(db.binderCards)
-      ..where((t) => t.binderId.equals(binderId))
-      ..where((t) => t.isPlaceholder.equals(false))
-    ).get();
-
+    final slots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId) & t.isPlaceholder.equals(false))).get();
     double total = 0.0;
 
     for (var slot in slots) {
       final cardId = slot.cardId;
       if (cardId == null) continue;
 
-      // Karte holen (um hasNormal / hasHolo und hasFirstEdition zu prüfen)
       final card = await (db.select(db.cards)..where((t) => t.id.equals(cardId))).getSingleOrNull();
       if (card == null) continue;
 
-      final cmPrice = await (db.select(db.cardMarketPrices)
-        ..where((t) => t.cardId.equals(cardId))
-        ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])
-        ..limit(1)
-      ).getSingleOrNull();
-
-      final tcgPrice = await (db.select(db.tcgPlayerPrices)
-        ..where((t) => t.cardId.equals(cardId))
-        ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])
-        ..limit(1)
-      ).getSingleOrNull();
+      final cmPrice = await (db.select(db.cardMarketPrices)..where((t) => t.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
+      final tcgPrice = await (db.select(db.tcgPlayerPrices)..where((t) => t.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
 
       double singlePrice = 0.0;
       bool baseIsHolo = !card.hasNormal && card.hasHolo;
@@ -443,74 +566,31 @@ class BinderService {
       final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
       final isReverse = variant == 'Reverse Holo';
 
-      // --- NEUE 1. EDITION LOGIK ---
       if (card.hasFirstEdition) {
-        if (isHolo) {
-          // Für Holo-Karten
-          if (isFirstEd) {
-            singlePrice = cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0;
-          } else {
-            singlePrice = cmPrice?.trendHolo ?? tcgPrice?.holoMarket ?? 0.0;
-          }
-        } else {
-          // Für Non-Holo Karten
-          if (isFirstEd) {
-            singlePrice = cmPrice?.trendHolo ?? tcgPrice?.normalMarket ?? 0.0;
-          } else {
-            singlePrice = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
-          }
-        }
+        if (isHolo) { singlePrice = isFirstEd ? (cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0) : (cmPrice?.trendHolo ?? tcgPrice?.holoMarket ?? 0.0); } 
+        else { singlePrice = isFirstEd ? (cmPrice?.trendHolo ?? tcgPrice?.normalMarket ?? 0.0) : (cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0); }
       } 
-      // --- NORMALE LOGIK ---
-      else if (isReverse) {
-        singlePrice = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? tcgPrice?.reverseMarket ?? 0.0;
-      } else if (isHolo) {
-        if (baseIsHolo) {
-          singlePrice = cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0;
-        } else {
-          singlePrice = cmPrice?.trendHolo ?? tcgPrice?.holoMarket ?? 0.0;
-        }
-      } else {
-        singlePrice = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
-      }
+      else if (isReverse) { singlePrice = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? tcgPrice?.reverseMarket ?? 0.0; } 
+      else if (isHolo) { singlePrice = baseIsHolo ? (cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0) : (cmPrice?.trendHolo ?? tcgPrice?.holoMarket ?? 0.0); } 
+      else { singlePrice = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0; }
 
-      if (singlePrice == 0.0) {
-        singlePrice = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? 0.0;
-      }
-
+      if (singlePrice == 0.0) singlePrice = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? 0.0;
       total += singlePrice;
     }
 
-    await (db.update(db.binders)..where((t) => t.id.equals(binderId))).write(
-      BindersCompanion(totalValue: Value(total))
-    );
+    await (db.update(db.binders)..where((t) => t.id.equals(binderId))).write(BindersCompanion(totalValue: Value(total)));
     
-    // --- GRAPH HISTORIE UPDATEN ---
     final today = DateTime.now();
     final dateOnly = DateTime(today.year, today.month, today.day);
-    
-    final existingEntry = await (db.select(db.binderHistory)
-      ..where((t) => t.binderId.equals(binderId) & t.date.equals(dateOnly))
-    ).getSingleOrNull();
+    final existingEntry = await (db.select(db.binderHistory)..where((t) => t.binderId.equals(binderId) & t.date.equals(dateOnly))).getSingleOrNull();
 
     if (existingEntry != null) {
-      // Existiert heute schon? -> Update
-      await (db.update(db.binderHistory)..where((t) => t.id.equals(existingEntry.id))).write(
-        BinderHistoryCompanion(value: Value(total))
-      );
+      await (db.update(db.binderHistory)..where((t) => t.id.equals(existingEntry.id))).write(BinderHistoryCompanion(value: Value(total)));
     } else {
-      // Noch kein Punkt für heute? -> NEU ANLEGEN (Hier ist dein gesuchter Teil!)
-      await db.into(db.binderHistory).insert(
-        BinderHistoryCompanion.insert(
-          binderId: binderId,
-          date: dateOnly,
-          value: total,
-        )
-      );
+      await db.into(db.binderHistory).insert(BinderHistoryCompanion.insert(binderId: binderId, date: dateOnly, value: total));
     }
   }
 
-  // --- NEU: Alle Binder aktualisieren (Nach einem API Sync) ---
   Future<void> recalculateAllBinders() async {
     final allBinders = await db.select(db.binders).get();
     for (var binder in allBinders) {
@@ -518,4 +598,3 @@ class BinderService {
     }
   }
 }
-

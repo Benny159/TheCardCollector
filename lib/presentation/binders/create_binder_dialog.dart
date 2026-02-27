@@ -2,11 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/database/database_provider.dart';
 import '../../domain/logic/binder_service.dart';
-import '../../domain/models/binder_templates.dart'; // WICHTIGER IMPORT!
-
-enum AdvancedBinderType { custom, dex, set, pokemon, artist, bulkBox }
-enum SetCompletionType { standard, master, complete }
-enum DexSortStyle { inline, appended }
+import '../../domain/models/binder_templates.dart'; // Holt die Enums jetzt HIERHER!
 
 class CreateBinderDialog extends ConsumerStatefulWidget {
   const CreateBinderDialog({super.key});
@@ -24,7 +20,6 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
   List<String> _dbPokemonNames = [];
   List<String> _dbArtists = [];
   
-  // Wir speichern die ausgewählten Werte der Autocompletes hier:
   String _selectedSetName = "";
   String _selectedTarget = "";
 
@@ -33,7 +28,7 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
   int _rows = 3;
   int _cols = 3;
   AdvancedBinderType _selectedType = AdvancedBinderType.custom;
-  BinderSortOrder _sortOrder = BinderSortOrder.leftToRight;
+  final BinderSortOrder _sortOrder = BinderSortOrder.leftToRight;
 
   // --- 1. CUSTOM EINSTELLUNGEN ---
   int _customPages = 10;
@@ -55,12 +50,9 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
   }
 
   Future<void> _loadAutocompleteData() async {
-    // Lädt alle Namen heimlich im Hintergrund für die Vorschlags-Liste!
     final db = ref.read(databaseProvider);
     final sets = await db.select(db.cardSets).get();
     final pokedex = await db.select(db.pokedex).get();
-    
-    // Holt alle einzigartigen Künstler aus der DB
     final artistsQuery = await db.customSelect("SELECT DISTINCT artist FROM cards WHERE artist IS NOT NULL AND artist != ''").get();
 
     if (mounted) {
@@ -108,7 +100,6 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 1. TYP AUSWAHL
                     const Text("Was möchtest du sammeln?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 12),
                     GridView.count(
@@ -132,7 +123,6 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
                     const Divider(height: 1),
                     const SizedBox(height: 16),
 
-                    // 2. DYNAMISCHER BEREICH
                     AnimatedSize(
                       duration: const Duration(milliseconds: 300),
                       child: _buildDynamicSettings(),
@@ -142,7 +132,6 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
                     const Divider(height: 1),
                     const SizedBox(height: 16),
 
-                    // 3. BASIS EINSTELLUNGEN
                     const Text("Basis Einstellungen", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 12),
                     TextField(
@@ -178,7 +167,6 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
                     ),
                     const SizedBox(height: 16),
 
-                    // LAYOUT (Ausgeblendet bei Bulk Box)
                     if (_selectedType != AdvancedBinderType.bulkBox) ...[
                       const Text("Seiten-Layout:", style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
@@ -219,8 +207,6 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
       ),
     );
   }
-
-  // --- DYNAMISCHE UIs ---
 
   Widget _buildDynamicSettings() {
     switch (_selectedType) {
@@ -266,8 +252,9 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
                   selected: isSel, selectedColor: Colors.blue[700],
                   onSelected: (val) {
                     setState(() {
-                      if (val) _selectedGens.add(gen);
-                      else if (_selectedGens.length > 1) _selectedGens.remove(gen); 
+                      if (val) {
+                        _selectedGens.add(gen);
+                      } else if (_selectedGens.length > 1) _selectedGens.remove(gen); 
                     });
                   },
                 );
@@ -311,7 +298,6 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- AUTOCOMPLETE FÜR SETS ---
             Autocomplete<String>(
               optionsBuilder: (TextEditingValue textEditingValue) {
                 if (textEditingValue.text.isEmpty) return const Iterable<String>.empty();
@@ -320,24 +306,16 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
               onSelected: (String selection) => _selectedSetName = selection,
               fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
                 return TextField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  onChanged: (val) => _selectedSetName = val,
-                  decoration: const InputDecoration(
-                    labelText: "Set suchen (z.B. '151' oder 'Base Set')",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.search),
-                  ),
+                  controller: controller, focusNode: focusNode, onChanged: (val) => _selectedSetName = val,
+                  decoration: const InputDecoration(labelText: "Set suchen (z.B. '151' oder 'Base Set')", border: OutlineInputBorder(), prefixIcon: Icon(Icons.search)),
                 );
               },
             ),
             const SizedBox(height: 16),
             const Text("Sammlungs-Ziel:", style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            
-            // --- FIX: isExpanded behebt den Overflow! ---
             DropdownButtonFormField<SetCompletionType>(
-              value: _setCompletion,
+              initialValue: _setCompletion,
               isExpanded: true, 
               decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
               items: const [
@@ -364,14 +342,8 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
           onSelected: (String selection) => _selectedTarget = selection,
           fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
             return TextField(
-              controller: controller,
-              focusNode: focusNode,
-              onChanged: (val) => _selectedTarget = val,
-              decoration: InputDecoration(
-                labelText: label,
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.search),
-              ),
+              controller: controller, focusNode: focusNode, onChanged: (val) => _selectedTarget = val,
+              decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), prefixIcon: const Icon(Icons.search)),
             );
           },
         );
@@ -390,8 +362,6 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
         );
     }
   }
-
-  // --- HELPER WIDGETS ---
 
   Widget _buildTypeTile(AdvancedBinderType type, String title, String subtitle, IconData icon) {
     final isSelected = _selectedType == type;
@@ -457,8 +427,6 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
     );
   }
 
-  // --- LOGIK ---
-
   Future<void> _createBinder() async {
     if (_nameController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bitte gib einen Namen ein.")));
@@ -480,17 +448,22 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
       final db = ref.read(databaseProvider);
       final service = BinderService(db); 
 
-      // WICHTIG: Damit die App nicht crasht, übergeben wir noch Type.custom,
-      // bis wir im NÄCHSTEN Schritt das Gehirn (BinderService) umschreiben!
       await service.createBinder(
         name: _nameController.text,
         color: _selectedColor.value,
-        // Bulk Box hat keine Slots:
         rows: _selectedType == AdvancedBinderType.bulkBox ? 0 : _rows,
         cols: _selectedType == AdvancedBinderType.bulkBox ? 0 : _cols,
-        // Wir speichern den Typ heimlich als Text in der DB!
-        type: BinderType.custom, // Wird im nächsten Schritt durch unseren Text-Typ ersetzt!
+        type: _selectedType,
         sortOrder: _sortOrder,
+        customPages: _customPages,
+        selectedGens: _selectedGens,
+        dexMegas: _dexMegas,
+        dexGmax: _dexGmax,
+        dexRegional: _dexRegional,
+        dexSort: _dexSort,
+        setCompletion: _setCompletion,
+        selectedSetName: _selectedSetName,
+        selectedTarget: _selectedTarget,
       );
 
       if (mounted) Navigator.pop(context);
