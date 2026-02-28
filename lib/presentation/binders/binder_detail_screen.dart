@@ -25,11 +25,14 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   final _searchController = TextEditingController();
   
   int _currentIndex = 0;
+  
+  // --- NEU: Tausch-Modus Variablen ---
+  bool _isSwapMode = false;
+  BinderSlotData? _slotToSwap;
 
   @override
   void initState() {
     super.initState();
-    // 1. Nativer PageController von Flutter (Bulletproof!)
     _pageController = PageController(initialPage: _currentIndex);
   }
 
@@ -42,8 +45,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 2. WIR BRAUCHEN KEIN SIGNAL MEHR! 
-    // Der Live-Stream (oder Future) aktualisiert sich komplett von selbst.
     final asyncData = ref.watch(binderDetailProvider(widget.binder.id));
 
     return Scaffold(
@@ -62,85 +63,138 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
           ),
         ],
       ),
-      body: asyncData.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, s) => Center(child: Text("Fehler: $e")),
-        data: (state) {
-          if (state.slots.isEmpty) return const Center(child: Text("Binder ist leer."));
-
-          final int itemsPerPage = widget.binder.rowsPerPage * widget.binder.columnsPerPage;
-          final int totalPages = (state.slots.length / itemsPerPage).ceil();
-
-          List<Widget> pages = [];
-          for (int i = 0; i < totalPages; i++) {
-            final start = i * itemsPerPage;
-            final end = (start + itemsPerPage < state.slots.length) 
-                ? start + itemsPerPage 
-                : state.slots.length;
-            
-            final pageSlots = state.slots.sublist(start, end);
-
-            pages.add(
-              Container(
-                color: const Color(0xFFFDFDFD), 
-                // --- KEIN INTERACTIVE VIEWER MEHR HIER! PageView übernimmt das Wischen. ---
-                child: BinderPageWidget(
-                  slots: pageSlots,
-                  rows: widget.binder.rowsPerPage,
-                  cols: widget.binder.columnsPerPage,
-                  pageNumber: i,
-                  totalPages: totalPages, 
-                  onSlotTap: (slot) => _handleSlotTap(slot),
-                  onSlotLongPress: (slot) => _handleSlotLongPress(slot),
-                  onNextPage: () {
-                    FocusScope.of(context).unfocus();
-                    if (_currentIndex < totalPages - 1) {
-                      _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-                    }
-                  },
-                  onPrevPage: () {
-                    FocusScope.of(context).unfocus();
-                    if (_currentIndex > 0) {
-                      _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-                    }
-                  },
-                ),
-              ),
-            );
-          }
-
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20.0), 
-              child: AspectRatio(
-                aspectRatio: 0.65, 
-                // --- 3. DAS HERZSTÜCK: FLUTTERS NATIVES PAGEVIEW ---
-                child: PageView(
-                  controller: _pageController,
-                  // --- NEU: Erlaubt das Wischen mit der Maus am PC! ---
-                  scrollBehavior: ScrollConfiguration.of(context).copyWith(
-                    dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+      body: Column(
+        children: [
+          // --- NEU: Der Tausch-Modus Banner ---
+          if (_isSwapMode && _slotToSwap != null)
+            Container(
+              width: double.infinity,
+              color: Colors.redAccent,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              child: Row(
+                children: [
+                  const Icon(Icons.swap_horiz, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Wähle den Ziel-Slot, um '${_slotToSwap!.binderCard.placeholderLabel ?? 'Slot'}' zu tauschen...",
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
                   ),
-                  onPageChanged: (index) {
-                    _currentIndex = index;
-                  },
-                  children: [
-                    ...pages,
-                    Container(
-                      color: Colors.white, 
-                      child: const Center(child: Text("Ende des Binders"))
-                    )
-                  ],
-                ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => setState(() {
+                      _isSwapMode = false;
+                      _slotToSwap = null;
+                    }),
+                  )
+                ],
               ),
             ),
-          );
-        },
+            
+          // --- Der eigentliche Binder ---
+          Expanded(
+            child: asyncData.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, s) => Center(child: Text("Fehler: $e")),
+              data: (state) {
+                if (state.slots.isEmpty) return const Center(child: Text("Binder ist leer.", style: TextStyle(color: Colors.white)));
+
+                int itemsPerPage = widget.binder.rowsPerPage * widget.binder.columnsPerPage;
+                if (itemsPerPage <= 0) itemsPerPage = 9; 
+
+                final int totalPages = (state.slots.length / itemsPerPage).ceil();
+
+                List<Widget> pages = [];
+                for (int i = 0; i < totalPages; i++) {
+                  final start = i * itemsPerPage;
+                  final end = (start + itemsPerPage < state.slots.length) 
+                      ? start + itemsPerPage 
+                      : state.slots.length;
+                  
+                  final pageSlots = state.slots.sublist(start, end);
+
+                  pages.add(
+                    Container(
+                      color: const Color(0xFFFDFDFD), 
+                      child: BinderPageWidget(
+                        slots: pageSlots,
+                        rows: widget.binder.rowsPerPage,
+                        cols: widget.binder.columnsPerPage,
+                        pageNumber: i,
+                        totalPages: totalPages, 
+                        onSlotTap: (slot) => _handleSlotTap(slot),
+                        onSlotLongPress: (slot) => _handleSlotLongPress(slot), 
+                        // --- NEU: Wir übergeben den Swap-State ans Widget ---
+                        isSwapMode: _isSwapMode,
+                        slotToSwapId: _slotToSwap?.binderCard.id,
+                        onNextPage: () {
+                          FocusScope.of(context).unfocus();
+                          if (_currentIndex < totalPages - 1) {
+                            _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                          }
+                        },
+                        onPrevPage: () {
+                          FocusScope.of(context).unfocus();
+                          if (_currentIndex > 0) {
+                            _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                          }
+                        },
+                      ),
+                    ),
+                  );
+                }
+
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20.0), 
+                    child: AspectRatio(
+                      aspectRatio: 0.65, 
+                      child: PageView(
+                        controller: _pageController,
+                        scrollBehavior: ScrollConfiguration.of(context).copyWith(
+                          dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+                        ),
+                        onPageChanged: (index) {
+                          _currentIndex = index;
+                        },
+                        children: [
+                          ...pages,
+                          Container(
+                            color: Colors.white, 
+                            child: const Center(child: Text("Ende des Binders"))
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  void _handleSlotTap(BinderSlotData slot) {
+  void _handleSlotTap(BinderSlotData slot) async {
+    // --- NEU: Wenn wir im Tausch-Modus sind, wird jetzt getauscht! ---
+    if (_isSwapMode && _slotToSwap != null) {
+       final db = ref.read(databaseProvider);
+       await BinderService(db).swapTwoSlots(widget.binder.id, _slotToSwap!.binderCard.id, slot.binderCard.id);
+       
+       if (mounted) {
+         setState(() {
+           _isSwapMode = false;
+           _slotToSwap = null;
+         });
+         ref.invalidate(binderDetailProvider(widget.binder.id));
+         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slots getauscht!")));
+       }
+       return;
+    }
+
+    // --- NORMALES MENÜ ---
     showModalBottomSheet(
       context: context,
       builder: (ctx) => SafeArea(
@@ -201,14 +255,99 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
     );
   }
 
+  void _handleSlotLongPress(BinderSlotData slot) {
+    if (_isSwapMode) return; // Wenn wir schon tauschen, kein langes Drücken
+
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text("Slot Layout bearbeiten", style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(slot.binderCard.placeholderLabel ?? "Leer"),
+            ),
+            const Divider(),
+            
+            // --- NEU: TAUSCH MODUS STARTEN ---
+            ListTile(
+              leading: const Icon(Icons.find_replace, color: Colors.orange),
+              title: const Text("Mit einem anderen Slot tauschen"),
+              subtitle: const Text("Tippe auf den Slot, mit dem du tauschen möchtest"),
+              onTap: () {
+                Navigator.pop(ctx);
+                setState(() {
+                  _isSwapMode = true;
+                  _slotToSwap = slot;
+                });
+              },
+            ),
+
+            ListTile(
+              leading: const Icon(Icons.arrow_back, color: Colors.purple),
+              title: const Text("Slot nach links verschieben"),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final db = ref.read(databaseProvider);
+                await BinderService(db).moveSlotLeft(widget.binder.id, slot.binderCard.id);
+                if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
+              },
+            ),
+            
+            ListTile(
+              leading: const Icon(Icons.arrow_forward, color: Colors.purple),
+              title: const Text("Slot nach rechts verschieben"),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final db = ref.read(databaseProvider);
+                await BinderService(db).moveSlotRight(widget.binder.id, slot.binderCard.id);
+                if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
+              },
+            ),
+
+            const Divider(),
+
+            ListTile(
+              leading: const Icon(Icons.add_to_photos, color: Colors.blue),
+              title: const Text("Leeren Slot danach einfügen"),
+              subtitle: const Text("Alle nachfolgenden Slots rücken auf"),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final db = ref.read(databaseProvider);
+                await BinderService(db).addSlotRight(widget.binder.id, slot.binderCard.id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot erfolgreich hinzugefügt.")));
+                  ref.invalidate(binderDetailProvider(widget.binder.id));
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_sweep, color: Colors.red),
+              title: const Text("Diesen Slot löschen", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              subtitle: const Text("Alle nachfolgenden Slots rücken zurück"),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final db = ref.read(databaseProvider);
+                await BinderService(db).deleteSlotAndShift(widget.binder.id, slot.binderCard.id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot komplett gelöscht.")));
+                  ref.invalidate(binderDetailProvider(widget.binder.id));
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
  Future<void> _pickCardForSlot(BinderSlotData slot, {required bool onlyOwned}) async {
     String initialQuery = slot.binderCard.placeholderLabel ?? "";
 
-    // --- NEU: Verhindere die Suche nach "Leerer Slot" ---
     if (initialQuery == "Leerer Slot") {
       initialQuery = ""; 
     } else if (initialQuery.contains(" ")) {
-      // --- ALT: (Deine Pokedex-Nummern abschneiden) ---
       final parts = initialQuery.split(" ");
       if (parts.first.startsWith("#") || parts.first.startsWith("✨")) {
         initialQuery = parts.sublist(1).join(" ");
@@ -284,7 +423,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
            await service.configureSlot(slot.binderCard.id, pickedCard.id, label);
         }
         
-        // Zwingt den Provider einfach zum Neuladen - PageView interessiert das nicht, es rendert einfach das neue Bild!
         if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
         
       } catch (e) {
@@ -397,7 +535,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
       FocusScope.of(context).unfocus();
 
       if (mounted) {
-        // Nativer PageView Slide!
         _pageController.animateToPage(targetPage, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Gefunden auf Seite ${targetPage + 1}!"), duration: const Duration(seconds: 1))
@@ -408,79 +545,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nichts gefunden.")));
       }
     }
-  }
-
-  void _handleSlotLongPress(BinderSlotData slot) {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text("Slot Layout bearbeiten", style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(slot.binderCard.placeholderLabel ?? "Leer"),
-            ),
-            const Divider(),
-            
-            // --- NEU: NACH LINKS VERSCHIEBEN ---
-            ListTile(
-              leading: const Icon(Icons.arrow_back, color: Colors.purple),
-              title: const Text("Slot nach links verschieben"),
-              onTap: () async {
-                Navigator.pop(ctx);
-                final db = ref.read(databaseProvider);
-                await BinderService(db).moveSlotLeft(widget.binder.id, slot.binderCard.id);
-                if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
-              },
-            ),
-            
-            // --- NEU: NACH RECHTS VERSCHIEBEN ---
-            ListTile(
-              leading: const Icon(Icons.arrow_forward, color: Colors.purple),
-              title: const Text("Slot nach rechts verschieben"),
-              onTap: () async {
-                Navigator.pop(ctx);
-                final db = ref.read(databaseProvider);
-                await BinderService(db).moveSlotRight(widget.binder.id, slot.binderCard.id);
-                if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
-              },
-            ),
-
-            const Divider(),
-
-            ListTile(
-              leading: const Icon(Icons.add_to_photos, color: Colors.blue),
-              title: const Text("Leeren Slot danach einfügen"),
-              subtitle: const Text("Alle nachfolgenden Slots rücken auf"),
-              onTap: () async {
-                Navigator.pop(ctx);
-                final db = ref.read(databaseProvider);
-                await BinderService(db).addSlotRight(widget.binder.id, slot.binderCard.id);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot erfolgreich hinzugefügt.")));
-                  ref.invalidate(binderDetailProvider(widget.binder.id));
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_sweep, color: Colors.red),
-              title: const Text("Diesen Slot löschen", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-              subtitle: const Text("Alle nachfolgenden Slots rücken zurück"),
-              onTap: () async {
-                Navigator.pop(ctx);
-                final db = ref.read(databaseProvider);
-                await BinderService(db).deleteSlotAndShift(widget.binder.id, slot.binderCard.id);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot komplett gelöscht.")));
-                  ref.invalidate(binderDetailProvider(widget.binder.id));
-                }
-              },
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -498,31 +562,27 @@ class _BinderStatsContent extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Griffleiste
         Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
         const SizedBox(height: 20),
         
         Text("Statistik & Verlauf", style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 5),
         
-        // --- PREIS & ÄNDERUNG ---
         historyAsync.when(
           data: (history) {
              double change = 0;
              double percent = 0;
              final current = currentState.totalValue;
              
-             // Änderung zum Vortag (oder letztem Datenpunkt)
              if (history.length >= 2) {
                  final last = history.last.value;
                  final prev = history[history.length - 2].value;
                  change = last - prev;
                  
-                 // NEUE LOGIK:
                  if (prev > 0) {
                    percent = (change / prev) * 100;
                  } else if (change > 0) {
-                   percent = 100.0; // Von 0 auf was anderes ist 100% Anstieg
+                   percent = 100.0; 
                  }
                }
 
@@ -555,7 +615,6 @@ class _BinderStatsContent extends ConsumerWidget {
 
         const SizedBox(height: 20),
 
-        // --- CHART ---
         Expanded(
           child: historyAsync.when(
             data: (history) {
@@ -580,7 +639,6 @@ class _BinderStatsContent extends ConsumerWidget {
         const SizedBox(height: 20),
         const Divider(),
 
-        // --- VERVOLLSTÄNDIGUNG ---
         ListTile(
           leading: const Icon(Icons.pie_chart, color: Colors.blue),
           title: const Text("Vervollständigung"),
@@ -594,7 +652,6 @@ class _BinderStatsContent extends ConsumerWidget {
           ),
         ),
 
-        // --- LÖSCHEN ---
         ListTile(
           leading: const Icon(Icons.delete_forever, color: Colors.red),
           title: const Text("Binder löschen", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
@@ -611,10 +668,7 @@ class _BinderHistoryChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Sichere Datenbasis erstellen
     List<FlSpot> spots = [];
-    
-    // Wir iterieren und verhindern, dass zwei Punkte exakt denselben X-Wert (Tag) haben
     Set<double> seenX = {};
     for (var p in history) {
       double x = p.date.millisecondsSinceEpoch.toDouble();
@@ -624,50 +678,43 @@ class _BinderHistoryChart extends StatelessWidget {
       }
     }
 
-    // Fallback: Wenn wir zu wenig Punkte haben, machen wir künstlich welche dazu
     if (spots.isEmpty) {
       final now = DateTime.now().millisecondsSinceEpoch.toDouble();
-      spots = [FlSpot(now - 86400000, 0), FlSpot(now, 0)]; // Gestern und Heute
+      spots = [FlSpot(now - 86400000, 0), FlSpot(now, 0)]; 
     } else if (spots.length == 1) {
       final alone = spots.first;
-      spots = [FlSpot(alone.x - 86400000, 0), alone]; // Einen Tag vorher auf 0
+      spots = [FlSpot(alone.x - 86400000, 0), alone]; 
     }
 
-    // 2. Achsen-Min/Max berechnen (Crash-sicher)
     double minX = spots.first.x;
     double maxX = spots.last.x;
-    
-    // Falls minX und maxX identisch sind (sollte durch Fallback oben nicht passieren)
     if (minX == maxX) {
-      minX -= 86400000; // - 1 Tag
-      maxX += 86400000; // + 1 Tag
+      minX -= 86400000; 
+      maxX += 86400000; 
     }
 
     double minY = spots.map((e) => e.y).reduce((a, b) => a < b ? a : b);
     double maxY = spots.map((e) => e.y).reduce((a, b) => a > b ? a : b);
 
-    // Wenn der Graph komplett flach ist (z.B. alles 0€ oder alles konstant 10€)
     if (minY == maxY) { 
       if (minY == 0) {
-        maxY = 10; // Gib ihm einfach eine Skala bis 10
+        maxY = 10; 
       } else {
         minY = minY * 0.8;
         maxY = maxY * 1.2;
       }
     }
     
-    // Puffer für Y-Achse
     final deltaY = maxY - minY;
     minY -= deltaY * 0.1;
     maxY += deltaY * 0.1;
     if (minY < 0) minY = 0;
 
-    // 3. Sichere Intervalle berechnen
     double xInterval = (maxX - minX) / 3;
-    if (xInterval <= 0) xInterval = 86400000; // Mindestens 1 Tag Abstand
+    if (xInterval <= 0) xInterval = 86400000; 
 
     double yInterval = (maxY - minY) / 4;
-    if (yInterval <= 0) yInterval = 1.0; // Verhindert Y-Achsen Crash
+    if (yInterval <= 0) yInterval = 1.0; 
 
     return LineChart(
       LineChartData(
@@ -680,15 +727,12 @@ class _BinderHistoryChart extends StatelessWidget {
           show: true,
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          
-          // Y-Achse (Links)
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 40,
-              interval: yInterval, // Crash-sicheres Intervall
+              interval: yInterval, 
               getTitlesWidget: (val, _) {
-                // Wir zeichnen keine unschönen negativen Werte oder krummen Zwischenschritte
                 if (val < 0) return const SizedBox();
                 return Text(
                   "${val.toInt()}€", 
@@ -698,13 +742,11 @@ class _BinderHistoryChart extends StatelessWidget {
               },
             ),
           ),
-          
-          // X-Achse (Unten)
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 22,
-              interval: xInterval, // Crash-sicheres Intervall
+              interval: xInterval, 
               getTitlesWidget: (val, _) {
                 final date = DateTime.fromMillisecondsSinceEpoch(val.toInt());
                 return Padding(
@@ -745,7 +787,7 @@ class _BinderHistoryChart extends StatelessWidget {
               return touchedSpots.map((spot) {
                 final date = DateTime.fromMillisecondsSinceEpoch(spot.x.toInt());
                 return LineTooltipItem(
-                  "${DateFormat('dd.MM.yy').format(date)}\n${spot.y.toStringAsFixed(2)} €",
+                  "${DateFormat('dd.MM').format(date)}\n${spot.y.toStringAsFixed(2)} €",
                   const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 );
               }).toList();

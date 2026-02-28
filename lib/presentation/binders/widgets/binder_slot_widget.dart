@@ -5,9 +5,16 @@ import '../binder_detail_provider.dart';
 class BinderSlotWidget extends StatelessWidget {
   final BinderSlotData slotData;
   final VoidCallback onTap;
-  final VoidCallback? onLongPress;
+  final VoidCallback? onLongPress; 
+  final bool isHighlightedForSwap; // <--- NEU
 
-  const BinderSlotWidget({super.key, required this.slotData, required this.onTap, this.onLongPress});
+  const BinderSlotWidget({
+    super.key, 
+    required this.slotData, 
+    required this.onTap, 
+    this.onLongPress,
+    this.isHighlightedForSwap = false, // <--- NEU
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -17,13 +24,18 @@ class BinderSlotWidget extends StatelessWidget {
     return GestureDetector(
       key: ValueKey("${slotData.binderCard.id}_${isPlaceholder}_${card?.id ?? 'null'}"),
       onTap: onTap,
-      onLongPress: onLongPress,
-      child: Container(
+      onLongPress: onLongPress, 
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: Colors.black12,
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.grey.withOpacity(0.3)),
+          // --- HIGHLIGHT RAHMEN BEIM TAUSCHEN ---
+          border: Border.all(
+            color: isHighlightedForSwap ? Colors.redAccent : Colors.grey.withOpacity(0.3),
+            width: isHighlightedForSwap ? 3 : 1,
+          ),
           boxShadow: [
              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, spreadRadius: 1, offset: const Offset(1, 1))
           ]

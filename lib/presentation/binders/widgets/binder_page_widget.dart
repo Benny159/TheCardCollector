@@ -9,9 +9,13 @@ class BinderPageWidget extends StatelessWidget {
   final int pageNumber; 
   final int totalPages;
   final Function(BinderSlotData) onSlotTap;
-  final Function(BinderSlotData)? onSlotLongPress; // <--- NEU
+  final Function(BinderSlotData)? onSlotLongPress; 
   final VoidCallback onNextPage;
   final VoidCallback onPrevPage;
+  
+  // --- NEU FÜR DEN TAUSCH-MODUS ---
+  final bool isSwapMode;
+  final int? slotToSwapId;
 
   const BinderPageWidget({
     super.key,
@@ -21,9 +25,11 @@ class BinderPageWidget extends StatelessWidget {
     required this.pageNumber,
     required this.totalPages,
     required this.onSlotTap,
-    this.onSlotLongPress, // <--- NEU
+    this.onSlotLongPress, 
     required this.onNextPage,
     required this.onPrevPage,
+    this.isSwapMode = false,
+    this.slotToSwapId,
   });
 
   @override
@@ -62,10 +68,13 @@ class BinderPageWidget extends StatelessWidget {
                   ),
                   itemCount: slots.length,
                   itemBuilder: (context, index) {
+                    final slotData = slots[index];
                     return BinderSlotWidget(
-                      slotData: slots[index],
-                      onTap: () => onSlotTap(slots[index]),
-                      onLongPress: onSlotLongPress != null ? () => onSlotLongPress!(slots[index]) : null, // <--- NEU
+                      slotData: slotData,
+                      onTap: () => onSlotTap(slotData),
+                      onLongPress: onSlotLongPress != null ? () => onSlotLongPress!(slotData) : null, 
+                      // Wenn es der aktuell gewählte Tausch-Slot ist, highlighten wir ihn!
+                      isHighlightedForSwap: isSwapMode && slotData.binderCard.id == slotToSwapId,
                     );
                   },
                 );

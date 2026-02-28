@@ -14,6 +14,7 @@ class CreateBinderDialog extends ConsumerStatefulWidget {
 class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
   final _nameController = TextEditingController();
   bool _isLoading = false;
+  String _bulkBoxShape = "box"; // 'box', 'etb', oder 'tin'
 
   // --- AUTOCOMPLETE DATEN ---
   List<String> _dbSetNames = [];
@@ -349,16 +350,33 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
         );
 
       case AdvancedBinderType.bulkBox:
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)),
-          child: const Row(
-            children: [
-              Icon(Icons.info_outline, color: Colors.orange),
-              SizedBox(width: 8),
-              Expanded(child: Text("Bulk Boxen haben kein Seitenlayout. Sie dienen als reine Listen-Aufbewahrung für doppelte Karten.", style: TextStyle(fontSize: 12, color: Colors.black87))),
-            ],
-          ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Art der Aufbewahrung:", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(child: _buildShapeOption("Standard Box", "box", Icons.inventory_2)),
+                const SizedBox(width: 8),
+                Expanded(child: _buildShapeOption("Elite Trainer Box", "etb", Icons.all_inbox)),
+                const SizedBox(width: 8),
+                Expanded(child: _buildShapeOption("Tin-Dose", "tin", Icons.takeout_dining)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Expanded(child: Text("Bulk Boxen haben kein Seitenlayout. Sie sind endlose Listen, die du mit Trennkarten strukturieren kannst.", style: TextStyle(fontSize: 12, color: Colors.black87))),
+                ],
+              ),
+            ),
+          ],
         );
     }
   }
@@ -427,6 +445,28 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
     );
   }
 
+  Widget _buildShapeOption(String label, String shape, IconData icon) {
+    final isSelected = _bulkBoxShape == shape;
+    return InkWell(
+      onTap: () => setState(() => _bulkBoxShape = shape),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.orange[50] : Colors.white,
+          border: Border.all(color: isSelected ? Colors.orange : Colors.grey[300]!, width: isSelected ? 2 : 1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: isSelected ? Colors.orange : Colors.grey),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(fontSize: 10, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal), textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _createBinder() async {
     if (_nameController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bitte gib einen Namen ein.")));
@@ -455,6 +495,7 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
         cols: _selectedType == AdvancedBinderType.bulkBox ? 0 : _cols,
         type: _selectedType,
         sortOrder: _sortOrder,
+        icon: _selectedType == AdvancedBinderType.bulkBox ? _bulkBoxShape : null,
         customPages: _customPages,
         selectedGens: _selectedGens,
         dexMegas: _dexMegas,

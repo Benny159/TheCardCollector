@@ -23,11 +23,13 @@ class BinderService {
     SetCompletionType setCompletion = SetCompletionType.standard,
     String? selectedSetName,
     String? selectedTarget,
+    String? icon,
   }) async {
     final binderId = await db.into(db.binders).insert(
       BindersCompanion.insert(
         name: name,
         color: color,
+        icon: Value(icon),
         rowsPerPage: Value(rows),
         columnsPerPage: Value(cols),
         type: Value(type.name),
@@ -818,6 +820,125 @@ class BinderService {
         }
       });
     });
+  }
+
+  // =====================================================================
+  // NEU: ZWEI BELIEBIGE SLOTS TAUSCHEN
+  // =====================================================================
+  Future<void> swapTwoSlots(int binderId, int slotId1, int slotId2) async {
+    if (slotId1 == slotId2) return;
+
+    final binder = await (db.select(db.binders)..where((t) => t.id.equals(binderId))).getSingle();
+    final rows = binder.rowsPerPage;
+    final cols = binder.columnsPerPage;
+    final slotsPerPage = rows * cols;
+    if (slotsPerPage <= 0) return;
+
+    final sortOrder = binder.sortOrder == BinderSortOrder.topToBottom.name 
+        ? BinderSortOrder.topToBottom 
+        : BinderSortOrder.leftToRight;
+
+    final slots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
+
+    int getAbsoluteIndex(BinderCard s) {
+      int localIndex;
+      if (sortOrder == BinderSortOrder.leftToRight) {
+        localIndex = s.slotIndex;
+      } else {
+        final int targetRow = (s.slotIndex / cols).floor();
+        final int targetCol = s.slotIndex % cols;
+        localIndex = targetCol * rows + targetRow;
+      }
+      return s.pageIndex * slotsPerPage + localIndex;
+    }
+
+    final sortedSlots = List<BinderCard>.from(slots);
+    sortedSlots.sort((a, b) => getAbsoluteIndex(a).compareTo(getAbsoluteIndex(b)));
+
+    final index1 = sortedSlots.indexWhere((s) => s.id == slotId1);
+    final index2 = sortedSlots.indexWhere((s) => s.id == slotId2);
+
+    if (index1 == -1 || index2 == -1) return;
+
+    await db.transaction(() async {
+      // IDs im Array tauschen
+      final orderedIds = sortedSlots.map((s) => s.id).toList();
+      final temp = orderedIds[index1];
+      orderedIds[index1] = orderedIds[index2];
+      orderedIds[index2] = temp;
+
+      // Massen-Update der neuen Positionen
+      await db.batch((batch) {
+        for (int i = 0; i < orderedIds.length; i++) {
+          final pageIndex = (i / slotsPerPage).floor();
+          final localIndex = i % slotsPerPage;
+          int visualSlotIndex;
+          
+          if (sortOrder == BinderSortOrder.leftToRight) {
+            visualSlotIndex = localIndex;
+          } else {
+            final int targetRow = localIndex % rows;
+            final int targetCol = (localIndex / rows).floor();
+            visualSlotIndex = targetRow * cols + targetCol;
+          }
+
+          batch.update(
+            db.binderCards,
+            BinderCardsCompanion(
+              pageIndex: Value(pageIndex),
+              slotIndex: Value(visualSlotIndex),
+            ),
+            where: (t) => t.id.equals(orderedIds[i])
+          );
+        }
+      });
+    });
+  }
+
+  // =====================================================================
+  // NEU: BULK BOX MANAGEMENT (Listen-Inventar & Trennkarten)
+  // =====================================================================
+
+  // 1. Eine Bulk-Karte (hinten) anfügen
+  Future<void> addCardToBulkBox(int binderId, String cardId, String variant) async {
+    if (!await isCardAvailable(cardId)) throw Exception("Keine Karte mehr verfügbar!");
+
+    final existingSlots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
+    final nextIndex = existingSlots.length; // Einfach ans Ende
+
+    await db.into(db.binderCards).insert(
+      BinderCardsCompanion.insert(
+        binderId: binderId,
+        pageIndex: 0,
+        slotIndex: nextIndex,
+        isPlaceholder: const Value(false),
+        cardId: Value(cardId),
+        variant: Value(variant),
+      )
+    );
+    await recalculateBinderValue(binderId);
+  }
+
+  // 2. Eine ETB/Box Trennkarte (Divider) anfügen
+  Future<void> addBulkDivider(int binderId, String title) async {
+    final existingSlots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
+    final nextIndex = existingSlots.length;
+
+    await db.into(db.binderCards).insert(
+      BinderCardsCompanion.insert(
+        binderId: binderId,
+        pageIndex: 0,
+        slotIndex: nextIndex,
+        isPlaceholder: const Value(true), // Ein Divider IST ein Platzhalter
+        placeholderLabel: Value("DIVIDER:$title"), // Interner Marker für das UI
+      )
+    );
+  }
+
+  // 3. Eine Karte direkt UNTER einen Divider (oder an eine bestimme Position) packen
+  Future<void> moveBulkItem(int binderId, int slotId, int offset) async {
+     // Nutzt unsere bestehende swap-Logik von vorhin!
+     await _swapSlot(binderId, slotId, offset);
   }
 }
 

@@ -6,6 +6,7 @@ import '../../data/database/database_provider.dart';
 import '../../data/database/app_database.dart';
 import 'create_binder_dialog.dart';
 import 'binder_detail_screen.dart';
+import 'bulk_box_detail_screen.dart';
 // WICHTIG: Hier importieren wir jetzt den Provider!
 import 'binder_detail_provider.dart'; 
 
@@ -76,7 +77,7 @@ class BinderListScreen extends ConsumerWidget {
   }
 }
 
-// --- BINDER CARD (Jetzt mit Box-Look!) ---
+// --- BINDER CARD (Jetzt mit ETB, Tin und Buch Look!) ---
 class _BinderCard extends ConsumerWidget {
   final Binder binder;
   const _BinderCard({required this.binder});
@@ -86,161 +87,101 @@ class _BinderCard extends ConsumerWidget {
     final color = Color(binder.color);
     final statsAsync = ref.watch(binderStatsProvider(binder.id));
     
-    // Erkennung: Hat 0 Spalten/Reihen? Dann ist es eine Bulk Box!
     final isBulkBox = binder.rowsPerPage == 0 || binder.columnsPerPage == 0;
+    final shape = binder.icon ?? 'box'; // 'etb', 'tin', 'box'
 
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            // HIER KOMMT SPÄTER DEIN ECHTER BULK-SCREEN REIN!
-            // Für den Moment navigieren wir ganz normal zum Binder.
-            builder: (context) => BinderDetailScreen(binder: binder),
-          ),
-        );
+        if (isBulkBox) {
+          // --- ÖFFNET DIE LISTEN-ANSICHT ---
+          Navigator.push(context, MaterialPageRoute(builder: (context) => BulkBoxDetailScreen(binder: binder)));
+        } else {
+          // --- ÖFFNET DIE BUCH-ANSICHT ---
+          Navigator.push(context, MaterialPageRoute(builder: (context) => BinderDetailScreen(binder: binder)));
+        }
       },
       child: Container(
         decoration: BoxDecoration(
           color: color,
-          // Bulk Boxen haben rundum leicht abgerundete Ecken, Binder haben einen Buchrücken!
           borderRadius: isBulkBox 
-              ? BorderRadius.circular(12) 
-              : const BorderRadius.only(
-                  topRight: Radius.circular(12),
-                  bottomRight: Radius.circular(12),
-                  bottomLeft: Radius.circular(4),
-                  topLeft: Radius.circular(4),
-                ),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 5, offset: const Offset(2, 4))
-          ],
+              ? (shape == 'tin' ? BorderRadius.circular(20) : BorderRadius.circular(8))
+              : const BorderRadius.only(topRight: Radius.circular(12), bottomRight: Radius.circular(12), bottomLeft: Radius.circular(4), topLeft: Radius.circular(4)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 5, offset: const Offset(2, 4))],
           gradient: LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: isBulkBox 
-                ? [color, color.withOpacity(0.8), color] // Box-Beleuchtung
-                : [color.withOpacity(0.8), color, color], // Buch-Beleuchtung
-            stops: isBulkBox ? const [0.0, 0.5, 1.0] : const [0.05, 0.1, 1.0],
-          )
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: shape == 'tin' 
+                ? [color.withOpacity(0.6), color, Colors.white.withOpacity(0.4), color] // Metallischer Glanz
+                : (isBulkBox 
+                    ? [color.withOpacity(0.9), color, color.withOpacity(0.7)] // Box Shading
+                    : [color.withOpacity(0.8), color, color]), // Buch Shading
+            stops: shape == 'tin' ? const [0.0, 0.4, 0.5, 1.0] : const [0.0, 0.5, 1.0],
+          ),
+          border: shape == 'tin' ? Border.all(color: Colors.white.withOpacity(0.5), width: 1.5) : null,
         ),
         child: Stack(
           children: [
-            // Buchrücken Linie (Nur bei Büchern!)
-            if (!isBulkBox)
-              Positioned(
-                left: 12, top: 0, bottom: 0,
-                child: Container(width: 2, color: Colors.black12),
-              ),
+            // --- DEKORATIONEN BASIEREND AUF DEM TYP ---
+            if (!isBulkBox) // Buchrücken
+              Positioned(left: 12, top: 0, bottom: 0, child: Container(width: 2, color: Colors.black12)),
 
-            // Kisten-Deckel (Nur bei Boxen!)
-            if (isBulkBox)
+            if (isBulkBox && shape == 'etb') // ETB Deckel (Oben abgeschnitten)
               Positioned(
                 left: 0, right: 0, top: 0,
                 child: Container(
-                  height: 15,
+                  height: 25,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                    border: Border(bottom: BorderSide(color: Colors.black.withOpacity(0.2), width: 2))
+                    color: Colors.black.withOpacity(0.15),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                    border: Border(bottom: BorderSide(color: Colors.black.withOpacity(0.4), width: 2))
                   ),
                 ),
               ),
-            
-            // Inhalt
+              
+            if (isBulkBox && shape == 'box') // Pappkarton-Klappen
+              Positioned(
+                left: 0, right: 0, top: 0,
+                child: Row(
+                  children: [
+                    Expanded(child: Container(height: 10, decoration: BoxDecoration(color: Colors.black.withOpacity(0.1), border: Border.all(color: Colors.black12)))),
+                    Expanded(child: Container(height: 10, decoration: BoxDecoration(color: Colors.black.withOpacity(0.1), border: Border.all(color: Colors.black12)))),
+                  ],
+                ),
+              ),
+
+            // --- INHALT ---
             Padding(
-              padding: EdgeInsets.fromLTRB(isBulkBox ? 12 : 24, 12, 12, 12),
+              padding: EdgeInsets.fromLTRB(isBulkBox ? 16 : 24, isBulkBox && shape == 'etb' ? 32 : 16, 12, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- HEADER: Name ---
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.9),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            binder.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
-                          ),
-                        ),
-                      ),
-                    ],
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(4)),
+                    child: Text(
+                      binder.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                    ),
                   ),
-                  
                   const SizedBox(height: 8),
-
-                  // WERT ANZEIGE
                   statsAsync.when(
                     data: (stats) => Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        "${stats.value.toStringAsFixed(2)} €",
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                      ),
+                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.3), borderRadius: BorderRadius.circular(12)),
+                      child: Text("${stats.value.toStringAsFixed(2)} €", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                     ),
-                    loading: () => const SizedBox(), 
-                    error: (_,__) => const SizedBox(),
+                    loading: () => const SizedBox(), error: (_,__) => const SizedBox(),
                   ),
-
                   const Spacer(),
-                  
-                  // --- FOOTER: Progress & Infos ---
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Icon(isBulkBox ? Icons.inventory_2 : Icons.grid_view, size: 10, color: Colors.white70),
-                          const SizedBox(width: 4),
-                          Text(
-                            isBulkBox ? "Lager-Box" : "${binder.rowsPerPage}x${binder.columnsPerPage} Grid", 
-                            style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10)
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-
-                      // Progress Bar
-                      statsAsync.when(
-                        data: (stats) => Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (!isBulkBox) ...[
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value: stats.progress,
-                                  backgroundColor: Colors.black26,
-                                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
-                                  minHeight: 6,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                            ],
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                isBulkBox ? "${stats.filled} Karten" : "${stats.filled} / ${stats.total}",
-                                style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 10, fontWeight: isBulkBox ? FontWeight.bold : FontWeight.normal),
-                              ),
-                            ),
-                          ],
-                        ),
-                        loading: () => const LinearProgressIndicator(minHeight: 6),
-                        error: (_,__) => Container(),
+                      Icon(isBulkBox ? Icons.inventory_2 : Icons.menu_book, size: 12, color: Colors.white70),
+                      const SizedBox(width: 4),
+                      Text(
+                        isBulkBox 
+                            ? (shape == 'etb' ? "Elite Trainer Box" : (shape == 'tin' ? "Tin-Dose" : "Lagerkarton")) 
+                            : "${binder.rowsPerPage}x${binder.columnsPerPage} Buch", 
+                        style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold)
                       ),
                     ],
                   ),
