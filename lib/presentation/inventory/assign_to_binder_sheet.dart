@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/drift.dart' as drift;
 
 import '../../data/database/database_provider.dart';
 import '../../data/database/app_database.dart';
 import '../../domain/models/api_card.dart';
 import '../../domain/logic/binder_service.dart';
 import '../../presentation/binders/binder_detail_provider.dart';
-import 'inventory_bottom_sheet.dart'; // Für den lastSelectedBinderProvider
+import 'inventory_bottom_sheet.dart'; 
 
 class AssignToBinderSheet extends ConsumerStatefulWidget {
   final ApiCard card;
@@ -30,19 +31,19 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
 
   Future<void> _loadData() async {
     final db = ref.read(databaseProvider);
+    final binderService = BinderService(db);
     
     // 1. Lade alle Binder
     final binders = await db.select(db.binders).get();
     
-    // 2. Finde heraus, welche Varianten der User von dieser Karte besitzt
-    final userCards = await (db.select(db.userCards)..where((tbl) => tbl.cardId.equals(widget.card.id))).get();
-    final variants = userCards.map((c) => c.variant ?? 'Normal').toSet().toList();
+    // 2. Lade NUR die Varianten, die noch NICHT in einem Binder stecken!
+    final availableVariants = await binderService.getAvailableVariantsForCard(widget.card.id);
 
     if (mounted) {
       setState(() {
         _availableBinders = binders;
-        _ownedVariants = variants;
-        if (variants.isNotEmpty) _selectedVariant = variants.first;
+        _ownedVariants = availableVariants; // <--- HIER: Nur noch freie Varianten!
+        if (_ownedVariants.isNotEmpty) _selectedVariant = _ownedVariants.first;
       });
     }
   }
@@ -85,7 +86,6 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
           Text(widget.card.nameDe ?? widget.card.name, style: const TextStyle(color: Colors.grey)),
           const Divider(),
 
-          // --- Varianten Auswahl ---
           const Text("Welche deiner Karten?", style: TextStyle(fontSize: 12, color: Colors.grey)),
           const SizedBox(height: 4),
           DropdownButtonFormField<String>(
@@ -100,7 +100,6 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
           ),
           const SizedBox(height: 16),
 
-          // --- Binder Auswahl ---
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -121,7 +120,12 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
                     icon: const Icon(Icons.arrow_drop_down, color: Colors.blue),
                     items: [
                       const DropdownMenuItem(value: -1, child: Text("✨ Automatisch (Beliebiger Binder)")),
-                      ..._availableBinders.map((b) => DropdownMenuItem(value: b.id, child: Text("📂 ${b.name}"))),
+                      ..._availableBinders.map((b) {
+                        String prefix = "📂 ";
+                        if (b.rowsPerPage == 0) prefix = "📦 ";
+                        if (b.isFull) prefix = "🚫 (Voll) ";
+                        return DropdownMenuItem(value: b.id, child: Text("$prefix${b.name}", style: TextStyle(color: b.isFull ? Colors.red : Colors.black)));
+                      }),
                     ],
                     onChanged: (val) => ref.read(lastSelectedBinderProvider.notifier).state = val,
                   ),
@@ -135,10 +139,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
           Row(
             children: [
               Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Abbrechen"),
-                ),
+                child: OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text("Abbrechen")),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -164,27 +165,31 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
     if (targetBinderId == null || _selectedVariant == null) return;
 
     try {
-      // 1. Checken, ob wir die Karte aus einem ALTEN Binder klauen müssen!
-      final availableVariants = await binderService.getAvailableVariantsForCard(widget.card.id);
-      
-      if (!availableVariants.contains(_selectedVariant)) {
-        // Wir haben keine losen Karten dieser Variante mehr. Wir müssen sie aus einem existierenden Slot holen.
-        final oldSlot = await (db.select(db.binderCards)
-          ..where((t) => t.cardId.equals(widget.card.id))
-          ..where((t) => t.variant.equals(_selectedVariant!))
-          ..limit(1)
-        ).getSingleOrNull();
+      // --- NEU: IST DAS ZIEL EINE BULK BOX? ---
+      if (targetBinderId != -1) {
+        final selectedBinder = await (db.select(db.binders)..where((t) => t.id.equals(targetBinderId))).getSingle();
+        
+        if (selectedBinder.isFull) {
+           if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diese Box ist als "Voll" markiert!'), backgroundColor: Colors.red));
+           return;
+        }
 
-        if (oldSlot != null) {
-          await binderService.clearSlot(oldSlot.id);
-          ref.invalidate(binderDetailProvider(oldSlot.binderId));
+        // Ist es eine Bulk Box? (Rows == 0)
+        // Dann einfach HINTEN REINWERFEN (keine Namenssuche!)
+        if (selectedBinder.rowsPerPage == 0) {
+           await binderService.addCardToBulkBox(targetBinderId, widget.card.id, _selectedVariant!);
+           if (mounted) {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('In Bulk Box geworfen!'), backgroundColor: Colors.green));
+              ref.invalidate(binderDetailProvider(targetBinderId));
+           }
+           return;
         }
       }
 
-      // 2. Die smarte Suche für den neuen Platz
+      // --- NORMALE PLATZHALTER-SUCHE (Wird nur für BÜCHER ausgeführt!) ---
       final cardNameDe = (widget.card.nameDe ?? "").toLowerCase();
       final cardNameEn = widget.card.name.toLowerCase();
-      
       final ignoreWords = ['ex', 'v', 'vmax', 'vstar', 'gx', 'team', 'rocket', "rocket's", 'rockets', 'dark', 'dunkles', 'light', 'helles', 'mega', 'm', 'lv', 'x', 'lvx', 'sp'];
 
       List<String> getCoreWords(String text) {
@@ -199,15 +204,27 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
       final cWordsDe = getCoreWords(cardNameDe);
       final cWordsEn = getCoreWords(cardNameEn);
 
-      final query = db.select(db.binderCards);
-      if (targetBinderId != -1) query.where((tbl) => tbl.binderId.equals(targetBinderId));
-      final allSlots = await query.get();
+      final query = db.select(db.binderCards).join([
+        drift.innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
+      ]);
+      
+      if (targetBinderId != -1) {
+        query.where(db.binderCards.binderId.equals(targetBinderId) & db.binderCards.isPlaceholder.equals(true));
+      } else {
+        query.where(db.binders.isFull.equals(false) & db.binders.rowsPerPage.isBiggerThanValue(0) & db.binderCards.isPlaceholder.equals(true)); 
+      }
+
+      final allJoined = await query.get();
+      final allSlots = allJoined.map((row) => row.readTable(db.binderCards)).toList();
 
       List<BinderCard> potentialSlots = allSlots.where((slot) {
+        // Ein Divider ist KEIN gültiger Platzhalter zum automatischen Befüllen!
+        if (slot.placeholderLabel?.startsWith('DIVIDER:') ?? false) return false;
+
         String pLabel = slot.placeholderLabel ?? '';
         if (pLabel.contains(" ")) {
           final parts = pLabel.split(" ");
-          if (parts.first.startsWith("#")) pLabel = parts.sublist(1).join(" ");
+          if (parts.first.startsWith("#") || parts.first.startsWith("✨")) pLabel = parts.sublist(1).join(" ");
         }
         pLabel = pLabel.toLowerCase();
         if (pLabel.isEmpty) return false;
@@ -222,26 +239,18 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
       }).toList();
 
       if (potentialSlots.isNotEmpty) {
-        potentialSlots.sort((a, b) {
-          if (a.isPlaceholder && !b.isPlaceholder) return -1;
-          if (!a.isPlaceholder && b.isPlaceholder) return 1;
-          return 0; 
-        });
-
         final slot = potentialSlots.first;
-        
-        // Slot befüllen (überschreibt ggf. eine alte Karte dort)
         await binderService.fillSlot(slot.id, widget.card.id, variant: _selectedVariant);
         
         if (mounted) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Karte erfolgreich einsortiert!'), backgroundColor: Colors.green));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Karte erfolgreich in den perfekten Slot einsortiert!'), backgroundColor: Colors.green));
           ref.invalidate(binderDetailProvider(slot.binderId));
         }
       } else {
         if (mounted) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kein passender Platz in diesem Binder gefunden!'), backgroundColor: Colors.orange));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kein passender Platz in einem Buch gefunden!'), backgroundColor: Colors.orange));
         }
       }
     } catch (e) {

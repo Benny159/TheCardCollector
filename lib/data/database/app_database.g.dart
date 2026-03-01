@@ -589,6 +589,12 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
   late final GeneratedColumn<String> number = GeneratedColumn<String>(
       'number', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _cardTypeMeta =
+      const VerificationMeta('cardType');
+  @override
+  late final GeneratedColumn<String> cardType = GeneratedColumn<String>(
+      'card_type', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _imageUrlMeta =
       const VerificationMeta('imageUrl');
   @override
@@ -688,6 +694,7 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
         name,
         nameDe,
         number,
+        cardType,
         imageUrl,
         imageUrlDe,
         artist,
@@ -737,6 +744,10 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
           number.isAcceptableOrUnknown(data['number']!, _numberMeta));
     } else if (isInserting) {
       context.missing(_numberMeta);
+    }
+    if (data.containsKey('card_type')) {
+      context.handle(_cardTypeMeta,
+          cardType.isAcceptableOrUnknown(data['card_type']!, _cardTypeMeta));
     }
     if (data.containsKey('image_url')) {
       context.handle(_imageUrlMeta,
@@ -821,6 +832,8 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
           .read(DriftSqlType.string, data['${effectivePrefix}name_de']),
       number: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}number'])!,
+      cardType: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}card_type']),
       imageUrl: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}image_url'])!,
       imageUrlDe: attachedDatabase.typeMapping
@@ -860,6 +873,7 @@ class Card extends DataClass implements Insertable<Card> {
   final String name;
   final String? nameDe;
   final String number;
+  final String? cardType;
   final String imageUrl;
   final String? imageUrlDe;
   final String? artist;
@@ -878,6 +892,7 @@ class Card extends DataClass implements Insertable<Card> {
       required this.name,
       this.nameDe,
       required this.number,
+      this.cardType,
       required this.imageUrl,
       this.imageUrlDe,
       this.artist,
@@ -900,6 +915,9 @@ class Card extends DataClass implements Insertable<Card> {
       map['name_de'] = Variable<String>(nameDe);
     }
     map['number'] = Variable<String>(number);
+    if (!nullToAbsent || cardType != null) {
+      map['card_type'] = Variable<String>(cardType);
+    }
     map['image_url'] = Variable<String>(imageUrl);
     if (!nullToAbsent || imageUrlDe != null) {
       map['image_url_de'] = Variable<String>(imageUrlDe);
@@ -933,6 +951,9 @@ class Card extends DataClass implements Insertable<Card> {
       nameDe:
           nameDe == null && nullToAbsent ? const Value.absent() : Value(nameDe),
       number: Value(number),
+      cardType: cardType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cardType),
       imageUrl: Value(imageUrl),
       imageUrlDe: imageUrlDe == null && nullToAbsent
           ? const Value.absent()
@@ -965,6 +986,7 @@ class Card extends DataClass implements Insertable<Card> {
       name: serializer.fromJson<String>(json['name']),
       nameDe: serializer.fromJson<String?>(json['nameDe']),
       number: serializer.fromJson<String>(json['number']),
+      cardType: serializer.fromJson<String?>(json['cardType']),
       imageUrl: serializer.fromJson<String>(json['imageUrl']),
       imageUrlDe: serializer.fromJson<String?>(json['imageUrlDe']),
       artist: serializer.fromJson<String?>(json['artist']),
@@ -988,6 +1010,7 @@ class Card extends DataClass implements Insertable<Card> {
       'name': serializer.toJson<String>(name),
       'nameDe': serializer.toJson<String?>(nameDe),
       'number': serializer.toJson<String>(number),
+      'cardType': serializer.toJson<String?>(cardType),
       'imageUrl': serializer.toJson<String>(imageUrl),
       'imageUrlDe': serializer.toJson<String?>(imageUrlDe),
       'artist': serializer.toJson<String?>(artist),
@@ -1009,6 +1032,7 @@ class Card extends DataClass implements Insertable<Card> {
           String? name,
           Value<String?> nameDe = const Value.absent(),
           String? number,
+          Value<String?> cardType = const Value.absent(),
           String? imageUrl,
           Value<String?> imageUrlDe = const Value.absent(),
           Value<String?> artist = const Value.absent(),
@@ -1027,6 +1051,7 @@ class Card extends DataClass implements Insertable<Card> {
         name: name ?? this.name,
         nameDe: nameDe.present ? nameDe.value : this.nameDe,
         number: number ?? this.number,
+        cardType: cardType.present ? cardType.value : this.cardType,
         imageUrl: imageUrl ?? this.imageUrl,
         imageUrlDe: imageUrlDe.present ? imageUrlDe.value : this.imageUrlDe,
         artist: artist.present ? artist.value : this.artist,
@@ -1048,6 +1073,7 @@ class Card extends DataClass implements Insertable<Card> {
       name: data.name.present ? data.name.value : this.name,
       nameDe: data.nameDe.present ? data.nameDe.value : this.nameDe,
       number: data.number.present ? data.number.value : this.number,
+      cardType: data.cardType.present ? data.cardType.value : this.cardType,
       imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
       imageUrlDe:
           data.imageUrlDe.present ? data.imageUrlDe.value : this.imageUrlDe,
@@ -1079,6 +1105,7 @@ class Card extends DataClass implements Insertable<Card> {
           ..write('name: $name, ')
           ..write('nameDe: $nameDe, ')
           ..write('number: $number, ')
+          ..write('cardType: $cardType, ')
           ..write('imageUrl: $imageUrl, ')
           ..write('imageUrlDe: $imageUrlDe, ')
           ..write('artist: $artist, ')
@@ -1102,6 +1129,7 @@ class Card extends DataClass implements Insertable<Card> {
       name,
       nameDe,
       number,
+      cardType,
       imageUrl,
       imageUrlDe,
       artist,
@@ -1123,6 +1151,7 @@ class Card extends DataClass implements Insertable<Card> {
           other.name == this.name &&
           other.nameDe == this.nameDe &&
           other.number == this.number &&
+          other.cardType == this.cardType &&
           other.imageUrl == this.imageUrl &&
           other.imageUrlDe == this.imageUrlDe &&
           other.artist == this.artist &&
@@ -1143,6 +1172,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
   final Value<String> name;
   final Value<String?> nameDe;
   final Value<String> number;
+  final Value<String?> cardType;
   final Value<String> imageUrl;
   final Value<String?> imageUrlDe;
   final Value<String?> artist;
@@ -1162,6 +1192,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.name = const Value.absent(),
     this.nameDe = const Value.absent(),
     this.number = const Value.absent(),
+    this.cardType = const Value.absent(),
     this.imageUrl = const Value.absent(),
     this.imageUrlDe = const Value.absent(),
     this.artist = const Value.absent(),
@@ -1182,6 +1213,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
     required String name,
     this.nameDe = const Value.absent(),
     required String number,
+    this.cardType = const Value.absent(),
     required String imageUrl,
     this.imageUrlDe = const Value.absent(),
     this.artist = const Value.absent(),
@@ -1206,6 +1238,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
     Expression<String>? name,
     Expression<String>? nameDe,
     Expression<String>? number,
+    Expression<String>? cardType,
     Expression<String>? imageUrl,
     Expression<String>? imageUrlDe,
     Expression<String>? artist,
@@ -1226,6 +1259,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
       if (name != null) 'name': name,
       if (nameDe != null) 'name_de': nameDe,
       if (number != null) 'number': number,
+      if (cardType != null) 'card_type': cardType,
       if (imageUrl != null) 'image_url': imageUrl,
       if (imageUrlDe != null) 'image_url_de': imageUrlDe,
       if (artist != null) 'artist': artist,
@@ -1248,6 +1282,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
       Value<String>? name,
       Value<String?>? nameDe,
       Value<String>? number,
+      Value<String?>? cardType,
       Value<String>? imageUrl,
       Value<String?>? imageUrlDe,
       Value<String?>? artist,
@@ -1267,6 +1302,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
       name: name ?? this.name,
       nameDe: nameDe ?? this.nameDe,
       number: number ?? this.number,
+      cardType: cardType ?? this.cardType,
       imageUrl: imageUrl ?? this.imageUrl,
       imageUrlDe: imageUrlDe ?? this.imageUrlDe,
       artist: artist ?? this.artist,
@@ -1300,6 +1336,9 @@ class CardsCompanion extends UpdateCompanion<Card> {
     }
     if (number.present) {
       map['number'] = Variable<String>(number.value);
+    }
+    if (cardType.present) {
+      map['card_type'] = Variable<String>(cardType.value);
     }
     if (imageUrl.present) {
       map['image_url'] = Variable<String>(imageUrl.value);
@@ -1351,6 +1390,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
           ..write('name: $name, ')
           ..write('nameDe: $nameDe, ')
           ..write('number: $number, ')
+          ..write('cardType: $cardType, ')
           ..write('imageUrl: $imageUrl, ')
           ..write('imageUrlDe: $imageUrlDe, ')
           ..write('artist: $artist, ')
@@ -3598,6 +3638,15 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
       type: DriftSqlType.double,
       requiredDuringInsert: false,
       defaultValue: const Constant(0.0));
+  static const VerificationMeta _isFullMeta = const VerificationMeta('isFull');
+  @override
+  late final GeneratedColumn<bool> isFull = GeneratedColumn<bool>(
+      'is_full', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_full" IN (0, 1))'),
+      defaultValue: const Constant(false));
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -3623,6 +3672,7 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
         type,
         sortOrder,
         totalValue,
+        isFull,
         createdAt,
         updatedAt
       ];
@@ -3681,6 +3731,10 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
           totalValue.isAcceptableOrUnknown(
               data['total_value']!, _totalValueMeta));
     }
+    if (data.containsKey('is_full')) {
+      context.handle(_isFullMeta,
+          isFull.isAcceptableOrUnknown(data['is_full']!, _isFullMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -3716,6 +3770,8 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
           .read(DriftSqlType.string, data['${effectivePrefix}sort_order'])!,
       totalValue: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}total_value'])!,
+      isFull: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_full'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -3739,6 +3795,7 @@ class Binder extends DataClass implements Insertable<Binder> {
   final String type;
   final String sortOrder;
   final double totalValue;
+  final bool isFull;
   final DateTime createdAt;
   final DateTime? updatedAt;
   const Binder(
@@ -3751,6 +3808,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       required this.type,
       required this.sortOrder,
       required this.totalValue,
+      required this.isFull,
       required this.createdAt,
       this.updatedAt});
   @override
@@ -3767,6 +3825,7 @@ class Binder extends DataClass implements Insertable<Binder> {
     map['type'] = Variable<String>(type);
     map['sort_order'] = Variable<String>(sortOrder);
     map['total_value'] = Variable<double>(totalValue);
+    map['is_full'] = Variable<bool>(isFull);
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || updatedAt != null) {
       map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -3785,6 +3844,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       type: Value(type),
       sortOrder: Value(sortOrder),
       totalValue: Value(totalValue),
+      isFull: Value(isFull),
       createdAt: Value(createdAt),
       updatedAt: updatedAt == null && nullToAbsent
           ? const Value.absent()
@@ -3805,6 +3865,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       type: serializer.fromJson<String>(json['type']),
       sortOrder: serializer.fromJson<String>(json['sortOrder']),
       totalValue: serializer.fromJson<double>(json['totalValue']),
+      isFull: serializer.fromJson<bool>(json['isFull']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
     );
@@ -3822,6 +3883,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       'type': serializer.toJson<String>(type),
       'sortOrder': serializer.toJson<String>(sortOrder),
       'totalValue': serializer.toJson<double>(totalValue),
+      'isFull': serializer.toJson<bool>(isFull),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
     };
@@ -3837,6 +3899,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           String? type,
           String? sortOrder,
           double? totalValue,
+          bool? isFull,
           DateTime? createdAt,
           Value<DateTime?> updatedAt = const Value.absent()}) =>
       Binder(
@@ -3849,6 +3912,7 @@ class Binder extends DataClass implements Insertable<Binder> {
         type: type ?? this.type,
         sortOrder: sortOrder ?? this.sortOrder,
         totalValue: totalValue ?? this.totalValue,
+        isFull: isFull ?? this.isFull,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
       );
@@ -3867,6 +3931,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       totalValue:
           data.totalValue.present ? data.totalValue.value : this.totalValue,
+      isFull: data.isFull.present ? data.isFull.value : this.isFull,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -3884,6 +3949,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           ..write('type: $type, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('totalValue: $totalValue, ')
+          ..write('isFull: $isFull, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -3891,8 +3957,19 @@ class Binder extends DataClass implements Insertable<Binder> {
   }
 
   @override
-  int get hashCode => Object.hash(id, name, color, icon, rowsPerPage,
-      columnsPerPage, type, sortOrder, totalValue, createdAt, updatedAt);
+  int get hashCode => Object.hash(
+      id,
+      name,
+      color,
+      icon,
+      rowsPerPage,
+      columnsPerPage,
+      type,
+      sortOrder,
+      totalValue,
+      isFull,
+      createdAt,
+      updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3906,6 +3983,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           other.type == this.type &&
           other.sortOrder == this.sortOrder &&
           other.totalValue == this.totalValue &&
+          other.isFull == this.isFull &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -3920,6 +3998,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
   final Value<String> type;
   final Value<String> sortOrder;
   final Value<double> totalValue;
+  final Value<bool> isFull;
   final Value<DateTime> createdAt;
   final Value<DateTime?> updatedAt;
   const BindersCompanion({
@@ -3932,6 +4011,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     this.type = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.totalValue = const Value.absent(),
+    this.isFull = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -3945,6 +4025,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     this.type = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.totalValue = const Value.absent(),
+    this.isFull = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   })  : name = Value(name),
@@ -3959,6 +4040,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     Expression<String>? type,
     Expression<String>? sortOrder,
     Expression<double>? totalValue,
+    Expression<bool>? isFull,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -3972,6 +4054,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
       if (type != null) 'type': type,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (totalValue != null) 'total_value': totalValue,
+      if (isFull != null) 'is_full': isFull,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -3987,6 +4070,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
       Value<String>? type,
       Value<String>? sortOrder,
       Value<double>? totalValue,
+      Value<bool>? isFull,
       Value<DateTime>? createdAt,
       Value<DateTime?>? updatedAt}) {
     return BindersCompanion(
@@ -3999,6 +4083,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
       type: type ?? this.type,
       sortOrder: sortOrder ?? this.sortOrder,
       totalValue: totalValue ?? this.totalValue,
+      isFull: isFull ?? this.isFull,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -4034,6 +4119,9 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     if (totalValue.present) {
       map['total_value'] = Variable<double>(totalValue.value);
     }
+    if (isFull.present) {
+      map['is_full'] = Variable<bool>(isFull.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4055,6 +4143,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
           ..write('type: $type, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('totalValue: $totalValue, ')
+          ..write('isFull: $isFull, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -5225,6 +5314,7 @@ typedef $$CardsTableCreateCompanionBuilder = CardsCompanion Function({
   required String name,
   Value<String?> nameDe,
   required String number,
+  Value<String?> cardType,
   required String imageUrl,
   Value<String?> imageUrlDe,
   Value<String?> artist,
@@ -5245,6 +5335,7 @@ typedef $$CardsTableUpdateCompanionBuilder = CardsCompanion Function({
   Value<String> name,
   Value<String?> nameDe,
   Value<String> number,
+  Value<String?> cardType,
   Value<String> imageUrl,
   Value<String?> imageUrlDe,
   Value<String?> artist,
@@ -5282,6 +5373,7 @@ class $$CardsTableTableManager extends RootTableManager<
             Value<String> name = const Value.absent(),
             Value<String?> nameDe = const Value.absent(),
             Value<String> number = const Value.absent(),
+            Value<String?> cardType = const Value.absent(),
             Value<String> imageUrl = const Value.absent(),
             Value<String?> imageUrlDe = const Value.absent(),
             Value<String?> artist = const Value.absent(),
@@ -5302,6 +5394,7 @@ class $$CardsTableTableManager extends RootTableManager<
             name: name,
             nameDe: nameDe,
             number: number,
+            cardType: cardType,
             imageUrl: imageUrl,
             imageUrlDe: imageUrlDe,
             artist: artist,
@@ -5322,6 +5415,7 @@ class $$CardsTableTableManager extends RootTableManager<
             required String name,
             Value<String?> nameDe = const Value.absent(),
             required String number,
+            Value<String?> cardType = const Value.absent(),
             required String imageUrl,
             Value<String?> imageUrlDe = const Value.absent(),
             Value<String?> artist = const Value.absent(),
@@ -5342,6 +5436,7 @@ class $$CardsTableTableManager extends RootTableManager<
             name: name,
             nameDe: nameDe,
             number: number,
+            cardType: cardType,
             imageUrl: imageUrl,
             imageUrlDe: imageUrlDe,
             artist: artist,
@@ -5379,6 +5474,11 @@ class $$CardsTableFilterComposer
 
   ColumnFilters<String> get number => $state.composableBuilder(
       column: $state.table.number,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get cardType => $state.composableBuilder(
+      column: $state.table.cardType,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -5529,6 +5629,11 @@ class $$CardsTableOrderingComposer
 
   ColumnOrderings<String> get number => $state.composableBuilder(
       column: $state.table.number,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get cardType => $state.composableBuilder(
+      column: $state.table.cardType,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
@@ -6514,6 +6619,7 @@ typedef $$BindersTableCreateCompanionBuilder = BindersCompanion Function({
   Value<String> type,
   Value<String> sortOrder,
   Value<double> totalValue,
+  Value<bool> isFull,
   Value<DateTime> createdAt,
   Value<DateTime?> updatedAt,
 });
@@ -6527,6 +6633,7 @@ typedef $$BindersTableUpdateCompanionBuilder = BindersCompanion Function({
   Value<String> type,
   Value<String> sortOrder,
   Value<double> totalValue,
+  Value<bool> isFull,
   Value<DateTime> createdAt,
   Value<DateTime?> updatedAt,
 });
@@ -6557,6 +6664,7 @@ class $$BindersTableTableManager extends RootTableManager<
             Value<String> type = const Value.absent(),
             Value<String> sortOrder = const Value.absent(),
             Value<double> totalValue = const Value.absent(),
+            Value<bool> isFull = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> updatedAt = const Value.absent(),
           }) =>
@@ -6570,6 +6678,7 @@ class $$BindersTableTableManager extends RootTableManager<
             type: type,
             sortOrder: sortOrder,
             totalValue: totalValue,
+            isFull: isFull,
             createdAt: createdAt,
             updatedAt: updatedAt,
           ),
@@ -6583,6 +6692,7 @@ class $$BindersTableTableManager extends RootTableManager<
             Value<String> type = const Value.absent(),
             Value<String> sortOrder = const Value.absent(),
             Value<double> totalValue = const Value.absent(),
+            Value<bool> isFull = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> updatedAt = const Value.absent(),
           }) =>
@@ -6596,6 +6706,7 @@ class $$BindersTableTableManager extends RootTableManager<
             type: type,
             sortOrder: sortOrder,
             totalValue: totalValue,
+            isFull: isFull,
             createdAt: createdAt,
             updatedAt: updatedAt,
           ),
@@ -6647,6 +6758,11 @@ class $$BindersTableFilterComposer
 
   ColumnFilters<double> get totalValue => $state.composableBuilder(
       column: $state.table.totalValue,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get isFull => $state.composableBuilder(
+      column: $state.table.isFull,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -6732,6 +6848,11 @@ class $$BindersTableOrderingComposer
 
   ColumnOrderings<double> get totalValue => $state.composableBuilder(
       column: $state.table.totalValue,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get isFull => $state.composableBuilder(
+      column: $state.table.isFull,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 

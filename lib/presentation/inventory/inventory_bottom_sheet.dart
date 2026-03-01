@@ -325,7 +325,33 @@ Future<void> _saveToInventory() async {
       String binderMessage = "";
       bool showOrangeBanner = false;
 
+      // =========================================================
+      // BINDER / BULK BOX LOGIK
+      // =========================================================
       if (selectedBinderId != null) {
+        
+        // --- 1. Check auf Bulk Box! ---
+        if (selectedBinderId != -1) {
+          final targetBinder = await (db.select(db.binders)..where((t) => t.id.equals(selectedBinderId))).getSingleOrNull();
+          
+          if (targetBinder != null) {
+            if (targetBinder.isFull) {
+               if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diese Box ist als "Voll" markiert! Karte wurde nur ins Inventar gelegt.'), backgroundColor: Colors.orange));
+               _closeAndShowSuccess("", true);
+               return; 
+            } else if (targetBinder.rowsPerPage == 0) {
+               // ES IST EINE BULK BOX! Einfach n-mal hinten anfügen
+               for (int i = 0; i < _quantity; i++) {
+                 await binderService.addCardToBulkBox(selectedBinderId, widget.card.id, _variant);
+               }
+               binderMessage = "\nund in die Bulk Box geworfen!";
+               _closeAndShowSuccess(binderMessage, false);
+               return; 
+            }
+          }
+        }
+
+        // --- 2. Normale Platzhalter-Suche für Bücher (Grid) ---
         final cardNameDe = (widget.card.nameDe ?? "").toLowerCase();
         final cardNameEn = widget.card.name.toLowerCase();
         
@@ -336,58 +362,57 @@ Future<void> _saveToInventory() async {
 
         List<String> getCoreWords(String text) {
           if (text.trim().isEmpty) return [];
-          
-          // FIX 1: Bindestriche zu Leerzeichen machen ("Pixi-ex" -> "Pixi ex")
           String spacedText = text.replaceAll('-', ' ');
-          
-          // Alle restlichen Sonderzeichen entfernen
           final cleaned = spacedText.replaceAll(RegExp(r'[^a-z0-9äöüß\s]'), '').toLowerCase();
           final words = cleaned.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
           final coreWords = words.where((w) => !ignoreWords.contains(w)).toList();
-          
           return coreWords.isNotEmpty ? coreWords : words;
         }
 
         final cWordsDe = getCoreWords(cardNameDe);
         final cWordsEn = getCoreWords(cardNameEn);
 
-        final query = db.select(db.binderCards);
+        final query = db.select(db.binderCards).join([
+          drift.innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
+        ]);
+
         if (selectedBinderId != -1) {
-          query.where((tbl) => tbl.binderId.equals(selectedBinderId));
+          // --- FIX: NUR LEERE PLATZHALTER SUCHEN ---
+          query.where(db.binderCards.binderId.equals(selectedBinderId) & db.binderCards.isPlaceholder.equals(true));
+        } else {
+          // --- FIX: NUR BÜCHER SUCHEN, DIE NICHT VOLL SIND, UND NUR LEERE PLATZHALTER ---
+          query.where(db.binders.isFull.equals(false) & db.binders.rowsPerPage.isBiggerThanValue(0) & db.binderCards.isPlaceholder.equals(true)); 
         }
-        final allSlots = await query.get();
+
+        final allJoined = await query.get();
+        final allSlots = allJoined.map((row) => row.readTable(db.binderCards)).toList();
 
         List<BinderCard> potentialSlots = allSlots.where((slot) {
-          final pLabel = (slot.placeholderLabel ?? '').toLowerCase();
+          if (slot.placeholderLabel?.startsWith('DIVIDER:') ?? false) return false;
+
+          String pLabel = slot.placeholderLabel ?? '';
+          if (pLabel.contains(" ")) {
+            final parts = pLabel.split(" ");
+            if (parts.first.startsWith("#") || parts.first.startsWith("✨")) pLabel = parts.sublist(1).join(" ");
+          }
+          pLabel = pLabel.toLowerCase();
           if (pLabel.isEmpty) return false;
           
           final pWords = getCoreWords(pLabel);
           if (pWords.isEmpty) return false;
 
-          // FIX 2: Nur matchen, wenn die jeweilige Sprache auch Wörter hat!
-          bool matchDe = false;
-          if (cWordsDe.isNotEmpty) {
-            matchDe = pWords.every((w) => cWordsDe.contains(w)) || cWordsDe.every((w) => pWords.contains(w));
-          }
-          
-          bool matchEn = false;
-          if (cWordsEn.isNotEmpty) {
-            matchEn = pWords.every((w) => cWordsEn.contains(w)) || cWordsEn.every((w) => pWords.contains(w));
-          }
+          bool matchDe = cWordsDe.isNotEmpty && (pWords.every((w) => cWordsDe.contains(w)) || cWordsDe.every((w) => pWords.contains(w)));
+          bool matchEn = cWordsEn.isNotEmpty && (pWords.every((w) => cWordsEn.contains(w)) || cWordsEn.every((w) => pWords.contains(w)));
 
-          // Wenn entweder der deutsche oder der englische Kern-Name passt -> MATCH!
           return matchDe || matchEn;
         }).toList();
 
         if (potentialSlots.isNotEmpty) {
           potentialSlots.sort((a, b) {
-            if (a.isPlaceholder && !b.isPlaceholder) return -1;
-            if (!a.isPlaceholder && b.isPlaceholder) return 1;
-
+            // Dies ist sicher, da wir oben schon auf isPlaceholder gefiltert haben
             final aLabel = a.placeholderLabel?.toLowerCase() ?? '';
             final bLabel = b.placeholderLabel?.toLowerCase() ?? '';
             
-            // FIX 3: Auch hier absichern, dass leere deutsche Namen nicht als "Exact Match" gewertet werden
             bool aExact = (cardNameDe.isNotEmpty && aLabel == cardNameDe) || aLabel == cardNameEn;
             bool bExact = (cardNameDe.isNotEmpty && bLabel == cardNameDe) || bLabel == cardNameEn;
             
@@ -400,83 +425,8 @@ Future<void> _saveToInventory() async {
           
           for (var i = 0; i < _quantity && i < potentialSlots.length; i++) {
             final slot = potentialSlots[i];
-
-            if (slot.isPlaceholder) {
-              await binderService.fillSlot(slot.id, widget.card.id, variant: _variant);
-              slotsFilled++;
-            } else {
-              final oldCard = slot.cardId != null 
-                  ? await (db.select(db.cards)..where((tbl) => tbl.id.equals(slot.cardId!))).getSingleOrNull()
-                  : null;
-              final oldVariant = slot.variant ?? "Normal";
-
-              if (!mounted) continue;
-
-              bool? replace = await showDialog<bool>(
-                context: context,
-                barrierDismissible: false,
-                builder: (ctx) => AlertDialog(
-                  title: const Text("Slot bereits belegt!"),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text("In diesem Binder-Slot liegt bereits eine Karte. Möchtest du sie durch die neu gescannte Karte ersetzen?", style: TextStyle(fontSize: 14)),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              children: [
-                                Text("Aktuell ($oldVariant)", style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                const SizedBox(height: 4),
-                                if (oldCard != null)
-                                  CachedNetworkImage(
-                                    imageUrl: oldCard.imageUrl ?? '', 
-                                    height: 110,
-                                    placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
-                                    errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),
-                                  )
-                                else
-                                  const Icon(Icons.broken_image, size: 50),
-                              ],
-                            ),
-                          ),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 8.0),
-                            child: Icon(Icons.arrow_forward_rounded, color: Colors.blueAccent, size: 36),
-                          ),
-                          Expanded(
-                            child: Column(
-                              children: [
-                                Text("Neu ($_variant)", style: const TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 4),
-                                CachedNetworkImage(
-                                  imageUrl: widget.card.displayImage, 
-                                  height: 110,
-                                  placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
-                                  errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      )
-                    ],
-                  ),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx, false), style: TextButton.styleFrom(foregroundColor: Colors.grey[700]), child: const Text("Nein, behalten")),
-                    FilledButton(onPressed: () => Navigator.pop(ctx, true), style: FilledButton.styleFrom(backgroundColor: Colors.blue[800]), child: const Text("Ja, austauschen")),
-                  ],
-                )
-              );
-
-              if (replace == true) {
-                await binderService.fillSlot(slot.id, widget.card.id, variant: _variant);
-                slotsFilled++;
-                binderService.recalculateBinderValue(slot.binderId);
-              }
-            }
+            await binderService.fillSlot(slot.id, widget.card.id, variant: _variant);
+            slotsFilled++;
           }
           
           if (slotsFilled > 0) {
@@ -486,20 +436,26 @@ Future<void> _saveToInventory() async {
             showOrangeBanner = true; 
           }
         } else {
-          binderMessage = "\n(Kein passender Platz in der Auswahl gefunden)";
+          binderMessage = "\n(Kein passender Platz in einem Buch gefunden)";
           showOrangeBanner = true; 
         }
       }
 
-      // --- MAGIE: UI SOFORT SCHLIESSEN ---
-      
-     // 1. Provider für Listen & Ansichten sofort leeren
+      // Zum Schluss aufrufen
+      _closeAndShowSuccess(binderMessage, showOrangeBanner);
+
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red));
+    }
+  }
+
+  // Hilfsmethode, um doppelten Code am Ende zu vermeiden
+  void _closeAndShowSuccess(String binderMessage, bool showOrangeBanner) {
       ref.invalidate(inventoryProvider); 
       ref.invalidate(searchResultsProvider);
       ref.invalidate(cardsForSetProvider(widget.card.setId));
       ref.invalidate(setStatsProvider(widget.card.setId));
 
-      // 2. Fenster schließen und Banner zeigen
       if (mounted) {
         Navigator.pop(context, true);
         final bannerColor = showOrangeBanner ? Colors.orange[800]! : Colors.green;
@@ -512,14 +468,8 @@ Future<void> _saveToInventory() async {
         );
       }
 
-      // 3. Den extrem schweren Portfolio Snapshot im Hintergrund starten.
-      // WICHTIG: Kein 'await' davor! Er läuft einfach leise weiter.
       createPortfolioSnapshot(ref);
       _refreshProviders();
-
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red));
-    }
   }
 
   void _refreshProviders() {

@@ -180,6 +180,18 @@ Future<_CardImportData?> _prepareCardData(dynamic summaryEn, dynamic summaryDe) 
     final number = data['localId'] ?? '0';
     int sortNum = int.tryParse(number) ?? 0;
 
+    // --- NEU: TYP AUSLESEN ---
+    String? cardType;
+    final cat = data['category']; // "Pokemon", "Trainer", "Energy"
+    if (cat == "Trainer") {
+      cardType = "Trainer";
+    } else if (cat == "Energy") {
+      cardType = "Energy";
+    } else if (data['types'] != null && data['types'] is List && (data['types'] as List).isNotEmpty) {
+      cardType = (data['types'] as List).first.toString(); // Nimmt den ersten Typ (z.B. "Fire")
+    }
+    // -------------------------
+
     final cardCompanion = CardsCompanion(
         id: Value(cardId),
         setId: Value(data['set']['id']),
@@ -190,6 +202,8 @@ Future<_CardImportData?> _prepareCardData(dynamic summaryEn, dynamic summaryDe) 
         nameDe: (nameDeApi != null && nameDeApi.isNotEmpty) ? Value(nameDeApi) : const Value.absent(),
         artist: (artistApi != null && artistApi.isNotEmpty) ? Value(artistApi) : const Value.absent(),
         
+        // Den Typ in der Datenbank speichern!
+        cardType: cardType != null ? Value(cardType) : const Value.absent(),
         // --- FIX: Immer Value() senden, niemals Value.absent() für Bilder ---
         imageUrl: Value(finalImageEn),
         imageUrlDe: Value(finalImageDe),

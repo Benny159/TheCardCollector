@@ -110,6 +110,15 @@ class InventoryScreen extends ConsumerWidget {
                 return (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
               case InventorySort.rarity:
                 return (b.card.rarity).compareTo(a.card.rarity); 
+              // --- NEU: SORTIERUNG NACH TYP ---
+              case InventorySort.type:
+                final tA = a.card.cardType ?? 'ZZZ'; // Fallback für Karten ohne Typ (z.B. Energie) rutschen nach hinten
+                final tB = b.card.cardType ?? 'ZZZ';
+                final typeComp = tA.compareTo(tB);
+                if (typeComp != 0) return typeComp;
+                // Wenn beide Feuer sind, sortiere intern alphabetisch nach Name
+                return (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
+              // --------------------------------
               default:
                 return 0;
             }
@@ -204,6 +213,8 @@ class InventoryScreen extends ConsumerWidget {
               DropdownMenuItem(value: InventorySort.value, child: Text("Wert")),
               DropdownMenuItem(value: InventorySort.name, child: Text("Name")),
               DropdownMenuItem(value: InventorySort.rarity, child: Text("Seltenheit")),
+              // --- NEU ---
+              DropdownMenuItem(value: InventorySort.type, child: Text("Element")),
             ],
             onChanged: (val) {
               if (val != null) ref.read(inventorySortProvider.notifier).state = val;

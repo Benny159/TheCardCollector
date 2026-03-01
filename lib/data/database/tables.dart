@@ -27,6 +27,7 @@ class Cards extends Table {
   TextColumn get name => text()(); 
   TextColumn get nameDe => text().nullable()(); 
   TextColumn get number => text()(); 
+  TextColumn get cardType => text().nullable()();
   
   // BILDER: Beide Sprachen
   TextColumn get imageUrl => text()();    // Englisch
@@ -144,6 +145,8 @@ class Binders extends Table {
   TextColumn get sortOrder => text().withDefault(const Constant('leftToRight'))();
   
   RealColumn get totalValue => real().withDefault(const Constant(0.0))();
+
+  BoolColumn get isFull => boolean().withDefault(const Constant(false))();
 
   // Metadaten
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();

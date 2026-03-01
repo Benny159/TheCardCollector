@@ -7,6 +7,7 @@ class ApiCard {
   final List<String> types;
   final String setId;
   final String number;
+  final String? cardType;
   final String setPrintedTotal;
   final String artist;
   final String rarity;
@@ -56,6 +57,7 @@ class ApiCard {
     required this.types,
     required this.setId,
     required this.number,
+    this.cardType,
     required this.setPrintedTotal,
     required this.artist,
     required this.rarity,

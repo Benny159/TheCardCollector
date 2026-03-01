@@ -104,7 +104,9 @@ class BinderService {
 
     if (type == AdvancedBinderType.custom) {
       int totalSlots = slotsPerPage * customPages;
-      for (int i = 0; i < totalSlots; i++) addSlot("Leerer Slot", null, null);
+      for (int i = 0; i < totalSlots; i++) {
+        addSlot("Leerer Slot", null, null);
+      }
     } 
 
     else if (type == AdvancedBinderType.dex) {
@@ -600,16 +602,16 @@ class BinderService {
     }
   }
 
-  // =====================================================================
+ // =====================================================================
   // SLOT MANAGEMENT (Löschen & Einfügen per Long-Press)
   // =====================================================================
   
   Future<void> addSlotRight(int binderId, int currentSlotId) async {
     final binder = await (db.select(db.binders)..where((t) => t.id.equals(binderId))).getSingle();
+    final isBulk = binder.rowsPerPage == 0 || binder.columnsPerPage == 0;
     final rows = binder.rowsPerPage;
     final cols = binder.columnsPerPage;
-    final slotsPerPage = rows * cols;
-    if (slotsPerPage <= 0) return; // Nicht für Bulk Boxen
+    final slotsPerPage = isBulk ? 999999 : (rows * cols); // Bulk hat keine Seiten-Limits
 
     final sortOrder = binder.sortOrder == BinderSortOrder.topToBottom.name 
         ? BinderSortOrder.topToBottom 
@@ -617,8 +619,8 @@ class BinderService {
 
     final slots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
 
-    // Logischen Absolut-Index berechnen (egal ob Reihe-für-Reihe oder Spalte-für-Spalte)
     int getAbsoluteIndex(BinderCard s) {
+      if (isBulk) return s.slotIndex;
       int localIndex;
       if (sortOrder == BinderSortOrder.leftToRight) {
         localIndex = s.slotIndex;
@@ -637,42 +639,39 @@ class BinderService {
     if (targetIndex == -1) return;
 
     await db.transaction(() async {
-      // 1. Neuen leeren Platzhalter in DB anlegen
       final newSlotId = await db.into(db.binderCards).insert(
         BinderCardsCompanion.insert(
           binderId: binderId,
-          pageIndex: 0,
+          pageIndex: 0, 
           slotIndex: 0, 
           isPlaceholder: const Value(true),
           placeholderLabel: const Value("Leerer Slot"),
         )
       );
 
-      // 2. Reihenfolge im Array anpassen (Neuen Slot einschieben)
       final List<int> orderedIds = sortedSlots.map((s) => s.id).toList();
       orderedIds.insert(targetIndex + 1, newSlotId); 
 
-      // 3. Neue Seiten & Indexe für alle Karten berechnen und massenhaft updaten
       await db.batch((batch) {
         for (int i = 0; i < orderedIds.length; i++) {
-          final pageIndex = (i / slotsPerPage).floor();
-          final localIndex = i % slotsPerPage;
-          int visualSlotIndex;
-          
-          if (sortOrder == BinderSortOrder.leftToRight) {
-            visualSlotIndex = localIndex;
-          } else {
-            final int targetRow = localIndex % rows;
-            final int targetCol = (localIndex / rows).floor();
-            visualSlotIndex = targetRow * cols + targetCol;
+          int pageIndex = 0;
+          int visualSlotIndex = i;
+
+          if (!isBulk) {
+            pageIndex = (i / slotsPerPage).floor();
+            final localIndex = i % slotsPerPage;
+            if (sortOrder == BinderSortOrder.leftToRight) {
+              visualSlotIndex = localIndex;
+            } else {
+              final int targetRow = localIndex % rows;
+              final int targetCol = (localIndex / rows).floor();
+              visualSlotIndex = targetRow * cols + targetCol;
+            }
           }
 
           batch.update(
             db.binderCards,
-            BinderCardsCompanion(
-              pageIndex: Value(pageIndex),
-              slotIndex: Value(visualSlotIndex),
-            ),
+            BinderCardsCompanion(pageIndex: Value(pageIndex), slotIndex: Value(visualSlotIndex)),
             where: (t) => t.id.equals(orderedIds[i])
           );
         }
@@ -682,10 +681,10 @@ class BinderService {
 
   Future<void> deleteSlotAndShift(int binderId, int slotId) async {
     final binder = await (db.select(db.binders)..where((t) => t.id.equals(binderId))).getSingle();
+    final isBulk = binder.rowsPerPage == 0 || binder.columnsPerPage == 0;
     final rows = binder.rowsPerPage;
     final cols = binder.columnsPerPage;
-    final slotsPerPage = rows * cols;
-    if (slotsPerPage <= 0) return;
+    final slotsPerPage = isBulk ? 999999 : (rows * cols);
 
     final sortOrder = binder.sortOrder == BinderSortOrder.topToBottom.name 
         ? BinderSortOrder.topToBottom 
@@ -694,6 +693,7 @@ class BinderService {
     final slots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
 
     int getAbsoluteIndex(BinderCard s) {
+      if (isBulk) return s.slotIndex;
       int localIndex;
       if (sortOrder == BinderSortOrder.leftToRight) {
         localIndex = s.slotIndex;
@@ -709,33 +709,29 @@ class BinderService {
     sortedSlots.sort((a, b) => getAbsoluteIndex(a).compareTo(getAbsoluteIndex(b)));
 
     await db.transaction(() async {
-      // 1. Slot aus DB löschen
       await (db.delete(db.binderCards)..where((t) => t.id.equals(slotId))).go();
-
-      // 2. Aus der ID-Liste entfernen
       final orderedIds = sortedSlots.map((s) => s.id).where((id) => id != slotId).toList();
 
-      // 3. Neu berechnen und alle nachfolgenden aufrücken lassen
       await db.batch((batch) {
         for (int i = 0; i < orderedIds.length; i++) {
-          final pageIndex = (i / slotsPerPage).floor();
-          final localIndex = i % slotsPerPage;
-          int visualSlotIndex;
-          
-          if (sortOrder == BinderSortOrder.leftToRight) {
-            visualSlotIndex = localIndex;
-          } else {
-            final int targetRow = localIndex % rows;
-            final int targetCol = (localIndex / rows).floor();
-            visualSlotIndex = targetRow * cols + targetCol;
+          int pageIndex = 0;
+          int visualSlotIndex = i;
+
+          if (!isBulk) {
+            pageIndex = (i / slotsPerPage).floor();
+            final localIndex = i % slotsPerPage;
+            if (sortOrder == BinderSortOrder.leftToRight) {
+              visualSlotIndex = localIndex;
+            } else {
+              final int targetRow = localIndex % rows;
+              final int targetCol = (localIndex / rows).floor();
+              visualSlotIndex = targetRow * cols + targetCol;
+            }
           }
 
           batch.update(
             db.binderCards,
-            BinderCardsCompanion(
-              pageIndex: Value(pageIndex),
-              slotIndex: Value(visualSlotIndex),
-            ),
+            BinderCardsCompanion(pageIndex: Value(pageIndex), slotIndex: Value(visualSlotIndex)),
             where: (t) => t.id.equals(orderedIds[i])
           );
         }
@@ -746,105 +742,28 @@ class BinderService {
   }
 
   // =====================================================================
-  // NEU: SLOT VERSCHIEBEN (LINKS / RECHTS)
+  // SLOT VERSCHIEBEN (LINKS / RECHTS / TAUSCHEN)
   // =====================================================================
   
   Future<void> moveSlotLeft(int binderId, int slotId) => _swapSlot(binderId, slotId, -1);
   Future<void> moveSlotRight(int binderId, int slotId) => _swapSlot(binderId, slotId, 1);
 
-  Future<void> _swapSlot(int binderId, int slotId, int offset) async {
-    final binder = await (db.select(db.binders)..where((t) => t.id.equals(binderId))).getSingle();
-    final rows = binder.rowsPerPage;
-    final cols = binder.columnsPerPage;
-    final slotsPerPage = rows * cols;
-    if (slotsPerPage <= 0) return;
-
-    final sortOrder = binder.sortOrder == BinderSortOrder.topToBottom.name 
-        ? BinderSortOrder.topToBottom 
-        : BinderSortOrder.leftToRight;
-
-    final slots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
-
-    int getAbsoluteIndex(BinderCard s) {
-      int localIndex;
-      if (sortOrder == BinderSortOrder.leftToRight) {
-        localIndex = s.slotIndex;
-      } else {
-        final int targetRow = (s.slotIndex / cols).floor();
-        final int targetCol = s.slotIndex % cols;
-        localIndex = targetCol * rows + targetRow;
-      }
-      return s.pageIndex * slotsPerPage + localIndex;
-    }
-
-    final sortedSlots = List<BinderCard>.from(slots);
-    sortedSlots.sort((a, b) => getAbsoluteIndex(a).compareTo(getAbsoluteIndex(b)));
-
-    final targetIndex = sortedSlots.indexWhere((s) => s.id == slotId);
-    if (targetIndex == -1) return;
-
-    final newIndex = targetIndex + offset;
-    // Verhindert, dass wir aus dem Binder herausrutschen
-    if (newIndex < 0 || newIndex >= sortedSlots.length) return;
-
-    await db.transaction(() async {
-      // 1. IDs im Array tauschen
-      final orderedIds = sortedSlots.map((s) => s.id).toList();
-      final temp = orderedIds[targetIndex];
-      orderedIds[targetIndex] = orderedIds[newIndex];
-      orderedIds[newIndex] = temp;
-
-      // 2. Massen-Update der neuen Positionen
-      await db.batch((batch) {
-        for (int i = 0; i < orderedIds.length; i++) {
-          final pageIndex = (i / slotsPerPage).floor();
-          final localIndex = i % slotsPerPage;
-          int visualSlotIndex;
-          
-          if (sortOrder == BinderSortOrder.leftToRight) {
-            visualSlotIndex = localIndex;
-          } else {
-            final int targetRow = localIndex % rows;
-            final int targetCol = (localIndex / rows).floor();
-            visualSlotIndex = targetRow * cols + targetCol;
-          }
-
-          batch.update(
-            db.binderCards,
-            BinderCardsCompanion(
-              pageIndex: Value(pageIndex),
-              slotIndex: Value(visualSlotIndex),
-            ),
-            where: (t) => t.id.equals(orderedIds[i])
-          );
-        }
-      });
-    });
-  }
-
-  // =====================================================================
-  // NEU: ZWEI BELIEBIGE SLOTS TAUSCHEN
-  // =====================================================================
   Future<void> swapTwoSlots(int binderId, int slotId1, int slotId2) async {
     if (slotId1 == slotId2) return;
-
     final binder = await (db.select(db.binders)..where((t) => t.id.equals(binderId))).getSingle();
+    final isBulk = binder.rowsPerPage == 0 || binder.columnsPerPage == 0;
     final rows = binder.rowsPerPage;
     final cols = binder.columnsPerPage;
-    final slotsPerPage = rows * cols;
-    if (slotsPerPage <= 0) return;
-
-    final sortOrder = binder.sortOrder == BinderSortOrder.topToBottom.name 
-        ? BinderSortOrder.topToBottom 
-        : BinderSortOrder.leftToRight;
+    final slotsPerPage = isBulk ? 999999 : (rows * cols);
+    final sortOrder = binder.sortOrder == BinderSortOrder.topToBottom.name ? BinderSortOrder.topToBottom : BinderSortOrder.leftToRight;
 
     final slots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
 
     int getAbsoluteIndex(BinderCard s) {
+      if (isBulk) return s.slotIndex;
       int localIndex;
-      if (sortOrder == BinderSortOrder.leftToRight) {
-        localIndex = s.slotIndex;
-      } else {
+      if (sortOrder == BinderSortOrder.leftToRight) { localIndex = s.slotIndex; } 
+      else {
         final int targetRow = (s.slotIndex / cols).floor();
         final int targetCol = s.slotIndex % cols;
         localIndex = targetCol * rows + targetRow;
@@ -861,56 +780,101 @@ class BinderService {
     if (index1 == -1 || index2 == -1) return;
 
     await db.transaction(() async {
-      // IDs im Array tauschen
       final orderedIds = sortedSlots.map((s) => s.id).toList();
       final temp = orderedIds[index1];
       orderedIds[index1] = orderedIds[index2];
       orderedIds[index2] = temp;
 
-      // Massen-Update der neuen Positionen
       await db.batch((batch) {
         for (int i = 0; i < orderedIds.length; i++) {
-          final pageIndex = (i / slotsPerPage).floor();
-          final localIndex = i % slotsPerPage;
-          int visualSlotIndex;
-          
-          if (sortOrder == BinderSortOrder.leftToRight) {
-            visualSlotIndex = localIndex;
-          } else {
-            final int targetRow = localIndex % rows;
-            final int targetCol = (localIndex / rows).floor();
-            visualSlotIndex = targetRow * cols + targetCol;
+          int pageIndex = 0;
+          int visualSlotIndex = i;
+          if (!isBulk) {
+            pageIndex = (i / slotsPerPage).floor();
+            final localIndex = i % slotsPerPage;
+            if (sortOrder == BinderSortOrder.leftToRight) { visualSlotIndex = localIndex; } 
+            else {
+              final int targetRow = localIndex % rows;
+              final int targetCol = (localIndex / rows).floor();
+              visualSlotIndex = targetRow * cols + targetCol;
+            }
           }
+          batch.update(db.binderCards, BinderCardsCompanion(pageIndex: Value(pageIndex), slotIndex: Value(visualSlotIndex)), where: (t) => t.id.equals(orderedIds[i]));
+        }
+      });
+    });
+  }
 
-          batch.update(
-            db.binderCards,
-            BinderCardsCompanion(
-              pageIndex: Value(pageIndex),
-              slotIndex: Value(visualSlotIndex),
-            ),
-            where: (t) => t.id.equals(orderedIds[i])
-          );
+  Future<void> _swapSlot(int binderId, int slotId, int offset) async {
+    final binder = await (db.select(db.binders)..where((t) => t.id.equals(binderId))).getSingle();
+    final isBulk = binder.rowsPerPage == 0 || binder.columnsPerPage == 0;
+    final rows = binder.rowsPerPage;
+    final cols = binder.columnsPerPage;
+    final slotsPerPage = isBulk ? 999999 : (rows * cols);
+    final sortOrder = binder.sortOrder == BinderSortOrder.topToBottom.name ? BinderSortOrder.topToBottom : BinderSortOrder.leftToRight;
+
+    final slots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
+
+    int getAbsoluteIndex(BinderCard s) {
+      if (isBulk) return s.slotIndex;
+      int localIndex;
+      if (sortOrder == BinderSortOrder.leftToRight) { localIndex = s.slotIndex; } 
+      else {
+        final int targetRow = (s.slotIndex / cols).floor();
+        final int targetCol = s.slotIndex % cols;
+        localIndex = targetCol * rows + targetRow;
+      }
+      return s.pageIndex * slotsPerPage + localIndex;
+    }
+
+    final sortedSlots = List<BinderCard>.from(slots);
+    sortedSlots.sort((a, b) => getAbsoluteIndex(a).compareTo(getAbsoluteIndex(b)));
+
+    final targetIndex = sortedSlots.indexWhere((s) => s.id == slotId);
+    if (targetIndex == -1) return;
+
+    final newIndex = targetIndex + offset;
+    if (newIndex < 0 || newIndex >= sortedSlots.length) return;
+
+    await db.transaction(() async {
+      final orderedIds = sortedSlots.map((s) => s.id).toList();
+      final temp = orderedIds[targetIndex];
+      orderedIds[targetIndex] = orderedIds[newIndex];
+      orderedIds[newIndex] = temp;
+
+      await db.batch((batch) {
+        for (int i = 0; i < orderedIds.length; i++) {
+          int pageIndex = 0;
+          int visualSlotIndex = i;
+          if (!isBulk) {
+            pageIndex = (i / slotsPerPage).floor();
+            final localIndex = i % slotsPerPage;
+            if (sortOrder == BinderSortOrder.leftToRight) { visualSlotIndex = localIndex; } 
+            else {
+              final int targetRow = localIndex % rows;
+              final int targetCol = (localIndex / rows).floor();
+              visualSlotIndex = targetRow * cols + targetCol;
+            }
+          }
+          batch.update(db.binderCards, BinderCardsCompanion(pageIndex: Value(pageIndex), slotIndex: Value(visualSlotIndex)), where: (t) => t.id.equals(orderedIds[i]));
         }
       });
     });
   }
 
   // =====================================================================
-  // NEU: BULK BOX MANAGEMENT (Listen-Inventar & Trennkarten)
+  // BULK BOX MANAGEMENT (Listen-Inventar, Trennkarten & SORTIERUNG)
   // =====================================================================
 
-  // 1. Eine Bulk-Karte (hinten) anfügen
   Future<void> addCardToBulkBox(int binderId, String cardId, String variant) async {
     if (!await isCardAvailable(cardId)) throw Exception("Keine Karte mehr verfügbar!");
-
     final existingSlots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
-    final nextIndex = existingSlots.length; // Einfach ans Ende
-
+    
     await db.into(db.binderCards).insert(
       BinderCardsCompanion.insert(
         binderId: binderId,
-        pageIndex: 0,
-        slotIndex: nextIndex,
+        pageIndex: 0, 
+        slotIndex: existingSlots.length,
         isPlaceholder: const Value(false),
         cardId: Value(cardId),
         variant: Value(variant),
@@ -919,26 +883,94 @@ class BinderService {
     await recalculateBinderValue(binderId);
   }
 
-  // 2. Eine ETB/Box Trennkarte (Divider) anfügen
   Future<void> addBulkDivider(int binderId, String title) async {
     final existingSlots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
-    final nextIndex = existingSlots.length;
-
     await db.into(db.binderCards).insert(
       BinderCardsCompanion.insert(
         binderId: binderId,
         pageIndex: 0,
-        slotIndex: nextIndex,
-        isPlaceholder: const Value(true), // Ein Divider IST ein Platzhalter
-        placeholderLabel: Value("DIVIDER:$title"), // Interner Marker für das UI
+        slotIndex: existingSlots.length,
+        isPlaceholder: const Value(true), 
+        placeholderLabel: Value("DIVIDER:$title"), 
       )
     );
   }
 
-  // 3. Eine Karte direkt UNTER einen Divider (oder an eine bestimme Position) packen
-  Future<void> moveBulkItem(int binderId, int slotId, int offset) async {
-     // Nutzt unsere bestehende swap-Logik von vorhin!
-     await _swapSlot(binderId, slotId, offset);
+  Future<void> toggleBinderFullStatus(int binderId, bool isFull) async {
+    await (db.update(db.binders)..where((t) => t.id.equals(binderId))).write(BindersCompanion(isFull: Value(isFull)));
+  }
+
+  // --- DIE GENIALE SORTIER-FUNKTION (Berücksichtigt Trennkarten!) ---
+  Future<void> sortBulkBox(int binderId, String sortMode) async {
+    final slots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))..orderBy([(t) => OrderingTerm(expression: t.slotIndex)])).get();
+
+    final cardIds = slots.map((s) => s.cardId).whereType<String>().toSet().toList();
+    final cardsList = await (db.select(db.cards)..where((t) => t.id.isIn(cardIds))).get();
+    final cardMap = {for (var c in cardsList) c.id: c};
+
+    List<BinderCard> newOrder = [];
+    List<BinderCard> currentGroupCards = [];
+    BinderCard? currentDivider;
+
+    // Hilfsfunktion: Seltenheit bewerten (Höhere Nummer = seltener = weiter vorne)
+    int getRarityScore(String? rarity) {
+      if (rarity == null) return 0;
+      final r = rarity.toLowerCase();
+      if (r.contains('secret') || r.contains('hyper') || r.contains('rainbow') || r.contains('gold')) return 100;
+      if (r.contains('illustration') || r.contains('alt art')) return 90;
+      if (r.contains('ultra') || r.contains('vmax') || r.contains('vstar')) return 80;
+      if (r.contains('double') || r.contains('v') || r.contains('ex') || r.contains('gx')) return 70;
+      if (r.contains('holo') || r.contains('rare')) return 50;
+      if (r.contains('uncommon')) return 20;
+      return 10; // Common
+    }
+
+    void sortAndAppendGroup() {
+      currentGroupCards.sort((a, b) {
+        final ca = cardMap[a.cardId];
+        final cb = cardMap[b.cardId];
+        if (ca == null || cb == null) return 0;
+        
+        if (sortMode == 'name') {
+           return (ca.nameDe ?? ca.name).compareTo(cb.nameDe ?? cb.name);
+        } else if (sortMode == 'number') {
+           return ca.sortNumber.compareTo(cb.sortNumber);
+        } else if (sortMode == 'rarity') {
+           return getRarityScore(cb.rarity).compareTo(getRarityScore(ca.rarity));
+        } else if (sortMode == 'type') {
+           // Sortieren nach Typ (A-Z, Trainer und Energy rutschen automatisch ans Ende / Alphabetisch)
+           // Wenn der Typ gleich ist, sortiere intern nach Nummer
+           final tA = ca.cardType ?? 'ZZZ'; // Fallback nach ganz hinten
+           final tB = cb.cardType ?? 'ZZZ';
+           final typeCompare = tA.compareTo(tB);
+           if (typeCompare != 0) return typeCompare;
+           return ca.sortNumber.compareTo(cb.sortNumber);
+        }
+        return 0;
+      });
+      
+      if (currentDivider != null) newOrder.add(currentDivider!);
+      newOrder.addAll(currentGroupCards);
+      currentGroupCards.clear();
+    }
+
+    for (var slot in slots) {
+      if (slot.isPlaceholder && (slot.placeholderLabel?.startsWith('DIVIDER:') ?? false)) {
+        sortAndAppendGroup(); 
+        currentDivider = slot; 
+      } else {
+        currentGroupCards.add(slot);
+      }
+    }
+    sortAndAppendGroup(); 
+
+    await db.transaction(() async {
+      await db.batch((batch) {
+        for (int i = 0; i < newOrder.length; i++) {
+          batch.update(db.binderCards, BinderCardsCompanion(slotIndex: Value(i)), where: (t) => t.id.equals(newOrder[i].id));
+        }
+      });
+    });
   }
 }
 

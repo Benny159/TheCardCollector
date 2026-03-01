@@ -189,6 +189,7 @@ ApiCard _mapToApiCard(
     types: [],
     setId: dbCard.setId,
     number: dbCard.number,
+    cardType: dbCard.cardType,
     setPrintedTotal: printedTotal.toString(),
     artist: dbCard.artist ?? '',
     rarity: dbCard.rarity ?? '',
@@ -295,7 +296,7 @@ class InventoryItem {
     this.binderName, // NEU
   });
 }
-enum InventorySort { value, name, rarity }
+enum InventorySort { value, name, rarity, type }
 final inventorySortProvider = StateProvider<InventorySort>((ref) => InventorySort.value);
 
 final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
