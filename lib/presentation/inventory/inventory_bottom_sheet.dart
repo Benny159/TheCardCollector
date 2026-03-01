@@ -21,6 +21,13 @@ class InventoryBottomSheet extends ConsumerStatefulWidget {
   ConsumerState<InventoryBottomSheet> createState() => _InventoryBottomSheetState();
 }
 
+// --- HILFSKLASSE FÜR DIE POSITION ---
+class _SlotInfo {
+  final BinderCard slot;
+  final Binder binder;
+  _SlotInfo(this.slot, this.binder);
+}
+
 class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
   int _quantity = 1;
   String _condition = 'NM';
@@ -325,9 +332,6 @@ Future<void> _saveToInventory() async {
       String binderMessage = "";
       bool showOrangeBanner = false;
 
-      // =========================================================
-      // BINDER / BULK BOX LOGIK
-      // =========================================================
       if (selectedBinderId != null) {
         
         // --- 1. Check auf Bulk Box! ---
@@ -340,18 +344,16 @@ Future<void> _saveToInventory() async {
                _closeAndShowSuccess("", true);
                return; 
             } else if (targetBinder.rowsPerPage == 0) {
-               // ES IST EINE BULK BOX! Einfach n-mal hinten anfügen
                for (int i = 0; i < _quantity; i++) {
                  await binderService.addCardToBulkBox(selectedBinderId, widget.card.id, _variant);
                }
-               binderMessage = "\nund in die Bulk Box geworfen!";
-               _closeAndShowSuccess(binderMessage, false);
+               _closeAndShowSuccess("\nund in die Bulk Box geworfen!", false);
                return; 
             }
           }
         }
 
-        // --- 2. Normale Platzhalter-Suche für Bücher (Grid) ---
+        // --- 2. Smarte Suche in echten Bindern ---
         final cardNameDe = (widget.card.nameDe ?? "").toLowerCase();
         final cardNameEn = widget.card.name.toLowerCase();
         
@@ -369,6 +371,30 @@ Future<void> _saveToInventory() async {
           return coreWords.isNotEmpty ? coreWords : words;
         }
 
+        // --- DER NEUE STRIKTE FORMEN-CHECKER (Verhindert Diebstahl) ---
+        bool isFormMismatch(String pLabel) {
+           final p = pLabel.toLowerCase();
+           
+           bool checkMatch(bool Function(String) condition) {
+              bool cardHasIt = condition(cardNameEn) || condition(cardNameDe);
+              bool placeholderHasIt = condition(p);
+              return cardHasIt != placeholderHasIt; // True, wenn es eine Abweichung gibt!
+           }
+
+           if (checkMatch((t) => t.contains('vmax'))) return true;
+           if (checkMatch((t) => t.contains('vstar'))) return true;
+           // Mega ist tricky. Wir checken verschiedene Schreibweisen.
+           if (checkMatch((t) => t.contains('mega') || t.startsWith('m ') || t.contains(' m ') || t.contains('m-') || t.contains('-mega'))) return true;
+           if (checkMatch((t) => t.contains('primal') || t.contains('proto'))) return true;
+           if (checkMatch((t) => t.contains('alola'))) return true;
+           if (checkMatch((t) => t.contains('galar'))) return true;
+           if (checkMatch((t) => t.contains('hisui'))) return true;
+           if (checkMatch((t) => t.contains('paldea'))) return true;
+
+           return false;
+        }
+        // --------------------------------------------------------------
+
         final cWordsDe = getCoreWords(cardNameDe);
         final cWordsEn = getCoreWords(cardNameEn);
 
@@ -377,17 +403,16 @@ Future<void> _saveToInventory() async {
         ]);
 
         if (selectedBinderId != -1) {
-          // --- FIX: NUR LEERE PLATZHALTER SUCHEN ---
-          query.where(db.binderCards.binderId.equals(selectedBinderId) & db.binderCards.isPlaceholder.equals(true));
+          query.where(db.binderCards.binderId.equals(selectedBinderId));
         } else {
-          // --- FIX: NUR BÜCHER SUCHEN, DIE NICHT VOLL SIND, UND NUR LEERE PLATZHALTER ---
-          query.where(db.binders.isFull.equals(false) & db.binders.rowsPerPage.isBiggerThanValue(0) & db.binderCards.isPlaceholder.equals(true)); 
+          query.where(db.binders.isFull.equals(false) & db.binders.rowsPerPage.isBiggerThanValue(0)); 
         }
 
         final allJoined = await query.get();
-        final allSlots = allJoined.map((row) => row.readTable(db.binderCards)).toList();
+        final allSlots = allJoined.map((row) => _SlotInfo(row.readTable(db.binderCards), row.readTable(db.binders))).toList();
 
-        List<BinderCard> potentialSlots = allSlots.where((slot) {
+        List<_SlotInfo> potentialSlots = allSlots.where((info) {
+          final slot = info.slot;
           if (slot.placeholderLabel?.startsWith('DIVIDER:') ?? false) return false;
 
           String pLabel = slot.placeholderLabel ?? '';
@@ -397,6 +422,10 @@ Future<void> _saveToInventory() async {
           }
           pLabel = pLabel.toLowerCase();
           if (pLabel.isEmpty) return false;
+
+          // --- FIX: Strikter Check auf Megas/VMAX/Regionalformen! ---
+          if (isFormMismatch(pLabel)) return false;
+          // ----------------------------------------------------------
           
           final pWords = getCoreWords(pLabel);
           if (pWords.isEmpty) return false;
@@ -409,9 +438,11 @@ Future<void> _saveToInventory() async {
 
         if (potentialSlots.isNotEmpty) {
           potentialSlots.sort((a, b) {
-            // Dies ist sicher, da wir oben schon auf isPlaceholder gefiltert haben
-            final aLabel = a.placeholderLabel?.toLowerCase() ?? '';
-            final bLabel = b.placeholderLabel?.toLowerCase() ?? '';
+            if (a.slot.isPlaceholder && !b.slot.isPlaceholder) return -1;
+            if (!a.slot.isPlaceholder && b.slot.isPlaceholder) return 1;
+
+            final aLabel = a.slot.placeholderLabel?.toLowerCase() ?? '';
+            final bLabel = b.slot.placeholderLabel?.toLowerCase() ?? '';
             
             bool aExact = (cardNameDe.isNotEmpty && aLabel == cardNameDe) || aLabel == cardNameEn;
             bool bExact = (cardNameDe.isNotEmpty && bLabel == cardNameDe) || bLabel == cardNameEn;
@@ -422,11 +453,192 @@ Future<void> _saveToInventory() async {
           });
 
           int slotsFilled = 0;
+          int quantityLeft = _quantity;
           
-          for (var i = 0; i < _quantity && i < potentialSlots.length; i++) {
-            final slot = potentialSlots[i];
-            await binderService.fillSlot(slot.id, widget.card.id, variant: _variant);
-            slotsFilled++;
+          for (final info in potentialSlots) {
+            if (quantityLeft <= 0) break;
+            
+            final slot = info.slot;
+            final binder = info.binder;
+
+            // --- PHYSISCHE POSITION BERECHNEN ---
+            final page = slot.pageIndex + 1;
+            int row = 1;
+            int col = 1;
+            
+            if (binder.sortOrder == 'topToBottom') {
+               row = (slot.slotIndex % binder.rowsPerPage) + 1;
+               col = (slot.slotIndex / binder.rowsPerPage).floor() + 1;
+            } else {
+               row = (slot.slotIndex / binder.columnsPerPage).floor() + 1;
+               col = (slot.slotIndex % binder.columnsPerPage) + 1;
+            }
+
+            final locationText = "${binder.name}\nSeite $page • Zeile $row • Spalte $col";
+            // ------------------------------------
+
+            bool? userConfirmed = false;
+
+            if (slot.isPlaceholder) {
+              // --- NEU: DIALOG FÜR LEERE SLOTS ---
+              if (!mounted) continue;
+              userConfirmed = await showDialog<bool>(
+                context: context,
+                barrierDismissible: false,
+                builder: (ctx) => AlertDialog(
+                  title: const Text("Freier Platz gefunden!"),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text("Es gibt einen perfekten, leeren Platzhalter für diese Karte. Möchtest du sie hier ablegen?", style: TextStyle(fontSize: 14)),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.location_on, color: Colors.green),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(locationText, style: const TextStyle(fontWeight: FontWeight.bold))),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text(slot.placeholderLabel ?? 'Platzhalter', style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold), textAlign: TextAlign.center, maxLines: 2),
+                                const SizedBox(height: 4),
+                                Container(
+                                  height: 110, width: 80,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[200],
+                                    border: Border.all(color: Colors.grey, width: 2),
+                                    borderRadius: BorderRadius.circular(6)
+                                  ),
+                                  child: const Center(child: Icon(Icons.image_not_supported, color: Colors.grey, size: 40)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8.0),
+                            child: Icon(Icons.arrow_forward_rounded, color: Colors.green, size: 36),
+                          ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text("Neu ($_variant)", style: const TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 4),
+                                CachedNetworkImage(
+                                  imageUrl: widget.card.displayImage, 
+                                  height: 110,
+                                  placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
+                                  errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    ],
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), style: TextButton.styleFrom(foregroundColor: Colors.grey[700]), child: const Text("Überspringen")),
+                    FilledButton(onPressed: () => Navigator.pop(ctx, true), style: FilledButton.styleFrom(backgroundColor: Colors.green[700]), child: const Text("Einsortieren")),
+                  ],
+                )
+              );
+            } else {
+              // --- DIALOG FÜR BELEGTE SLOTS ---
+              final oldCard = slot.cardId != null 
+                  ? await (db.select(db.cards)..where((tbl) => tbl.id.equals(slot.cardId!))).getSingleOrNull()
+                  : null;
+              final oldVariant = slot.variant ?? "Normal";
+
+              if (!mounted) continue;
+              userConfirmed = await showDialog<bool>(
+                context: context,
+                barrierDismissible: false,
+                builder: (ctx) => AlertDialog(
+                  title: const Text("Slot bereits belegt!"),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text("In diesem Binder-Slot liegt bereits eine Karte. Möchtest du sie durch die neu gescannte Karte ersetzen?", style: TextStyle(fontSize: 14)),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.location_on, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(locationText, style: const TextStyle(fontWeight: FontWeight.bold))),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text("Aktuell ($oldVariant)", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                const SizedBox(height: 4),
+                                if (oldCard != null)
+                                  CachedNetworkImage(
+                                    imageUrl: oldCard.imageUrl, 
+                                    height: 110,
+                                    placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
+                                    errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),
+                                  )
+                                else
+                                  const Icon(Icons.broken_image, size: 50),
+                              ],
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8.0),
+                            child: Icon(Icons.arrow_forward_rounded, color: Colors.blueAccent, size: 36),
+                          ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text("Neu ($_variant)", style: const TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 4),
+                                CachedNetworkImage(
+                                  imageUrl: widget.card.displayImage, 
+                                  height: 110,
+                                  placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
+                                  errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    ],
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), style: TextButton.styleFrom(foregroundColor: Colors.grey[700]), child: const Text("Überspringen")),
+                    FilledButton(onPressed: () => Navigator.pop(ctx, true), style: FilledButton.styleFrom(backgroundColor: Colors.blue[800]), child: const Text("Austauschen")),
+                  ],
+                )
+              );
+            }
+
+            // Auswertung des Dialogs
+            if (userConfirmed == true) {
+              await binderService.fillSlot(slot.id, widget.card.id, variant: _variant);
+              slotsFilled++;
+              quantityLeft--;
+              binderService.recalculateBinderValue(slot.binderId);
+            }
           }
           
           if (slotsFilled > 0) {
@@ -436,7 +648,7 @@ Future<void> _saveToInventory() async {
             showOrangeBanner = true; 
           }
         } else {
-          binderMessage = "\n(Kein passender Platz in einem Buch gefunden)";
+          binderMessage = "\n(Kein passender Platz in der Auswahl gefunden)";
           showOrangeBanner = true; 
         }
       }
