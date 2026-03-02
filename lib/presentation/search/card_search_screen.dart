@@ -17,7 +17,6 @@ enum ChartFilter { week, month, year, all }
 final chartFilterProvider = StateProvider<ChartFilter>((ref) => ChartFilter.week);
 
 class CardSearchScreen extends ConsumerStatefulWidget {
-  // --- NEUE PARAMETER ---
   final String? initialQuery;
   final bool pickerMode; 
   final bool onlyOwned; 
@@ -35,7 +34,7 @@ class CardSearchScreen extends ConsumerStatefulWidget {
 
 class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
   late TextEditingController _searchController;
-  late FocusNode _focusNode; // <--- NEU für Autocomplete
+  late FocusNode _focusNode; 
   Timer? _debounce;
 
   @override
@@ -43,18 +42,15 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
     super.initState();
     _focusNode = FocusNode();
 
-    // 1. Initial Query setzen (entweder vom Parameter oder Provider)
     final startQuery = widget.initialQuery ?? ref.read(searchQueryProvider);
     _searchController = TextEditingController(text: startQuery);
 
-    // 2. Wenn Parameter übergeben wurde, Suche sofort starten
     if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
        Future.delayed(Duration.zero, () {
          ref.read(searchQueryProvider.notifier).state = widget.initialQuery!;
        });
     }
 
-    // Snapshot nur erstellen, wenn wir NICHT im Picker Modus sind (Performance)
     if (!widget.pickerMode) {
       Future.delayed(Duration.zero, () {
         createPortfolioSnapshot(ref);
@@ -75,7 +71,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
     final isSearching = searchQuery.isNotEmpty;
     final currentMode = ref.watch(searchModeProvider);
 
-    // Im Picker Mode immer die Ergebnisse (das Inventar) anzeigen!
+    // --- WICHTIG: Im Picker-Mode zeigen wir IMMER Ergebnisse, auch wenn Suche leer ist! ---
     final showResults = isSearching || widget.pickerMode;
 
     return Scaffold(
@@ -110,7 +106,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                       final query = textEditingValue.text.trim();
                       if (query.length < 2) return const Iterable<String>.empty();
                       
-                      // Keine Vorschläge beim Inventar-Durchsuchen (geht ohnehin live)
+                      // Im Inventar-Picker brauchen wir kein Autocomplete von der ganzen DB
                       if (widget.onlyOwned) return const Iterable<String>.empty();
 
                       final dbInst = ref.read(databaseProvider);
@@ -122,7 +118,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                       } else {
                         select.where((t) => t.artist.like('%$query%'));
                       }
-                      select.limit(8); // Maximal 8 Vorschläge anzeigen
+                      select.limit(8); 
                       final rows = await select.get();
                       
                       final Set<String> results = {};
@@ -191,7 +187,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
                               maxHeight: 250, 
-                              maxWidth: constraints.maxWidth, // Exakt so breit wie die Suchleiste
+                              maxWidth: constraints.maxWidth, 
                             ),
                             child: ListView.separated(
                               padding: EdgeInsets.zero,
@@ -276,7 +272,7 @@ class _DashboardView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final historyAsync = ref.watch(portfolioHistoryProvider);
-    final top10Cards = ref.watch(top10CardsProvider); // Korrekter Provider Name
+    final top10Cards = ref.watch(top10CardsProvider); 
     final inventoryAsync = ref.watch(inventoryProvider);
     
     final double totalValue = inventoryAsync.valueOrNull?.fold(0.0, (sum, i) => sum! + i.totalValue) ?? 0.0;
@@ -286,17 +282,10 @@ class _DashboardView extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // HEADER
           _buildPortfolioHeader(context, totalValue, historyAsync),
-          
           const SizedBox(height: 24),
-          
-          // CHART FILTER
           _buildChartFilterButtons(ref),
-
           const SizedBox(height: 16),
-
-          // DIAGRAMM
           SizedBox(
             height: 200,
             child: historyAsync.when(
@@ -305,13 +294,9 @@ class _DashboardView extends ConsumerWidget {
               error: (_,__) => const Center(child: Text("Keine Daten verfügbar")),
             ),
           ),
-
           const SizedBox(height: 32),
-
-          // TOP 10 KARTEN
           const Text("Deine Top 10 Karten", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          
           if (top10Cards.isEmpty)
             Container(
               padding: const EdgeInsets.all(20),
@@ -321,7 +306,6 @@ class _DashboardView extends ConsumerWidget {
             )
           else
             _buildTop10List(top10Cards, context),
-            
           const SizedBox(height: 40),
         ],
       ),
@@ -425,7 +409,6 @@ class _DashboardView extends ConsumerWidget {
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
-          // Bild-Logik: Deutsch wenn verfügbar
           final displayImage = item.card.displayImage;
           
           return Container(
@@ -450,9 +433,8 @@ class _DashboardView extends ConsumerWidget {
                             tag: "top10_${item.card.id}",
                             child: CachedNetworkImage(
                               imageUrl: displayImage,
-                              // Optimierung: Bildgröße im Speicher begrenzen (Da 3 Spalten, reichen ca. 300px)
                               memCacheWidth: 300, 
-                              fadeOutDuration: const Duration(milliseconds: 100), // Schnelleres Einblenden
+                              fadeOutDuration: const Duration(milliseconds: 100), 
                               fadeInDuration: const Duration(milliseconds: 100),
                               placeholder: (context, url) => Container(color: Colors.grey[200]),
                               errorWidget: (context, url, error) => const Icon(Icons.broken_image),
@@ -511,38 +493,27 @@ class _PortfolioChart extends ConsumerWidget {
     final filter = ref.watch(chartFilterProvider);
     final now = DateTime.now();
     
-    // 1. Daten kopieren und sortieren
     List<db.PortfolioHistoryData> chartData = List.from(history);
-    chartData.sort((a, b) => a.date.compareTo(b.date)); // Sicherstellen, dass Sortierung stimmt
+    chartData.sort((a, b) => a.date.compareTo(b.date)); 
 
-    // 2. Heutigen DB-Wert durch Live-Wert ersetzen (falls vorhanden)
     if (chartData.isNotEmpty && _isSameDay(chartData.last.date, now)) {
       chartData.removeLast(); 
     }
-    // Live-Wert hinzufügen
     chartData.add(db.PortfolioHistoryData(id: -1, date: now, totalValue: currentTotal));
 
-    // --- LOGIK FÜR START BEI NULL ---
-    // Wir holen uns das Datum des allerersten Eintrags
     if (chartData.isNotEmpty) {
       final firstDate = chartData.first.date;
       final firstValue = chartData.first.totalValue;
 
-      // Wenn der erste Wert größer als 0 ist, fügen wir EINEN TAG DAVOR eine 0 ein.
-      // Das erzeugt den schönen Anstieg von der Basislinie.
       if (firstValue > 0) {
          chartData.insert(0, db.PortfolioHistoryData(
-           id: -2, // Fake ID
+           id: -2, 
            date: firstDate.subtract(const Duration(days: 1)), 
            totalValue: 0.0 
          ));
       }
     }
 
-    // 3. Zeitraum filtern
-    // Wichtig: Das Filtern passiert NACH dem Hinzufügen der 0.
-    // Wenn "1 Woche" gewählt ist, fliegt die 0 raus, wenn der User schon länger sammelt.
-    // Das ist korrekt so (die Kurve soll bei alten Nutzern nicht plötzlich auf 0 fallen).
     if (chartData.length > 1) {
       DateTime start = now;
       switch (filter) {
@@ -556,36 +527,30 @@ class _PortfolioChart extends ConsumerWidget {
 
     if (chartData.isEmpty) return const Center(child: Text("Warte auf Daten..."));
 
-    // 4. Spots für FL Chart erstellen
     final spots = chartData.map((e) {
       return FlSpot(e.date.millisecondsSinceEpoch.toDouble(), e.totalValue);
     }).toList();
 
-    // Min/Max Berechnung für schöne Skalierung
     double minY = spots.map((e) => e.y).reduce((a, b) => a < b ? a : b);
     double maxY = spots.map((e) => e.y).reduce((a, b) => a > b ? a : b);
     
-    // Wenn Linie flach ist oder leer
     if (minY == maxY) { 
         if (minY == 0) { maxY = 100; } 
         else { minY = minY * 0.5; maxY = maxY * 1.5; }
     }
     
-    // Puffer hinzufügen (Y-Achse)
-    final double yBuffer = (maxY - minY) * 0.1; // 10% Puffer
+    final double yBuffer = (maxY - minY) * 0.1; 
     minY -= yBuffer;
-    if (minY < 0) minY = 0; // Nicht unter 0 gehen
+    if (minY < 0) minY = 0; 
     maxY += yBuffer;
 
     return Padding(
-      // Padding rechts erhöht, damit die letzte Datums-Label nicht abgeschnitten wird
       padding: const EdgeInsets.only(right: 24.0, left: 6, top: 24, bottom: 10),
       child: LineChart(
         LineChartData(
           gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
-            // Horizontale Linien sehr dezent
             getDrawingHorizontalLine: (value) => FlLine(
               color: Colors.grey.withOpacity(0.15),
               strokeWidth: 1,
@@ -596,12 +561,11 @@ class _PortfolioChart extends ConsumerWidget {
             rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             
-            // --- Y-ACHSE (LINKS) MIT PREISEN ---
             leftTitles: AxisTitles(
               sideTitles: SideTitles(
-                showTitles: true, // Hier auf TRUE setzen!
-                reservedSize: 40, // Platz für Text reservieren
-                interval: (maxY - minY) / 4, // Ca. 4 Labels
+                showTitles: true, 
+                reservedSize: 40, 
+                interval: (maxY - minY) / 4, 
                 getTitlesWidget: (value, meta) {
                   if (value < 0) return const SizedBox();
                   return Padding(
@@ -616,12 +580,10 @@ class _PortfolioChart extends ConsumerWidget {
               ),
             ),
             
-            // --- X-ACHSE (UNTEN) MIT DATUM ---
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 30,
-                // Dynamisches Intervall für bessere Lesbarkeit
                 interval: (spots.last.x - spots.first.x) > 0 
                       ? (spots.last.x - spots.first.x) / 4 
                       : 1.0, 
@@ -647,11 +609,11 @@ class _PortfolioChart extends ConsumerWidget {
             LineChartBarData(
               spots: spots,
               isCurved: true,
-              curveSmoothness: 0.25, // Kurven-Stärke
+              curveSmoothness: 0.25, 
               color: Colors.blueAccent,
               barWidth: 3,
               isStrokeCapRound: true,
-              dotData: const FlDotData(show: false), // Punkte im Normalzustand aus
+              dotData: const FlDotData(show: false), 
               belowBarData: BarAreaData(
                 show: true,
                 gradient: LinearGradient(
@@ -696,7 +658,7 @@ class _PortfolioChart extends ConsumerWidget {
 }
 
 // =========================================================
-// VIEW 2: SUCHERGEBNISSE
+// VIEW 2: SUCHERGEBNISSE ODER INVENTAR-PICKER
 // =========================================================
 class _SearchResultsView extends ConsumerWidget {
   final bool pickerMode;
@@ -706,169 +668,242 @@ class _SearchResultsView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final searchAsyncValue = ref.watch(searchResultsProvider);
+    
+    // --- FALL 1: WIR SUCHEN NUR IM EIGENEN INVENTAR (Picker Mode) ---
+    if (onlyOwned) {
+      final inventoryAsync = ref.watch(inventoryProvider);
+      final queryText = ref.watch(searchQueryProvider).toLowerCase();
+      final mode = ref.watch(searchModeProvider);
 
-    return searchAsyncValue.when(
-      data: (allCards) {
-        // --- FILTER: Wenn "Nur Inventar" aktiv ist ---
-        final cards = onlyOwned 
-            ? allCards.where((c) => c.isOwned).toList() 
-            : allCards;
+      return inventoryAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, s) => Center(child: Text("Fehler: $e")),
+        data: (items) {
+          
+          // 1. Duplikate entfernen und speichern, OB sie lose sind
+          final Map<String, ApiCard> uniqueCards = {};
+          final Map<String, bool> isLooseMap = {}; 
 
-        if (cards.isEmpty) {
-          return const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.search_off, size: 64, color: Colors.grey),
-                SizedBox(height: 16),
-                Text('Keine Karten gefunden.'),
-              ],
-            ),
-          );
+          for (var item in items) {
+             uniqueCards[item.card.id] = item.card;
+             if (item.binderName == null) {
+               isLooseMap[item.card.id] = true;
+             } else {
+               isLooseMap.putIfAbsent(item.card.id, () => false);
+             }
+          }
+          
+          List<ApiCard> cards = uniqueCards.values.toList();
+
+          // 2. Suche lokal filtern
+          if (queryText.isNotEmpty) {
+            cards = cards.where((c) {
+              if (mode == SearchMode.name) {
+                return c.name.toLowerCase().contains(queryText) || 
+                      (c.nameDe?.toLowerCase().contains(queryText) ?? false);
+              } else {
+                return (c.artist.toLowerCase().contains(queryText));
+              }
+            }).toList();
+          }
+
+          // 3. SORTIEREN: Lose Karten NACH OBEN!
+          cards.sort((a, b) {
+            final aIsLoose = isLooseMap[a.id] ?? false;
+            final bIsLoose = isLooseMap[b.id] ?? false;
+
+            if (aIsLoose && !bIsLoose) return -1; // a nach oben
+            if (!aIsLoose && bIsLoose) return 1;  // b nach oben
+            
+            return (a.nameDe ?? a.name).compareTo(b.nameDe ?? b.name);
+          });
+
+          if (cards.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.search_off, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text(queryText.isEmpty ? "Dein Inventar ist leer." : "Keine passende Karte gefunden."),
+                ],
+              ),
+            );
+          }
+
+          // Rufen hier die Build-Methode für das Grid direkt auf
+          return _buildGrid(cards, context, ref, pickerMode);
+        },
+      );
+    } 
+    // --- FALL 2: GLOBALE KARTEN SUCHE ---
+    else {
+      final searchAsyncValue = ref.watch(searchResultsProvider);
+      final queryText = ref.watch(searchQueryProvider);
+
+      if (queryText.isEmpty) {
+         return const SizedBox(); 
+      }
+
+      return searchAsyncValue.when(
+        data: (allCards) {
+          if (allCards.isEmpty) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.search_off, size: 64, color: Colors.grey),
+                  SizedBox(height: 16),
+                  Text('Keine Karten gefunden.'),
+                ],
+              ),
+            );
+          }
+          
+          // Rufen hier die Build-Methode für das Grid direkt auf
+          return _buildGrid(allCards, context, ref, pickerMode);
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e,s) => Center(child: Text("Fehler: $e")),
+      );
+    }
+  }
+
+  // --- DAS GEMEINSAME GRID FÜR BEIDE FÄLLE ---
+  Widget _buildGrid(List<ApiCard> cards, BuildContext context, WidgetRef ref, bool isPicker) {
+    return GridView.builder(
+      cacheExtent: 100, 
+      padding: const EdgeInsets.all(10),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        childAspectRatio: 0.70,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+      ),
+      itemCount: cards.length,
+      itemBuilder: (context, index) {
+        final card = cards[index];
+        final bool isOwned = card.isOwned;
+
+        double? displayPrice = card.cardmarket?.trendPrice;
+        if (displayPrice == null || displayPrice == 0) {
+          displayPrice = card.tcgplayer?.prices?.normal?.market ?? 
+                         card.tcgplayer?.prices?.holofoil?.market ?? 
+                         card.tcgplayer?.prices?.reverseHolofoil?.market;
         }
         
-    return GridView.builder(
-          // Puffer reduzieren, damit nicht unsichtbare Bilder sofort geladen werden
-          cacheExtent: 100, 
-          padding: const EdgeInsets.all(10),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            childAspectRatio: 0.70,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-          ),
-          itemCount: cards.length,
-          itemBuilder: (context, index) {
-            final card = cards[index];
-            final bool isOwned = card.isOwned;
+        final displayImage = card.displayImage;
 
-            double? displayPrice = card.cardmarket?.trendPrice;
-            if (displayPrice == null || displayPrice == 0) {
-              displayPrice = card.tcgplayer?.prices?.normal?.market ?? 
-                             card.tcgplayer?.prices?.holofoil?.market ?? 
-                             card.tcgplayer?.prices?.reverseHolofoil?.market;
-            }
+        return Consumer(
+          builder: (context, cardRef, child) {
+            final binderLocationsAsync = cardRef.watch(cardBinderLocationProvider(card.id));
             
-            final displayImage = card.displayImage;
-
-            return Consumer(
-              builder: (context, cardRef, child) {
-                // Wir fragen für jede Karte ab, ob sie in einem Binder steckt
-                final binderLocationsAsync = cardRef.watch(cardBinderLocationProvider(card.id));
-                
-                return InkWell(
-                  onTap: () {
-                    if (pickerMode) {
-                      Navigator.pop(context, card); 
-                    } else {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => CardDetailScreen(card: card)))
-                        .then((_) {
-                          ref.invalidate(searchResultsProvider);
-                          // Auch die Location invalidieren, falls die Karte verschoben wurde
-                          ref.invalidate(cardBinderLocationProvider(card.id)); 
-                        });
-                    }
-                  },
-                  onLongPress: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      builder: (context) => InventoryBottomSheet(card: card),
-                    ).then((_) {
+            return InkWell(
+              onTap: () {
+                if (isPicker) {
+                  Navigator.pop(context, card); 
+                } else {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => CardDetailScreen(card: card)))
+                    .then((_) {
                       ref.invalidate(searchResultsProvider);
-                      ref.invalidate(cardBinderLocationProvider(card.id));
+                      ref.invalidate(cardBinderLocationProvider(card.id)); 
                     });
-                  },
-                  child: Card(
-                    elevation: 2,
-                    clipBehavior: Clip.antiAlias,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      side: (pickerMode && isOwned) ? const BorderSide(color: Colors.green, width: 2) : BorderSide.none
+                }
+              },
+              onLongPress: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (context) => InventoryBottomSheet(card: card),
+                ).then((_) {
+                  ref.invalidate(searchResultsProvider);
+                  ref.invalidate(cardBinderLocationProvider(card.id));
+                });
+              },
+              child: Card(
+                elevation: 2,
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  side: (isPicker && isOwned) ? const BorderSide(color: Colors.green, width: 2) : BorderSide.none
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CachedNetworkImage(
+                      imageUrl: displayImage,
+                      memCacheWidth: 200, 
+                      placeholder: (context, url) => Container(color: Colors.grey[200]),
+                      errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
+                      fadeInDuration: const Duration(milliseconds: 150),
                     ),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        CachedNetworkImage(
-                          imageUrl: displayImage,
-                          memCacheWidth: 200, 
-                          placeholder: (context, url) => Container(color: Colors.grey[200]),
-                          errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
-                          fadeInDuration: const Duration(milliseconds: 150),
-                        ),
+                    
+                    // --- BINDER BADGE ---
+                    binderLocationsAsync.when(
+                      data: (binders) {
+                        if (binders.isEmpty) return const SizedBox();
                         
-                        // --- NEU: BINDER BADGE (OBEN LINKS) ---
-                        binderLocationsAsync.when(
-                          data: (binders) {
-                            if (binders.isEmpty) return const SizedBox();
+                        final badgeText = binders.length > 1 
+                            ? "${binders.first} (+${binders.length - 1})" 
+                            : binders.first;
                             
-                            // Zeigt den ersten Binder an (und falls es mehrere sind, ein "+1")
-                            final badgeText = binders.length > 1 
-                                ? "${binders.first} (+${binders.length - 1})" 
-                                : binders.first;
-                                
-                            return Positioned(
-                              top: 4, left: 4,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.blueAccent.withOpacity(0.9),
-                                  borderRadius: BorderRadius.circular(4),
-                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 2)],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.folder_special, color: Colors.white, size: 10),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      badgeText,
-                                      style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-                                      maxLines: 1,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                          loading: () => const SizedBox(),
-                          error: (_,__) => const SizedBox(),
-                        ),
-
-                        // --- UNTERE LEISTE (PREIS & NUMMER) ---
-                        Positioned(
-                          bottom: 0, left: 0, right: 0,
+                        return Positioned(
+                          top: 4, left: 4,
                           child: Container(
-                            color: Colors.black.withOpacity(0.7),
-                            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.blueAccent.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(4),
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 2)],
+                            ),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
+                                const Icon(Icons.folder_special, color: Colors.white, size: 10),
+                                const SizedBox(width: 3),
                                 Text(
-                                  card.number,
-                                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                  badgeText,
+                                  style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                  maxLines: 1,
                                 ),
-                                if (displayPrice != null && displayPrice > 0)
-                                  Text(
-                                    '${displayPrice.toStringAsFixed(2)}€',
-                                    style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                                  ),
                               ],
                             ),
                           ),
-                        ),
-                      ],
+                        );
+                      },
+                      loading: () => const SizedBox(),
+                      error: (_,__) => const SizedBox(),
                     ),
-                  ),
-                );
-              }
+
+                    // --- PREIS LEISTE ---
+                    Positioned(
+                      bottom: 0, left: 0, right: 0,
+                      child: Container(
+                        color: Colors.black.withOpacity(0.7),
+                        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              card.number,
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                            if (displayPrice != null && displayPrice > 0)
+                              Text(
+                                '${displayPrice.toStringAsFixed(2)}€',
+                                style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             );
-          },
+          }
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e,s) => Center(child: Text("Fehler: $e")),
     );
   }
 }
