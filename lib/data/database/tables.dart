@@ -148,6 +148,8 @@ class Binders extends Table {
 
   BoolColumn get isFull => boolean().withDefault(const Constant(false))();
 
+  BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
+
   // Metadaten
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().nullable()();

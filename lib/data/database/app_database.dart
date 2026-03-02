@@ -27,7 +27,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Wir springen auf Version 20 für den "Hard Reset"
   @override
-  int get schemaVersion => 39; 
+  int get schemaVersion => 40; 
 
   @override
   MigrationStrategy get migration {
@@ -36,12 +36,8 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        if (from < 38) {
-          await m.addColumn(binders, binders.isFull);
-        }
-        // --- NEU: Falls jemand von 38 auf 39 updatet ---
-        if (from < 39) {
-          await m.addColumn(cards, cards.cardType);
+        if (from < 40) {
+          await m.addColumn(binders, binders.isFavorite);
         }
       },
       beforeOpen: (details) async {

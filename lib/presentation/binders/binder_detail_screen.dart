@@ -5,6 +5,7 @@ import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
 import '../../domain/logic/binder_service.dart';
 import '../../domain/models/api_card.dart'; 
+import '../cards/card_detail_screen.dart';
 import 'binder_detail_provider.dart'; 
 import 'widgets/binder_page_widget.dart';
 import '../search/card_search_screen.dart';
@@ -178,7 +179,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   }
 
   void _handleSlotTap(BinderSlotData slot) async {
-    // --- NEU: Wenn wir im Tausch-Modus sind, wird jetzt getauscht! ---
     if (_isSwapMode && _slotToSwap != null) {
        final db = ref.read(databaseProvider);
        await BinderService(db).swapTwoSlots(widget.binder.id, _slotToSwap!.binderCard.id, slot.binderCard.id);
@@ -202,7 +202,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              title: Text(slot.binderCard.placeholderLabel ?? "Slot"),
+              title: Text(slot.binderCard.placeholderLabel ?? "Slot", style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Text(slot.binderCard.isPlaceholder ? "Leer (Platzhalter)" : "Befüllt"),
             ),
             const Divider(),
@@ -227,6 +227,88 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
             ],
               
             if (!slot.binderCard.isPlaceholder) ...[
+              // --- NEU: KARTE ANSCHAUEN ---
+              ListTile(
+                leading: const Icon(Icons.zoom_in, color: Colors.purple),
+                title: const Text("Karte im Detail anschauen"),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  
+                  if (slot.card != null) {
+                    final db = ref.read(databaseProvider);
+                    
+                    // --- PREISE KURZ AUS DER DB LADEN ---
+                    final cmPrice = await (db.select(db.cardMarketPrices)
+                      ..where((t) => t.cardId.equals(slot.card!.id))
+                      ..orderBy([(t) => drift.OrderingTerm(expression: t.fetchedAt, mode: drift.OrderingMode.desc)])
+                      ..limit(1)
+                    ).getSingleOrNull();
+
+                    final tcgPrice = await (db.select(db.tcgPlayerPrices)
+                      ..where((t) => t.cardId.equals(slot.card!.id))
+                      ..orderBy([(t) => drift.OrderingTerm(expression: t.fetchedAt, mode: drift.OrderingMode.desc)])
+                      ..limit(1)
+                    ).getSingleOrNull();
+
+                    final apiCard = ApiCard(
+                      id: slot.card!.id,
+                      name: slot.card!.name,
+                      nameDe: slot.card!.nameDe,
+                      supertype: '', subtypes: [], types: [],
+                      setId: slot.card!.setId,
+                      number: slot.card!.number,
+                      setPrintedTotal: "0", 
+                      artist: slot.card!.artist ?? '',
+                      rarity: slot.card!.rarity ?? '',
+                      flavorText: slot.card!.flavorText,
+                      flavorTextDe: slot.card!.flavorTextDe,
+                      smallImageUrl: slot.card!.imageUrl, 
+                      largeImageUrl: slot.card!.imageUrl,
+                      imageUrlDe: slot.card!.imageUrlDe,
+                      hasNormal: slot.card!.hasNormal,
+                      hasHolo: slot.card!.hasHolo,
+                      hasReverse: slot.card!.hasReverse,
+                      hasWPromo: slot.card!.hasWPromo,
+                      hasFirstEdition: slot.card!.hasFirstEdition,
+                      isOwned: true,
+                      // --- PREISE ANHÄNGEN ---
+                      cardmarket: cmPrice != null ? ApiCardMarket(
+                        url: cmPrice.url ?? '',
+                        updatedAt: cmPrice.fetchedAt.toIso8601String(),
+                        trendPrice: cmPrice.trend,
+                        avg30: cmPrice.avg30,
+                        avg7: cmPrice.avg7,
+                        avg1: cmPrice.avg1,
+                        lowPrice: cmPrice.low,
+                        trendHolo: cmPrice.trendHolo,
+                        avg30Holo: cmPrice.avg30Holo,
+                        avg7Holo: cmPrice.avg7Holo,
+                        avg1Holo: cmPrice.avg1Holo,
+                        lowHolo: cmPrice.lowHolo,
+                        reverseHoloTrend: cmPrice.trendReverse,
+                      ) : null,
+                      tcgplayer: tcgPrice != null ? ApiTcgPlayer(
+                        url: tcgPrice.url ?? '',
+                        updatedAt: tcgPrice.fetchedAt.toIso8601String(),
+                        prices: ApiTcgPlayerPrices(
+                          normal: ApiPriceType(market: tcgPrice.normalMarket, low: tcgPrice.normalLow, mid: tcgPrice.normalMid, directLow: tcgPrice.normalDirectLow),
+                          holofoil: ApiPriceType(market: tcgPrice.holoMarket, low: tcgPrice.holoLow, mid: tcgPrice.holoMid, directLow: tcgPrice.holoDirectLow),
+                          reverseHolofoil: ApiPriceType(market: tcgPrice.reverseMarket, low: tcgPrice.reverseLow, mid: tcgPrice.reverseMid, directLow: tcgPrice.reverseDirectLow),
+                        )
+                      ) : null,
+                    );
+
+                    if (mounted) {
+                      Navigator.push(context, MaterialPageRoute(
+                        builder: (context) => CardDetailScreen(card: apiCard)
+                      ));
+                    }
+                  }
+                },
+              ),
+              const Divider(),
+              // ----------------------------
+
               ListTile(
                 leading: const Icon(Icons.change_circle, color: Colors.orange),
                 title: const Text("Karte austauschen"),
@@ -500,7 +582,11 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         content: TextField(
           controller: _searchController,
           autofocus: true,
-          decoration: const InputDecoration(hintText: "z.B. Glurak"),
+          // --- NEU: Wir passen den Hint-Text an ---
+          decoration: const InputDecoration(
+            hintText: "z.B. Glurak oder Seite (z.B. 5)",
+            helperText: "Tipp: Gib nur eine Zahl ein, um zur Seite zu springen."
+          ),
           onSubmitted: (query) {
              _performSearch(query, state);
              Navigator.pop(ctx);
@@ -519,6 +605,36 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
 
   void _performSearch(String query, BinderDetailState state) async {
     if (query.isEmpty) return;
+    
+    // --- NEU: SEITEN-SPRUNG LOGIK ---
+    // Wir prüfen, ob die Eingabe NUR aus Zahlen besteht
+    final isNumeric = RegExp(r'^[0-9]+$').hasMatch(query.trim());
+    
+    final int itemsPerPage = widget.binder.rowsPerPage * widget.binder.columnsPerPage;
+    final int totalPages = (state.slots.length / (itemsPerPage > 0 ? itemsPerPage : 1)).ceil();
+
+    if (isNumeric) {
+      final targetPageNumber = int.tryParse(query.trim());
+      if (targetPageNumber != null && targetPageNumber > 0 && targetPageNumber <= totalPages) {
+        
+        FocusScope.of(context).unfocus();
+        if (mounted) {
+          // Nativer PageView Slide! (Wir ziehen -1 ab, weil PageView bei 0 anfängt)
+          _pageController.animateToPage(
+            targetPageNumber - 1, 
+            duration: const Duration(milliseconds: 500), 
+            curve: Curves.easeInOut
+          );
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Zu Seite $targetPageNumber gesprungen!"), duration: const Duration(seconds: 1))
+          );
+        }
+        return; // Suche hier beenden, wir sind gesprungen!
+      }
+    }
+    // ---------------------------------
+
+    // --- NORMALE TEXT-SUCHE ---
     final qLower = query.toLowerCase();
     
     final index = state.slots.indexWhere((s) {
@@ -529,13 +645,16 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
     });
 
     if (index != -1) {
-      final int itemsPerPage = widget.binder.rowsPerPage * widget.binder.columnsPerPage;
       final int targetPage = (index / itemsPerPage).floor();
 
       FocusScope.of(context).unfocus();
 
       if (mounted) {
-        _pageController.animateToPage(targetPage, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+        _pageController.animateToPage(
+          targetPage, 
+          duration: const Duration(milliseconds: 500), 
+          curve: Curves.easeInOut
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Gefunden auf Seite ${targetPage + 1}!"), duration: const Duration(seconds: 1))
         );

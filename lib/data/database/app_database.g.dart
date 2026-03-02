@@ -3647,6 +3647,16 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('CHECK ("is_full" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _isFavoriteMeta =
+      const VerificationMeta('isFavorite');
+  @override
+  late final GeneratedColumn<bool> isFavorite = GeneratedColumn<bool>(
+      'is_favorite', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_favorite" IN (0, 1))'),
+      defaultValue: const Constant(false));
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -3673,6 +3683,7 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
         sortOrder,
         totalValue,
         isFull,
+        isFavorite,
         createdAt,
         updatedAt
       ];
@@ -3735,6 +3746,12 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
       context.handle(_isFullMeta,
           isFull.isAcceptableOrUnknown(data['is_full']!, _isFullMeta));
     }
+    if (data.containsKey('is_favorite')) {
+      context.handle(
+          _isFavoriteMeta,
+          isFavorite.isAcceptableOrUnknown(
+              data['is_favorite']!, _isFavoriteMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -3772,6 +3789,8 @@ class $BindersTable extends Binders with TableInfo<$BindersTable, Binder> {
           .read(DriftSqlType.double, data['${effectivePrefix}total_value'])!,
       isFull: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_full'])!,
+      isFavorite: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_favorite'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -3796,6 +3815,7 @@ class Binder extends DataClass implements Insertable<Binder> {
   final String sortOrder;
   final double totalValue;
   final bool isFull;
+  final bool isFavorite;
   final DateTime createdAt;
   final DateTime? updatedAt;
   const Binder(
@@ -3809,6 +3829,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       required this.sortOrder,
       required this.totalValue,
       required this.isFull,
+      required this.isFavorite,
       required this.createdAt,
       this.updatedAt});
   @override
@@ -3826,6 +3847,7 @@ class Binder extends DataClass implements Insertable<Binder> {
     map['sort_order'] = Variable<String>(sortOrder);
     map['total_value'] = Variable<double>(totalValue);
     map['is_full'] = Variable<bool>(isFull);
+    map['is_favorite'] = Variable<bool>(isFavorite);
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || updatedAt != null) {
       map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -3845,6 +3867,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       sortOrder: Value(sortOrder),
       totalValue: Value(totalValue),
       isFull: Value(isFull),
+      isFavorite: Value(isFavorite),
       createdAt: Value(createdAt),
       updatedAt: updatedAt == null && nullToAbsent
           ? const Value.absent()
@@ -3866,6 +3889,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       sortOrder: serializer.fromJson<String>(json['sortOrder']),
       totalValue: serializer.fromJson<double>(json['totalValue']),
       isFull: serializer.fromJson<bool>(json['isFull']),
+      isFavorite: serializer.fromJson<bool>(json['isFavorite']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
     );
@@ -3884,6 +3908,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       'sortOrder': serializer.toJson<String>(sortOrder),
       'totalValue': serializer.toJson<double>(totalValue),
       'isFull': serializer.toJson<bool>(isFull),
+      'isFavorite': serializer.toJson<bool>(isFavorite),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
     };
@@ -3900,6 +3925,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           String? sortOrder,
           double? totalValue,
           bool? isFull,
+          bool? isFavorite,
           DateTime? createdAt,
           Value<DateTime?> updatedAt = const Value.absent()}) =>
       Binder(
@@ -3913,6 +3939,7 @@ class Binder extends DataClass implements Insertable<Binder> {
         sortOrder: sortOrder ?? this.sortOrder,
         totalValue: totalValue ?? this.totalValue,
         isFull: isFull ?? this.isFull,
+        isFavorite: isFavorite ?? this.isFavorite,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
       );
@@ -3932,6 +3959,8 @@ class Binder extends DataClass implements Insertable<Binder> {
       totalValue:
           data.totalValue.present ? data.totalValue.value : this.totalValue,
       isFull: data.isFull.present ? data.isFull.value : this.isFull,
+      isFavorite:
+          data.isFavorite.present ? data.isFavorite.value : this.isFavorite,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -3950,6 +3979,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           ..write('sortOrder: $sortOrder, ')
           ..write('totalValue: $totalValue, ')
           ..write('isFull: $isFull, ')
+          ..write('isFavorite: $isFavorite, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -3968,6 +3998,7 @@ class Binder extends DataClass implements Insertable<Binder> {
       sortOrder,
       totalValue,
       isFull,
+      isFavorite,
       createdAt,
       updatedAt);
   @override
@@ -3984,6 +4015,7 @@ class Binder extends DataClass implements Insertable<Binder> {
           other.sortOrder == this.sortOrder &&
           other.totalValue == this.totalValue &&
           other.isFull == this.isFull &&
+          other.isFavorite == this.isFavorite &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -3999,6 +4031,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
   final Value<String> sortOrder;
   final Value<double> totalValue;
   final Value<bool> isFull;
+  final Value<bool> isFavorite;
   final Value<DateTime> createdAt;
   final Value<DateTime?> updatedAt;
   const BindersCompanion({
@@ -4012,6 +4045,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     this.sortOrder = const Value.absent(),
     this.totalValue = const Value.absent(),
     this.isFull = const Value.absent(),
+    this.isFavorite = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -4026,6 +4060,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     this.sortOrder = const Value.absent(),
     this.totalValue = const Value.absent(),
     this.isFull = const Value.absent(),
+    this.isFavorite = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   })  : name = Value(name),
@@ -4041,6 +4076,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     Expression<String>? sortOrder,
     Expression<double>? totalValue,
     Expression<bool>? isFull,
+    Expression<bool>? isFavorite,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -4055,6 +4091,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
       if (sortOrder != null) 'sort_order': sortOrder,
       if (totalValue != null) 'total_value': totalValue,
       if (isFull != null) 'is_full': isFull,
+      if (isFavorite != null) 'is_favorite': isFavorite,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -4071,6 +4108,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
       Value<String>? sortOrder,
       Value<double>? totalValue,
       Value<bool>? isFull,
+      Value<bool>? isFavorite,
       Value<DateTime>? createdAt,
       Value<DateTime?>? updatedAt}) {
     return BindersCompanion(
@@ -4084,6 +4122,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
       sortOrder: sortOrder ?? this.sortOrder,
       totalValue: totalValue ?? this.totalValue,
       isFull: isFull ?? this.isFull,
+      isFavorite: isFavorite ?? this.isFavorite,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -4122,6 +4161,9 @@ class BindersCompanion extends UpdateCompanion<Binder> {
     if (isFull.present) {
       map['is_full'] = Variable<bool>(isFull.value);
     }
+    if (isFavorite.present) {
+      map['is_favorite'] = Variable<bool>(isFavorite.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4144,6 +4186,7 @@ class BindersCompanion extends UpdateCompanion<Binder> {
           ..write('sortOrder: $sortOrder, ')
           ..write('totalValue: $totalValue, ')
           ..write('isFull: $isFull, ')
+          ..write('isFavorite: $isFavorite, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -6620,6 +6663,7 @@ typedef $$BindersTableCreateCompanionBuilder = BindersCompanion Function({
   Value<String> sortOrder,
   Value<double> totalValue,
   Value<bool> isFull,
+  Value<bool> isFavorite,
   Value<DateTime> createdAt,
   Value<DateTime?> updatedAt,
 });
@@ -6634,6 +6678,7 @@ typedef $$BindersTableUpdateCompanionBuilder = BindersCompanion Function({
   Value<String> sortOrder,
   Value<double> totalValue,
   Value<bool> isFull,
+  Value<bool> isFavorite,
   Value<DateTime> createdAt,
   Value<DateTime?> updatedAt,
 });
@@ -6665,6 +6710,7 @@ class $$BindersTableTableManager extends RootTableManager<
             Value<String> sortOrder = const Value.absent(),
             Value<double> totalValue = const Value.absent(),
             Value<bool> isFull = const Value.absent(),
+            Value<bool> isFavorite = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> updatedAt = const Value.absent(),
           }) =>
@@ -6679,6 +6725,7 @@ class $$BindersTableTableManager extends RootTableManager<
             sortOrder: sortOrder,
             totalValue: totalValue,
             isFull: isFull,
+            isFavorite: isFavorite,
             createdAt: createdAt,
             updatedAt: updatedAt,
           ),
@@ -6693,6 +6740,7 @@ class $$BindersTableTableManager extends RootTableManager<
             Value<String> sortOrder = const Value.absent(),
             Value<double> totalValue = const Value.absent(),
             Value<bool> isFull = const Value.absent(),
+            Value<bool> isFavorite = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> updatedAt = const Value.absent(),
           }) =>
@@ -6707,6 +6755,7 @@ class $$BindersTableTableManager extends RootTableManager<
             sortOrder: sortOrder,
             totalValue: totalValue,
             isFull: isFull,
+            isFavorite: isFavorite,
             createdAt: createdAt,
             updatedAt: updatedAt,
           ),
@@ -6763,6 +6812,11 @@ class $$BindersTableFilterComposer
 
   ColumnFilters<bool> get isFull => $state.composableBuilder(
       column: $state.table.isFull,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get isFavorite => $state.composableBuilder(
+      column: $state.table.isFavorite,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -6853,6 +6907,11 @@ class $$BindersTableOrderingComposer
 
   ColumnOrderings<bool> get isFull => $state.composableBuilder(
       column: $state.table.isFull,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get isFavorite => $state.composableBuilder(
+      column: $state.table.isFavorite,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 

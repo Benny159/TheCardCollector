@@ -972,5 +972,11 @@ class BinderService {
       });
     });
   }
+
+  Future<void> toggleBinderFavorite(int binderId, bool isFavorite) async {
+    await (db.update(db.binders)..where((t) => t.id.equals(binderId))).write(
+      BindersCompanion(isFavorite: Value(isFavorite))
+    );
+  }
 }
 

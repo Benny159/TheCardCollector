@@ -1,83 +1,135 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' as drift;
-
 import '../../data/database/database_provider.dart';
 import '../../data/database/app_database.dart';
-import 'create_binder_dialog.dart';
+import '../../domain/logic/binder_service.dart';
 import 'binder_detail_screen.dart';
 import 'bulk_box_detail_screen.dart';
-// WICHTIG: Hier importieren wir jetzt den Provider!
+import 'create_binder_dialog.dart';
 import 'binder_detail_provider.dart'; 
 
-// --- HAUPT SCREEN ---
-final allBindersProvider = StreamProvider<List<Binder>>((ref) {
-  final db = ref.watch(databaseProvider);
-  return (db.select(db.binders)
-        ..orderBy([(t) => drift.OrderingTerm(expression: t.createdAt, mode: drift.OrderingMode.desc)]))
-      .watch();
-});
+// --- STATE PROVIDER FÜR SUCHE & SORTIERUNG ---
+enum StorageSort { newest, name, value }
+final storageSearchProvider = StateProvider<String>((ref) => '');
+final storageSortProvider = StateProvider<StorageSort>((ref) => StorageSort.newest);
 
 class BinderListScreen extends ConsumerWidget {
   const BinderListScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bindersAsync = ref.watch(allBindersProvider);
+    final db = ref.watch(databaseProvider);
+    final search = ref.watch(storageSearchProvider);
+    final sort = ref.watch(storageSortProvider);
+
+    // Live-Stream aller Binder/Boxen
+    final bindersStream = db.select(db.binders).watch();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Meine Binder"),
+        title: const Text("Aufbewahrung"), // Umbenannt!
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => showDialog(context: context, builder: (_) => const CreateBinderDialog()),
+          )
+        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          showDialog(
-            context: context,
-            builder: (context) => const CreateBinderDialog(), 
-          );
-        },
-        icon: const Icon(Icons.add),
-        label: const Text("Neuer Binder"),
-        backgroundColor: Colors.blue[800],
-        foregroundColor: Colors.white,
-      ),
-      body: bindersAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, s) => Center(child: Text("Fehler: $e")),
-        data: (binders) {
-          if (binders.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.book_outlined, size: 80, color: Colors.grey[300]),
-                  const SizedBox(height: 16),
-                  const Text("Erstelle deinen ersten Binder!", style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            );
-          }
+      body: StreamBuilder<List<Binder>>(
+         stream: bindersStream,
+         builder: (context, snapshot) {
+            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+            
+            var binders = snapshot.data!;
+            
+            // 1. FILTERN (SUCHE)
+            if (search.isNotEmpty) {
+               binders = binders.where((b) => b.name.toLowerCase().contains(search.toLowerCase())).toList();
+            }
 
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, 
-              childAspectRatio: 0.70, 
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-            ),
-            itemCount: binders.length,
-            itemBuilder: (context, index) {
-              return _BinderCard(binder: binders[index]);
-            },
-          );
-        },
+            // 2. SORTIEREN
+            binders.sort((a, b) {
+               // Favoriten IMMER ganz oben!
+               if (a.isFavorite && !b.isFavorite) return -1;
+               if (!a.isFavorite && b.isFavorite) return 1;
+               
+               if (sort == StorageSort.value) return b.totalValue.compareTo(a.totalValue);
+               if (sort == StorageSort.name) return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+               return b.createdAt.compareTo(a.createdAt); // Standard: Neueste zuerst
+            });
+
+            return Column(
+              children: [
+                // --- SUCHE & SORTIER LEISTE ---
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          decoration: InputDecoration(
+                            hintText: "Box / Ordner suchen...",
+                            prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            filled: true,
+                            fillColor: Colors.grey[100],
+                          ),
+                          onChanged: (val) => ref.read(storageSearchProvider.notifier).state = val,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey[400]!),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<StorageSort>(
+                            value: sort,
+                            icon: const Icon(Icons.sort, size: 18),
+                            style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.bold),
+                            items: const [
+                              DropdownMenuItem(value: StorageSort.newest, child: Text("Neu")),
+                              DropdownMenuItem(value: StorageSort.name, child: Text("A-Z")),
+                              DropdownMenuItem(value: StorageSort.value, child: Text("Preis")),
+                            ],
+                            onChanged: (val) => ref.read(storageSortProvider.notifier).state = val!,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // --- DIE LISTE ---
+                Expanded(
+                  child: binders.isEmpty 
+                    ? const Center(child: Text("Nichts gefunden.", style: TextStyle(color: Colors.grey)))
+                    : GridView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.8,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        itemCount: binders.length,
+                        itemBuilder: (ctx, i) => _BinderCard(binder: binders[i]),
+                      ),
+                ),
+              ],
+            );
+         }
       ),
     );
   }
 }
 
-// --- BINDER CARD (Jetzt mit ETB, Tin und Buch Look!) ---
+// --- BINDER CARD (Mit ETB, Favoriten & Fortschrittsbalken) ---
 class _BinderCard extends ConsumerWidget {
   final Binder binder;
   const _BinderCard({required this.binder});
@@ -93,10 +145,8 @@ class _BinderCard extends ConsumerWidget {
     return GestureDetector(
       onTap: () {
         if (isBulkBox) {
-          // --- ÖFFNET DIE LISTEN-ANSICHT ---
           Navigator.push(context, MaterialPageRoute(builder: (context) => BulkBoxDetailScreen(binder: binder)));
         } else {
-          // --- ÖFFNET DIE BUCH-ANSICHT ---
           Navigator.push(context, MaterialPageRoute(builder: (context) => BinderDetailScreen(binder: binder)));
         }
       },
@@ -111,10 +161,10 @@ class _BinderCard extends ConsumerWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: shape == 'tin' 
-                ? [color.withOpacity(0.6), color, Colors.white.withOpacity(0.4), color] // Metallischer Glanz
+                ? [color.withOpacity(0.6), color, Colors.white.withOpacity(0.4), color] 
                 : (isBulkBox 
-                    ? [color.withOpacity(0.9), color, color.withOpacity(0.7)] // Box Shading
-                    : [color.withOpacity(0.8), color, color]), // Buch Shading
+                    ? [color.withOpacity(0.9), color, color.withOpacity(0.7)] 
+                    : [color.withOpacity(0.8), color, color]), 
             stops: shape == 'tin' ? const [0.0, 0.4, 0.5, 1.0] : const [0.0, 0.5, 1.0],
           ),
           border: shape == 'tin' ? Border.all(color: Colors.white.withOpacity(0.5), width: 1.5) : null,
@@ -122,10 +172,10 @@ class _BinderCard extends ConsumerWidget {
         child: Stack(
           children: [
             // --- DEKORATIONEN BASIEREND AUF DEM TYP ---
-            if (!isBulkBox) // Buchrücken
+            if (!isBulkBox) 
               Positioned(left: 12, top: 0, bottom: 0, child: Container(width: 2, color: Colors.black12)),
 
-            if (isBulkBox && shape == 'etb') // ETB Deckel (Oben abgeschnitten)
+            if (isBulkBox && shape == 'etb') 
               Positioned(
                 left: 0, right: 0, top: 0,
                 child: Container(
@@ -138,7 +188,7 @@ class _BinderCard extends ConsumerWidget {
                 ),
               ),
               
-            if (isBulkBox && shape == 'box') // Pappkarton-Klappen
+            if (isBulkBox && shape == 'box') 
               Positioned(
                 left: 0, right: 0, top: 0,
                 child: Row(
@@ -148,6 +198,24 @@ class _BinderCard extends ConsumerWidget {
                   ],
                 ),
               ),
+
+            // --- FAVORITEN STERN ---
+            Positioned(
+              top: isBulkBox && shape == 'etb' ? 24 : 0,
+              right: 0,
+              child: IconButton(
+                icon: Icon(
+                  binder.isFavorite ? Icons.star : Icons.star_border, 
+                  color: binder.isFavorite ? Colors.amberAccent : Colors.white54,
+                  size: 20,
+                  shadows: [if (binder.isFavorite) const Shadow(color: Colors.black54, blurRadius: 4)],
+                ),
+                onPressed: () async {
+                  final db = ref.read(databaseProvider);
+                  await BinderService(db).toggleBinderFavorite(binder.id, !binder.isFavorite);
+                },
+              ),
+            ),
 
             // --- INHALT ---
             Padding(
@@ -164,24 +232,54 @@ class _BinderCard extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  
                   statsAsync.when(
-                    data: (stats) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.3), borderRadius: BorderRadius.circular(12)),
-                      child: Text("${stats.value.toStringAsFixed(2)} €", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                    data: (stats) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.3), borderRadius: BorderRadius.circular(12)),
+                          child: Text("${stats.value.toStringAsFixed(2)} €", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                        ),
+                        
+                        // --- FORTSCHRITTSBALKEN ---
+                        if (!isBulkBox && stats.total > 0) ...[
+                           const SizedBox(height: 8),
+                           ClipRRect(
+                             borderRadius: BorderRadius.circular(2),
+                             child: LinearProgressIndicator(
+                               value: stats.progress,
+                               backgroundColor: Colors.black26,
+                               valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                               minHeight: 4,
+                             ),
+                           ),
+                           const SizedBox(height: 2),
+                           Text("${stats.filled} / ${stats.total}", style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold)),
+                        ] else if (isBulkBox) ...[
+                           const SizedBox(height: 8),
+                           Text("${stats.filled} Karten", style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+                        ]
+                      ],
                     ),
                     loading: () => const SizedBox(), error: (_,__) => const SizedBox(),
                   ),
+
                   const Spacer(),
+                  
                   Row(
                     children: [
                       Icon(isBulkBox ? Icons.inventory_2 : Icons.menu_book, size: 12, color: Colors.white70),
                       const SizedBox(width: 4),
-                      Text(
-                        isBulkBox 
-                            ? (shape == 'etb' ? "Elite Trainer Box" : (shape == 'tin' ? "Tin-Dose" : "Lagerkarton")) 
-                            : "${binder.rowsPerPage}x${binder.columnsPerPage} Buch", 
-                        style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold)
+                      Expanded(
+                        child: Text(
+                          isBulkBox 
+                              ? (shape == 'etb' ? "Elite Trainer Box" : (shape == 'tin' ? "Tin-Dose" : "Lagerkarton")) 
+                              : "${binder.rowsPerPage}x${binder.columnsPerPage} Buch", 
+                          style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold),
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),

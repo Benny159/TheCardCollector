@@ -8,6 +8,7 @@ import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
 import '../../domain/logic/binder_service.dart';
 import '../../domain/models/api_card.dart';
+import '../cards/card_detail_screen.dart';
 import '../search/card_search_screen.dart';
 import 'binder_detail_provider.dart';
 
@@ -403,6 +404,89 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                 if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
               },
             ),
+
+            // IN BULK BOX SCREEN:
+            if (!isDivider) ...[
+              ListTile(
+                leading: const Icon(Icons.zoom_in, color: Colors.purple),
+                title: const Text("Karte im Detail anschauen"),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  
+                  if (slot.card != null) {
+                    final db = ref.read(databaseProvider);
+                    
+                    // --- PREISE KURZ AUS DER DB LADEN ---
+                    final cmPrice = await (db.select(db.cardMarketPrices)
+                      ..where((t) => t.cardId.equals(slot.card!.id))
+                      ..orderBy([(t) => drift.OrderingTerm(expression: t.fetchedAt, mode: drift.OrderingMode.desc)])
+                      ..limit(1)
+                    ).getSingleOrNull();
+
+                    final tcgPrice = await (db.select(db.tcgPlayerPrices)
+                      ..where((t) => t.cardId.equals(slot.card!.id))
+                      ..orderBy([(t) => drift.OrderingTerm(expression: t.fetchedAt, mode: drift.OrderingMode.desc)])
+                      ..limit(1)
+                    ).getSingleOrNull();
+
+                    final apiCard = ApiCard(
+                      id: slot.card!.id,
+                      name: slot.card!.name,
+                      nameDe: slot.card!.nameDe,
+                      supertype: '', subtypes: [], types: [],
+                      setId: slot.card!.setId,
+                      number: slot.card!.number,
+                      setPrintedTotal: "0", 
+                      artist: slot.card!.artist ?? '',
+                      rarity: slot.card!.rarity ?? '',
+                      flavorText: slot.card!.flavorText,
+                      flavorTextDe: slot.card!.flavorTextDe,
+                      smallImageUrl: slot.card!.imageUrl, 
+                      largeImageUrl: slot.card!.imageUrl,
+                      imageUrlDe: slot.card!.imageUrlDe,
+                      hasNormal: slot.card!.hasNormal,
+                      hasHolo: slot.card!.hasHolo,
+                      hasReverse: slot.card!.hasReverse,
+                      hasWPromo: slot.card!.hasWPromo,
+                      hasFirstEdition: slot.card!.hasFirstEdition,
+                      isOwned: true,
+                      // --- PREISE ANHÄNGEN ---
+                      cardmarket: cmPrice != null ? ApiCardMarket(
+                        url: cmPrice.url ?? '',
+                        updatedAt: cmPrice.fetchedAt.toIso8601String(),
+                        trendPrice: cmPrice.trend,
+                        avg30: cmPrice.avg30,
+                        avg7: cmPrice.avg7,
+                        avg1: cmPrice.avg1,
+                        lowPrice: cmPrice.low,
+                        trendHolo: cmPrice.trendHolo,
+                        avg30Holo: cmPrice.avg30Holo,
+                        avg7Holo: cmPrice.avg7Holo,
+                        avg1Holo: cmPrice.avg1Holo,
+                        lowHolo: cmPrice.lowHolo,
+                        reverseHoloTrend: cmPrice.trendReverse,
+                      ) : null,
+                      tcgplayer: tcgPrice != null ? ApiTcgPlayer(
+                        url: tcgPrice.url ?? '',
+                        updatedAt: tcgPrice.fetchedAt.toIso8601String(),
+                        prices: ApiTcgPlayerPrices(
+                          normal: ApiPriceType(market: tcgPrice.normalMarket, low: tcgPrice.normalLow, mid: tcgPrice.normalMid, directLow: tcgPrice.normalDirectLow),
+                          holofoil: ApiPriceType(market: tcgPrice.holoMarket, low: tcgPrice.holoLow, mid: tcgPrice.holoMid, directLow: tcgPrice.holoDirectLow),
+                          reverseHolofoil: ApiPriceType(market: tcgPrice.reverseMarket, low: tcgPrice.reverseLow, mid: tcgPrice.reverseMid, directLow: tcgPrice.reverseDirectLow),
+                        )
+                      ) : null,
+                    );
+
+                    if (mounted) {
+                      Navigator.push(context, MaterialPageRoute(
+                        builder: (context) => CardDetailScreen(card: apiCard)
+                      ));
+                    }
+                  }
+                },
+              ),
+              const Divider(),
+            ],
           ],
         ),
       ),

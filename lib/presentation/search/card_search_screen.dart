@@ -3,11 +3,13 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart'; 
-
+import '../../data/database/database_provider.dart';
 import '../../data/database/app_database.dart' as db; 
 import '../../data/api/search_provider.dart'; 
+import '../../domain/models/api_card.dart';
 import '../cards/card_detail_screen.dart';
 import '../inventory/inventory_bottom_sheet.dart';
+import 'package:drift/drift.dart' hide Column;
 import 'dart:async';
 
 
@@ -33,11 +35,13 @@ class CardSearchScreen extends ConsumerStatefulWidget {
 
 class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
   late TextEditingController _searchController;
+  late FocusNode _focusNode; // <--- NEU für Autocomplete
   Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
+    _focusNode = FocusNode();
 
     // 1. Initial Query setzen (entweder vom Parameter oder Provider)
     final startQuery = widget.initialQuery ?? ref.read(searchQueryProvider);
@@ -61,6 +65,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -70,14 +75,13 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
     final isSearching = searchQuery.isNotEmpty;
     final currentMode = ref.watch(searchModeProvider);
 
-    // Im Picker Mode immer die Ergebnisse anzeigen, sonst Dashboard nur wenn nicht gesucht wird
+    // Im Picker Mode immer die Ergebnisse (das Inventar) anzeigen!
     final showResults = isSearching || widget.pickerMode;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.pickerMode ? 'Karte auswählen' : (isSearching ? 'Suche' : 'Dashboard')),
         actions: [
-          // HOME BUTTON NEU:
           if (isSearching && !widget.pickerMode)
             IconButton(
               icon: const Icon(Icons.home),
@@ -92,75 +96,136 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
       ),
       body: Column(
         children: [
-          // --- 1. SUCHLEISTE ---
+          // --- 1. SUCHLEISTE MIT AUTOCOMPLETE ---
           Container(
             padding: const EdgeInsets.all(12),
             color: Theme.of(context).colorScheme.surface,
             child: Column(
               children: [
-                TextField(
-                  controller: _searchController,
-                  // Fokus automatisch setzen im Picker Mode, wenn keine Query da ist
-                  autofocus: widget.pickerMode && (widget.initialQuery?.isEmpty ?? true),
-                  decoration: InputDecoration(
-                    hintText: currentMode == SearchMode.name 
-                        ? 'Suche Karte (z.B. Glurak)...' 
-                        : 'Suche Künstler...',
-                    filled: true,
-                    fillColor: Colors.grey[100],
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              ref.read(searchQueryProvider.notifier).state = '';
-                              // Im Picker Mode nicht unfocusen, damit man direkt weitertippen kann
-                              if (!widget.pickerMode) FocusScope.of(context).unfocus(); 
-                            },
-                          )
-                        : null,
+                LayoutBuilder(
+                  builder: (context, constraints) => RawAutocomplete<String>(
+                    textEditingController: _searchController,
+                    focusNode: _focusNode,
+                    optionsBuilder: (TextEditingValue textEditingValue) async {
+                      final query = textEditingValue.text.trim();
+                      if (query.length < 2) return const Iterable<String>.empty();
+                      
+                      // Keine Vorschläge beim Inventar-Durchsuchen (geht ohnehin live)
+                      if (widget.onlyOwned) return const Iterable<String>.empty();
+
+                      final dbInst = ref.read(databaseProvider);
+                      final mode = ref.read(searchModeProvider);
+
+                      final select = dbInst.select(dbInst.cards);
+                      if (mode == SearchMode.name) {
+                        select.where((t) => t.name.like('%$query%') | t.nameDe.like('%$query%'));
+                      } else {
+                        select.where((t) => t.artist.like('%$query%'));
+                      }
+                      select.limit(8); // Maximal 8 Vorschläge anzeigen
+                      final rows = await select.get();
+                      
+                      final Set<String> results = {};
+                      for (var r in rows) {
+                        if (mode == SearchMode.name) {
+                          if (r.nameDe != null && r.nameDe!.toLowerCase().contains(query.toLowerCase())) {
+                            results.add(r.nameDe!);
+                          } else if (r.name.toLowerCase().contains(query.toLowerCase())) {
+                            results.add(r.name);
+                          }
+                        } else {
+                          if (r.artist != null && r.artist!.toLowerCase().contains(query.toLowerCase())) {
+                            results.add(r.artist!);
+                          }
+                        }
+                      }
+                      return results;
+                    },
+                    onSelected: (String selection) {
+                      ref.read(searchQueryProvider.notifier).state = selection;
+                      _focusNode.unfocus();
+                    },
+                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        autofocus: widget.pickerMode && (widget.initialQuery?.isEmpty ?? true),
+                        decoration: InputDecoration(
+                          hintText: currentMode == SearchMode.name ? 'Suche Karte (z.B. Glurak)...' : 'Suche Künstler...',
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: controller.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    controller.clear();
+                                    ref.read(searchQueryProvider.notifier).state = '';
+                                    if (!widget.pickerMode) focusNode.unfocus(); 
+                                  },
+                                )
+                              : null,
+                        ),
+                        onChanged: (val) {
+                          if (_debounce?.isActive ?? false) _debounce!.cancel();
+                          _debounce = Timer(const Duration(milliseconds: 500), () {
+                            if (mounted) ref.read(searchQueryProvider.notifier).state = val;
+                          });
+                        },
+                        onSubmitted: (val) {
+                          if (_debounce?.isActive ?? false) _debounce!.cancel();
+                          if (mounted) ref.read(searchQueryProvider.notifier).state = val;
+                          focusNode.unfocus();
+                          onFieldSubmitted();
+                        },
+                      );
+                    },
+                    optionsViewBuilder: (context, onSelected, options) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 6,
+                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.white,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: 250, 
+                              maxWidth: constraints.maxWidth, // Exakt so breit wie die Suchleiste
+                            ),
+                            child: ListView.separated(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: options.length,
+                              separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.black12),
+                              itemBuilder: (BuildContext context, int index) {
+                                final String option = options.elementAt(index);
+                                return ListTile(
+                                  leading: const Icon(Icons.search, size: 18, color: Colors.grey),
+                                  title: Text(option, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                  visualDensity: VisualDensity.compact,
+                                  onTap: () => onSelected(option),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                  onChanged: (val) {
-                    // Wenn der User tippt, löschen wir den alten Timer...
-                    if (_debounce?.isActive ?? false) _debounce!.cancel();
-                    
-                    // ... und starten einen neuen. Erst wenn 500ms lang NICHTS getippt wurde,
-                    // wird der Provider aktualisiert und die API angefragt.
-                    _debounce = Timer(const Duration(milliseconds: 500), () {
-                      if (mounted) {
-                        ref.read(searchQueryProvider.notifier).state = val;
-                      }
-                    });
-                  },
-                  onSubmitted: (val) {
-                    // Wenn der User tippt, löschen wir den alten Timer...
-                    if (_debounce?.isActive ?? false) _debounce!.cancel();
-                    
-                    // ... und starten einen neuen. Erst wenn 500ms lang NICHTS getippt wurde,
-                    // wird der Provider aktualisiert und die API angefragt.
-                    _debounce = Timer(const Duration(milliseconds: 500), () {
-                      if (mounted) {
-                        ref.read(searchQueryProvider.notifier).state = val;
-                      }
-                    });
-                  },
                 ),
                 
                 const SizedBox(height: 8),
                 
-                // Filter Chips (Künstler Suche macht im Picker Mode wenig Sinn, aber lassen wir drin)
                 Row(
                   children: [
                     _buildFilterChip("Karten Name", SearchMode.name, ref),
                     const SizedBox(width: 8),
                     _buildFilterChip("Künstler", SearchMode.artist, ref),
-                    // Optional: Info Chip wenn "Nur Inventar" aktiv ist
                     if (widget.onlyOwned) ...[
                        const SizedBox(width: 8),
                        const Chip(
-                         label: Text("Nur Inventar"), 
+                         label: Text("Dein Inventar", style: TextStyle(fontWeight: FontWeight.bold)), 
                          backgroundColor: Colors.greenAccent, 
                          visualDensity: VisualDensity.compact
                        ),
@@ -174,7 +239,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
           // --- 2. INHALT ---
           Expanded(
             child: showResults 
-              ? _SearchResultsView(pickerMode: widget.pickerMode, onlyOwned: widget.onlyOwned) // Parameter weitergeben 
+              ? _SearchResultsView(pickerMode: widget.pickerMode, onlyOwned: widget.onlyOwned)
               : const _DashboardView(),    
           ),
         ],
@@ -663,7 +728,7 @@ class _SearchResultsView extends ConsumerWidget {
           );
         }
         
-return GridView.builder(
+    return GridView.builder(
           // Puffer reduzieren, damit nicht unsichtbare Bilder sofort geladen werden
           cacheExtent: 100, 
           padding: const EdgeInsets.all(10),
