@@ -22,12 +22,13 @@ class SetListScreen extends ConsumerStatefulWidget {
 
 class _SetListScreenState extends ConsumerState<SetListScreen> {
   late TextEditingController _searchController;
+  late FocusNode _focusNode; // <--- NEU
 
   @override
   void initState() {
     super.initState();
+    _focusNode = FocusNode(); // <--- NEU
     // Controller mit dem aktuellen Wert aus dem Provider initialisieren
-    // (falls man vom Detail-Screen zurückkommt und die Suche noch da sein soll)
     _searchController = TextEditingController(
       text: ref.read(setListSearchProvider)
     );
@@ -36,13 +37,13 @@ class _SetListScreenState extends ConsumerState<SetListScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _focusNode.dispose(); // <--- NEU
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final setsAsync = ref.watch(allSetsProvider);
-    // Wir beobachten den Provider, um das "X" Icon ein/auszublenden
     final searchQuery = ref.watch(setListSearchProvider);
 
     return Scaffold(
@@ -58,32 +59,91 @@ class _SetListScreenState extends ConsumerState<SetListScreen> {
       ),
       body: Column(
         children: [
-          // 1. SUCHLEISTE
+          // 1. SUCHLEISTE MIT AUTOCOMPLETE
           Padding(
             padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: _searchController, // WICHTIG: Controller verbinden
-              decoration: InputDecoration(
-                hintText: 'Suche Set (z.B. 151, Evolving Skies)...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          // WICHTIG: Beides zurücksetzen!
-                          _searchController.clear(); // 1. Textfeld leeren
-                          ref.read(setListSearchProvider.notifier).state = ''; // 2. Such-State leeren
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                filled: true,
-                fillColor: Colors.grey[100],
+            child: LayoutBuilder(
+              builder: (context, constraints) => RawAutocomplete<String>(
+                textEditingController: _searchController,
+                focusNode: _focusNode,
+                optionsBuilder: (TextEditingValue textEditingValue) {
+                  final query = textEditingValue.text.trim().toLowerCase();
+                  if (query.isEmpty) return const Iterable<String>.empty();
+                  
+                  // Wir holen uns die bereits geladenen Sets aus dem Provider
+                  final allSets = ref.read(allSetsProvider).valueOrNull ?? [];
+                  final Set<String> results = {};
+                  
+                  for (var set in allSets) {
+                    if (set.nameDe != null && set.nameDe!.toLowerCase().contains(query)) {
+                      results.add(set.nameDe!);
+                    } else if (set.name.toLowerCase().contains(query)) {
+                      results.add(set.name);
+                    }
+                  }
+                  return results.take(8);
+                },
+                onSelected: (String selection) {
+                  ref.read(setListSearchProvider.notifier).state = selection;
+                  FocusScope.of(context).unfocus();
+                },
+                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                  return TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      hintText: 'Suche Set (z.B. 151, Evolving Skies)...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                controller.clear();
+                                ref.read(setListSearchProvider.notifier).state = '';
+                                focusNode.unfocus();
+                              },
+                            )
+                          : null,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                    ),
+                    onChanged: (value) => ref.read(setListSearchProvider.notifier).state = value,
+                    onSubmitted: (_) {
+                      focusNode.unfocus();
+                      onFieldSubmitted();
+                    },
+                  );
+                },
+                optionsViewBuilder: (context, onSelected, options) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 6,
+                      borderRadius: BorderRadius.circular(8),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: 250, maxWidth: constraints.maxWidth),
+                        child: ListView.separated(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.black12),
+                          itemBuilder: (context, index) {
+                            final option = options.elementAt(index);
+                            return ListTile(
+                              leading: const Icon(Icons.search, size: 18, color: Colors.grey),
+                              title: Text(option, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                              visualDensity: VisualDensity.compact,
+                              onTap: () => onSelected(option),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
-              onChanged: (value) {
-                ref.read(setListSearchProvider.notifier).state = value;
-              },
             ),
           ),
 

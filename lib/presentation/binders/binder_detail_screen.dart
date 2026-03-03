@@ -24,6 +24,7 @@ class BinderDetailScreen extends ConsumerStatefulWidget {
 class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   late PageController _pageController;
   final _searchController = TextEditingController();
+  late FocusNode _focusNode;
   
   int _currentIndex = 0;
   
@@ -35,12 +36,14 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _currentIndex);
+    _focusNode = FocusNode();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
     _searchController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -575,22 +578,81 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   void _showSearchDialog(BuildContext context, BinderDetailState? state) {
     if (state == null) return;
     _searchController.clear(); 
+    
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Im Binder suchen"),
-        content: TextField(
-          controller: _searchController,
-          autofocus: true,
-          // --- NEU: Wir passen den Hint-Text an ---
-          decoration: const InputDecoration(
-            hintText: "z.B. Glurak oder Seite (z.B. 5)",
-            helperText: "Tipp: Gib nur eine Zahl ein, um zur Seite zu springen."
+        content: SizedBox(
+          width: double.maxFinite,
+          child: RawAutocomplete<String>(
+            textEditingController: _searchController,
+            focusNode: _focusNode,
+            optionsBuilder: (TextEditingValue textEditingValue) {
+              final query = textEditingValue.text.trim().toLowerCase();
+              if (query.isEmpty) return const Iterable<String>.empty();
+              
+              final Set<String> results = {};
+              for (var slotData in state.slots) {
+                 // Vorschläge für Karten-Namen
+                 if (slotData.card != null) {
+                    if (slotData.card!.nameDe != null && slotData.card!.nameDe!.toLowerCase().contains(query)) {
+                       results.add(slotData.card!.nameDe!);
+                    } else if (slotData.card!.name.toLowerCase().contains(query)) {
+                       results.add(slotData.card!.name);
+                    }
+                 }
+                 // Vorschläge für Platzhalter/Divider
+                 if (slotData.binderCard.placeholderLabel != null) {
+                    String label = slotData.binderCard.placeholderLabel!;
+                    if (label.startsWith("DIVIDER:")) label = label.replaceAll("DIVIDER:", "");
+                    if (label.toLowerCase().contains(query)) results.add(label);
+                 }
+              }
+              return results.take(6);
+            },
+            onSelected: (String selection) {
+               _performSearch(selection, state);
+               Navigator.pop(ctx);
+            },
+            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+               return TextField(
+                 controller: controller,
+                 focusNode: focusNode,
+                 autofocus: true,
+                 decoration: const InputDecoration(
+                   hintText: "z.B. Glurak oder Seite (z.B. 5)",
+                   helperText: "Tipp: Gib eine Zahl ein, um direkt zur Seite zu springen."
+                 ),
+                 onSubmitted: (query) {
+                   _performSearch(query, state);
+                   Navigator.pop(ctx);
+                 },
+               );
+            },
+            optionsViewBuilder: (context, onSelected, options) {
+              return Align(
+                alignment: Alignment.topLeft,
+                child: Material(
+                  elevation: 4,
+                  borderRadius: BorderRadius.circular(4),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (context, index) {
+                      final option = options.elementAt(index);
+                      return ListTile(
+                        title: Text(option, style: const TextStyle(fontSize: 14)),
+                        visualDensity: VisualDensity.compact,
+                        onTap: () => onSelected(option),
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
           ),
-          onSubmitted: (query) {
-             _performSearch(query, state);
-             Navigator.pop(ctx);
-          },
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Abbrechen")),

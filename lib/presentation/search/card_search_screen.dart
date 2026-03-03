@@ -680,16 +680,30 @@ class _SearchResultsView extends ConsumerWidget {
         error: (e, s) => Center(child: Text("Fehler: $e")),
         data: (items) {
           
-          // 1. Duplikate entfernen und speichern, OB sie lose sind
+          // 1. Duplikate entfernen und exakten Status berechnen
+          // Status 0 = Komplett lose (in keinem Binder)
+          // Status 1 = Teilweise lose (Du hast noch Reserve-Karten)
+          // Status 2 = Komplett verplant (Alle stecken im Binder)
           final Map<String, ApiCard> uniqueCards = {};
-          final Map<String, bool> isLooseMap = {}; 
+          final Map<String, int> looseStatusMap = {}; 
 
           for (var item in items) {
              uniqueCards[item.card.id] = item.card;
+             
              if (item.binderName == null) {
-               isLooseMap[item.card.id] = true;
+               // Karte ist lose
+               if (looseStatusMap[item.card.id] == 2) {
+                   looseStatusMap[item.card.id] = 1; // Hatten schon Binder -> jetzt Teilweise (1)
+               } else {
+                   looseStatusMap.putIfAbsent(item.card.id, () => 0); // Bisher nur lose gesehen -> (0)
+               }
              } else {
-               isLooseMap.putIfAbsent(item.card.id, () => false);
+               // Karte steckt im Binder
+               if (looseStatusMap[item.card.id] == 0) {
+                   looseStatusMap[item.card.id] = 1; // Hatten schon Lose -> jetzt Teilweise (1)
+               } else {
+                   looseStatusMap.putIfAbsent(item.card.id, () => 2); // Bisher nur Binder gesehen -> (2)
+               }
              }
           }
           
@@ -707,14 +721,16 @@ class _SearchResultsView extends ConsumerWidget {
             }).toList();
           }
 
-          // 3. SORTIEREN: Lose Karten NACH OBEN!
+          // 3. 3-STUFEN-SORTIERUNG ANWENDEN
           cards.sort((a, b) {
-            final aIsLoose = isLooseMap[a.id] ?? false;
-            final bIsLoose = isLooseMap[b.id] ?? false;
+            final statusA = looseStatusMap[a.id] ?? 2;
+            final statusB = looseStatusMap[b.id] ?? 2;
 
-            if (aIsLoose && !bIsLoose) return -1; // a nach oben
-            if (!aIsLoose && bIsLoose) return 1;  // b nach oben
+            // Zuerst nach Status sortieren (0 -> 1 -> 2)
+            final statusCompare = statusA.compareTo(statusB);
+            if (statusCompare != 0) return statusCompare;
             
+            // Wenn beide gleichen Status haben, alphabetisch sortieren
             return (a.nameDe ?? a.name).compareTo(b.nameDe ?? b.name);
           });
 
@@ -731,7 +747,6 @@ class _SearchResultsView extends ConsumerWidget {
             );
           }
 
-          // Rufen hier die Build-Methode für das Grid direkt auf
           return _buildGrid(cards, context, ref, pickerMode);
         },
       );
@@ -760,7 +775,6 @@ class _SearchResultsView extends ConsumerWidget {
             );
           }
           
-          // Rufen hier die Build-Methode für das Grid direkt auf
           return _buildGrid(allCards, context, ref, pickerMode);
         },
         loading: () => const Center(child: CircularProgressIndicator()),

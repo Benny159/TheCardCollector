@@ -66,17 +66,80 @@ class BinderListScreen extends ConsumerWidget {
                   child: Row(
                     children: [
                       Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: "Box / Ordner suchen...",
-                            prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            filled: true,
-                            fillColor: Colors.grey[100],
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => RawAutocomplete<String>(
+                            optionsBuilder: (TextEditingValue textEditingValue) {
+                              final query = textEditingValue.text.trim().toLowerCase();
+                              if (query.isEmpty) return const Iterable<String>.empty();
+                              
+                              final Set<String> results = {};
+                              for (var b in binders) {
+                                if (b.name.toLowerCase().contains(query)) {
+                                  results.add(b.name);
+                                }
+                              }
+                              return results.take(6);
+                            },
+                            onSelected: (String selection) {
+                              ref.read(storageSearchProvider.notifier).state = selection;
+                              FocusScope.of(context).unfocus();
+                            },
+                            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                              return TextField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                decoration: InputDecoration(
+                                  hintText: "Box / Ordner suchen...",
+                                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                                  suffixIcon: search.isNotEmpty ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18),
+                                    onPressed: () {
+                                      controller.clear();
+                                      ref.read(storageSearchProvider.notifier).state = '';
+                                      focusNode.unfocus();
+                                    },
+                                  ) : null,
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                  filled: true,
+                                  fillColor: Colors.grey[100],
+                                ),
+                                onChanged: (val) => ref.read(storageSearchProvider.notifier).state = val,
+                                onSubmitted: (_) {
+                                  focusNode.unfocus();
+                                  onFieldSubmitted();
+                                },
+                              );
+                            },
+                            optionsViewBuilder: (context, onSelected, options) {
+                              return Align(
+                                alignment: Alignment.topLeft,
+                                child: Material(
+                                  elevation: 6,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(maxHeight: 200, maxWidth: constraints.maxWidth),
+                                    child: ListView.separated(
+                                      padding: EdgeInsets.zero,
+                                      shrinkWrap: true,
+                                      itemCount: options.length,
+                                      separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.black12),
+                                      itemBuilder: (context, index) {
+                                        final option = options.elementAt(index);
+                                        return ListTile(
+                                          leading: const Icon(Icons.folder, size: 18, color: Colors.blueGrey),
+                                          title: Text(option, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                          visualDensity: VisualDensity.compact,
+                                          onTap: () => onSelected(option),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
-                          onChanged: (val) => ref.read(storageSearchProvider.notifier).state = val,
                         ),
                       ),
                       const SizedBox(width: 8),

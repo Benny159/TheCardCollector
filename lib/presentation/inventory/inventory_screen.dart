@@ -177,23 +177,91 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSearchBar(BuildContext context, WidgetRef ref, String currentText) {
+ Widget _buildSearchBar(BuildContext context, WidgetRef ref, String currentText) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      child: TextField(
-        controller: TextEditingController(text: currentText)..selection = TextSelection.fromPosition(TextPosition(offset: currentText.length)),
-        decoration: InputDecoration(
-          hintText: 'Suche (Name, Set, Binder)...',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: currentText.isNotEmpty 
-            ? IconButton(icon: const Icon(Icons.clear), onPressed: () => ref.read(inventorySearchProvider.notifier).state = '')
-            : null,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-          filled: true,
-          fillColor: Colors.grey[100],
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      child: LayoutBuilder(
+        builder: (context, constraints) => RawAutocomplete<String>(
+          // --- FIX: Wir lassen RawAutocomplete den Controller selbst bauen ---
+          initialValue: TextEditingValue(text: currentText),
+          
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            final query = textEditingValue.text.trim().toLowerCase();
+            if (query.length < 2) return const Iterable<String>.empty();
+            
+            final inventory = ref.read(inventoryProvider).valueOrNull ?? [];
+            final Set<String> results = {};
+            
+            for (var item in inventory) {
+              if (item.card.nameDe != null && item.card.nameDe!.toLowerCase().contains(query)) {
+                results.add(item.card.nameDe!);
+              } else if (item.card.name.toLowerCase().contains(query)) {
+                results.add(item.card.name);
+              }
+            }
+            return results.take(8);
+          },
+          onSelected: (String selection) {
+            ref.read(inventorySearchProvider.notifier).state = selection;
+            FocusScope.of(context).unfocus();
+          },
+          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+            return TextField(
+              controller: controller,
+              focusNode: focusNode,
+              decoration: InputDecoration(
+                hintText: 'Suche Karte in Inventar...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: controller.text.isNotEmpty 
+                  ? IconButton(
+                      icon: const Icon(Icons.clear), 
+                      onPressed: () {
+                         controller.clear();
+                         ref.read(inventorySearchProvider.notifier).state = '';
+                         focusNode.unfocus();
+                      }
+                    )
+                  : null,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                filled: true,
+                fillColor: Colors.grey[100],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+              onChanged: (val) => ref.read(inventorySearchProvider.notifier).state = val,
+              onSubmitted: (_) {
+                focusNode.unfocus();
+                onFieldSubmitted();
+              },
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 6,
+                borderRadius: BorderRadius.circular(8),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: 250, maxWidth: constraints.maxWidth),
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.black12),
+                    itemBuilder: (context, index) {
+                      final option = options.elementAt(index);
+                      return ListTile(
+                        leading: const Icon(Icons.search, size: 18, color: Colors.grey),
+                        title: Text(option, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                        visualDensity: VisualDensity.compact,
+                        onTap: () => onSelected(option),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
         ),
-        onChanged: (val) => ref.read(inventorySearchProvider.notifier).state = val,
       ),
     );
   }
