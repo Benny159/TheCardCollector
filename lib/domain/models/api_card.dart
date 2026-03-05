@@ -13,6 +13,9 @@ class ApiCard {
   final String rarity;
   final String? flavorText;
   final String? flavorTextDe;
+
+  final String preferredPriceSource; 
+  final double? customPrice;
   
   // Bilder
   final String smallImageUrl;
@@ -63,6 +66,9 @@ class ApiCard {
     required this.rarity,
     this.flavorText,
     this.flavorTextDe,
+
+    this.preferredPriceSource = 'cardmarket',
+    this.customPrice,
     
     required this.smallImageUrl,
     this.largeImageUrl,

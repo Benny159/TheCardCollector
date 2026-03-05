@@ -84,15 +84,18 @@ final searchResultsProvider = FutureProvider<List<ApiCard>>((ref) async {
     _fetchOwnedIds(db, cardIds),
     (db.select(db.cardMarketPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get(),
     (db.select(db.tcgPlayerPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get(),
+    (db.select(db.customCardPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get(),
   ]);
 
   final Set<String> ownedSet = results[0] as Set<String>;
   final List<CardMarketPrice> allCmPrices = results[1] as List<CardMarketPrice>;
   final List<TcgPlayerPrice> allTcgPrices = results[2] as List<TcgPlayerPrice>;
+  final List<CustomCardPrice> allCustomPrices = results[3] as List<CustomCardPrice>;
 
   // 3. Mapping für schnellen Zugriff
   final cmPriceMap = _getLatestCmPrices(allCmPrices);
   final tcgPriceMap = _getLatestTcgPrices(allTcgPrices);
+  final customPriceMap = _getLatestCustomPrices(allCustomPrices);
 
   List<ApiCard> apiCards = [];
 
@@ -106,7 +109,8 @@ final searchResultsProvider = FutureProvider<List<ApiCard>>((ref) async {
       set.printedTotal ?? 0, 
       ownedSet.contains(card.id), 
       cmPriceMap[card.id], 
-      tcgPriceMap[card.id]
+      tcgPriceMap[card.id],
+      customPriceMap[card.id]
     ));
   }
 
@@ -130,9 +134,11 @@ final cardsForSetProvider = FutureProvider.family<List<ApiCard>, String>((ref, s
 
   final allCmPrices = await (db.select(db.cardMarketPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
   final allTcgPrices = await (db.select(db.tcgPlayerPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
+  final allCustomPrices = await (db.select(db.customCardPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
 
   final cmPriceMap = _getLatestCmPrices(allCmPrices);
   final tcgPriceMap = _getLatestTcgPrices(allTcgPrices);
+  final customPriceMap = _getLatestCustomPrices(allCustomPrices);
 
   return dbCards.map((dbCard) {
     return _mapToApiCard(
@@ -141,6 +147,7 @@ final cardsForSetProvider = FutureProvider.family<List<ApiCard>, String>((ref, s
       ownedSet.contains(dbCard.id),
       cmPriceMap[dbCard.id],
       tcgPriceMap[dbCard.id],
+      customPriceMap[dbCard.id],
     );
   }).toList();
 });
@@ -178,7 +185,8 @@ ApiCard _mapToApiCard(
   int printedTotal, 
   bool isOwned, 
   CardMarketPrice? cmPrice, 
-  TcgPlayerPrice? tcgPrice
+  TcgPlayerPrice? tcgPrice,
+  CustomCardPrice? customPrice,
 ) {
   return ApiCard(
     id: dbCard.id,
@@ -195,6 +203,8 @@ ApiCard _mapToApiCard(
     rarity: dbCard.rarity ?? '',
     flavorText: dbCard.flavorText,
     flavorTextDe: dbCard.flavorTextDe,
+    preferredPriceSource: dbCard.preferredPriceSource,
+    customPrice: customPrice?.price,
     smallImageUrl: dbCard.imageUrl, 
     largeImageUrl: dbCard.imageUrl,
     imageUrlDe: dbCard.imageUrlDe,
@@ -273,6 +283,16 @@ Map<String, TcgPlayerPrice> _getLatestTcgPrices(List<TcgPlayerPrice> allPrices) 
   return map;
 }
 
+Map<String, CustomCardPrice> _getLatestCustomPrices(List<CustomCardPrice> allPrices) {
+  final Map<String, CustomCardPrice> map = {};
+  for (final p in allPrices) {
+    if (!map.containsKey(p.cardId) || p.fetchedAt.isAfter(map[p.cardId]!.fetchedAt)) {
+      map[p.cardId] = p;
+    }
+  }
+  return map;
+}
+
 // -----------------------------------------------------------------------------
 // INVENTORY PROVIDER
 // -----------------------------------------------------------------------------
@@ -316,8 +336,10 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
     // 2. Preise laden
     final allCmPrices = await (db.select(db.cardMarketPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
     final allTcgPrices = await (db.select(db.tcgPlayerPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
+    final allCustomPrices = await (db.select(db.customCardPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
     final cmPriceMap = _getLatestCmPrices(allCmPrices);
     final tcgPriceMap = _getLatestTcgPrices(allTcgPrices);
+    final customPriceMap = _getLatestCustomPrices(allCustomPrices);
 
     // 3. ALLE Binder-Zuweisungen für die Karten des Users laden
     final binderCardsQuery = db.select(db.binderCards).join([
@@ -346,7 +368,7 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
       final dbCard = row.readTable(db.cards);
       final dbSet = row.readTable(db.cardSets);
 
-      final apiCard = _mapToApiCard(dbCard, dbSet.printedTotal ?? 0, true, cmPriceMap[dbCard.id], tcgPriceMap[dbCard.id]);
+      final apiCard = _mapToApiCard(dbCard, dbSet.printedTotal ?? 0, true, cmPriceMap[dbCard.id], tcgPriceMap[dbCard.id], customPriceMap[dbCard.id]);
       final apiSet = ApiSet(
         id: dbSet.id, name: dbSet.name, nameDe: dbSet.nameDe, series: dbSet.series, 
         printedTotal: dbSet.printedTotal ?? 0, total: dbSet.total ?? 0, 
@@ -354,7 +376,7 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
         logoUrl: dbSet.logoUrl, logoUrlDe: dbSet.logoUrlDe, symbolUrl: dbSet.symbolUrl,
       );
 
-      // --- PREIS LOGIK ---
+      // --- PREIS LOGIK (Respektiert die bevorzugte Quelle!) ---
       double singlePrice = 0.0;
       bool baseIsHolo = !dbCard.hasNormal && dbCard.hasHolo;
       final variant = userCard.variant;
@@ -363,40 +385,40 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
       final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
       final isReverse = variant == 'Reverse Holo';
 
-      // --- NEUE 1. EDITION LOGIK (Mit Holo/Non-Holo Unterscheidung) ---
-      if (dbCard.hasFirstEdition) {
-        if (isHolo) {
-          // Für Holo-Karten (z.B. Glurak Base Set)
-          if (isFirstEd) {
-            singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
-          } else {
-            singlePrice = apiCard.cardmarket?.trendHolo ?? apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
-          }
-        } else {
-          // Für Non-Holo Karten (z.B. Bisasam Base Set)
-          if (isFirstEd) {
-            singlePrice = apiCard.cardmarket?.trendHolo ?? apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
-          } else {
-            singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
-          }
-        }
+      final pref = dbCard.preferredPriceSource;
+
+      if (pref == 'custom' && apiCard.customPrice != null) {
+          singlePrice = apiCard.customPrice!;
       } 
-      // --- NORMALE LOGIK ---
-      else if (isReverse) {
-        singlePrice = apiCard.cardmarket?.trendHolo ?? apiCard.cardmarket?.reverseHoloTrend ?? apiCard.tcgplayer?.prices?.reverseHolofoil?.market ?? 0.0;
-      } else if (isHolo) {
-        if (baseIsHolo) {
-          singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
-        } else {
-          singlePrice = apiCard.cardmarket?.trendHolo ?? apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
-        }
-      } else {
-        singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
+      else if (pref == 'tcgplayer') {
+          // TCGPlayer fokussiert
+          if (isReverse) {
+            singlePrice = apiCard.tcgplayer?.prices?.reverseHolofoil?.market ?? 0.0;
+          } else if (isHolo) singlePrice = apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
+          else singlePrice = apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
+      } 
+      else {
+          // Cardmarket fokussiert (Standard)
+          if (dbCard.hasFirstEdition) {
+             if (isHolo) {
+               singlePrice = isFirstEd ? (apiCard.cardmarket?.trendPrice ?? 0.0) : (apiCard.cardmarket?.trendHolo ?? 0.0);
+             } else {
+               singlePrice = isFirstEd ? (apiCard.cardmarket?.trendHolo ?? 0.0) : (apiCard.cardmarket?.trendPrice ?? 0.0);
+             }
+          } else if (isReverse) {
+             singlePrice = apiCard.cardmarket?.reverseHoloTrend ?? apiCard.cardmarket?.trendHolo ?? 0.0;
+          } else if (isHolo && !baseIsHolo) {
+             singlePrice = apiCard.cardmarket?.trendHolo ?? 0.0;
+          } else {
+             singlePrice = apiCard.cardmarket?.trendPrice ?? 0.0;
+          }
       }
 
+      // Absoluter Fallback, falls die gewählte Quelle 0.0 liefert
       if (singlePrice == 0.0) {
-        singlePrice = (isHolo ? apiCard.tcgplayer?.prices?.holofoil?.market : apiCard.tcgplayer?.prices?.normal?.market) ?? apiCard.cardmarket?.trendPrice ?? 0.0;
+         singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.normal?.market ?? apiCard.customPrice ?? 0.0;
       }
+      // --------------------------------------------------------
 
       // --- SPLITTING LOGIK ---
       final key = "${userCard.cardId}_${userCard.variant}";
@@ -502,25 +524,17 @@ Future<void> createPortfolioSnapshot(WidgetRef ref) async {
   }
 }
 
-// Holt die Preishistorie für eine Karte (Cardmarket & TCGPlayer)
 final cardPriceHistoryProvider = FutureProvider.family<Map<String, List<dynamic>>, String>((ref, cardId) async {
   final db = ref.read(databaseProvider);
   
-  // Cardmarket laden
-  final cmHistory = await (db.select(db.cardMarketPrices)
-    ..where((t) => t.cardId.equals(cardId))
-    ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt)]) // Älteste zuerst
-  ).get();
-
-  // TCGPlayer laden
-  final tcgHistory = await (db.select(db.tcgPlayerPrices)
-    ..where((t) => t.cardId.equals(cardId))
-    ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt)])
-  ).get();
+  final cmHistory = await (db.select(db.cardMarketPrices)..where((t) => t.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt)])).get();
+  final tcgHistory = await (db.select(db.tcgPlayerPrices)..where((t) => t.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt)])).get();
+  final customHistory = await (db.select(db.customCardPrices)..where((t) => t.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt)])).get();
 
   return {
     'cm': cmHistory,
     'tcg': tcgHistory,
+    'custom': customHistory,
   };
 });
 

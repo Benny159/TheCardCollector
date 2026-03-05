@@ -561,6 +561,9 @@ class BinderService {
 
       final cmPrice = await (db.select(db.cardMarketPrices)..where((t) => t.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
       final tcgPrice = await (db.select(db.tcgPlayerPrices)..where((t) => t.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
+      
+      // --- NEU: Eigener Preis aus der DB laden ---
+      final customPriceRow = await (db.select(db.customCardPrices)..where((t) => t.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
 
       double singlePrice = 0.0;
       bool baseIsHolo = !card.hasNormal && card.hasHolo;
@@ -569,16 +572,34 @@ class BinderService {
       final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
       final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
       final isReverse = variant == 'Reverse Holo';
+      
+      // --- NEU: PREFERENZ CHECKEN ---
+      final pref = card.preferredPriceSource;
+      final customPrice = customPriceRow?.price;
 
-      if (card.hasFirstEdition) {
-        if (isHolo) { singlePrice = isFirstEd ? (cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0) : (cmPrice?.trendHolo ?? tcgPrice?.holoMarket ?? 0.0); } 
-        else { singlePrice = isFirstEd ? (cmPrice?.trendHolo ?? tcgPrice?.normalMarket ?? 0.0) : (cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0); }
+      if (pref == 'custom' && customPrice != null && customPrice > 0) {
+          singlePrice = customPrice;
       } 
-      else if (isReverse) { singlePrice = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? tcgPrice?.reverseMarket ?? 0.0; } 
-      else if (isHolo) { singlePrice = baseIsHolo ? (cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0) : (cmPrice?.trendHolo ?? tcgPrice?.holoMarket ?? 0.0); } 
-      else { singlePrice = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0; }
+      else if (pref == 'tcgplayer') {
+          if (isReverse) singlePrice = tcgPrice?.reverseMarket ?? 0.0;
+          else if (isHolo) singlePrice = tcgPrice?.holoMarket ?? 0.0;
+          else singlePrice = tcgPrice?.normalMarket ?? 0.0;
+      } 
+      else {
+          if (card.hasFirstEdition) {
+             if (isHolo) singlePrice = isFirstEd ? (cmPrice?.trend ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
+             else singlePrice = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
+          } else if (isReverse) {
+             singlePrice = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? 0.0;
+          } else if (isHolo && !baseIsHolo) {
+             singlePrice = cmPrice?.trendHolo ?? 0.0;
+          } else {
+             singlePrice = cmPrice?.trend ?? 0.0;
+          }
+      }
 
-      if (singlePrice == 0.0) singlePrice = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? 0.0;
+      // Fallback
+      if (singlePrice == 0.0) singlePrice = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? customPrice ?? 0.0;
       total += singlePrice;
     }
 
@@ -949,7 +970,7 @@ class BinderService {
         return 0;
       });
       
-      if (currentDivider != null) newOrder.add(currentDivider!);
+      if (currentDivider != null) newOrder.add(currentDivider);
       newOrder.addAll(currentGroupCards);
       currentGroupCards.clear();
     }

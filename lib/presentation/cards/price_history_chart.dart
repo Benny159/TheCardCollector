@@ -3,17 +3,23 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../data/database/app_database.dart';
 
-// KORREKTUR: cmReverse entfernt, da nicht in der DB
 enum PriceType { 
   cmTrend, cmTrendHolo, 
-  tcgMarket, tcgMarketHolo, tcgMarketReverse 
+  tcgMarket, tcgMarketHolo, tcgMarketReverse,
+  customPrice // <-- NEU
 }
 
 class PriceHistoryChart extends StatefulWidget {
   final List<CardMarketPrice> cmHistory;
   final List<TcgPlayerPrice> tcgHistory;
+  final List<CustomCardPrice> customHistory; // <-- NEU
 
-  const PriceHistoryChart({super.key, required this.cmHistory, required this.tcgHistory});
+  const PriceHistoryChart({
+    super.key, 
+    required this.cmHistory, 
+    required this.tcgHistory,
+    required this.customHistory, // <-- NEU
+  });
 
   @override
   State<PriceHistoryChart> createState() => _PriceHistoryChartState();
@@ -29,7 +35,25 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
     _determineBestInitialType();
   }
 
+  // --- NEU: SOFORTIGES UPDATE BEI NEUEM PREIS ---
+  @override
+  void didUpdateWidget(PriceHistoryChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Wenn ein neuer Custom-Preis dazukam, sofort darauf umschalten!
+    if (widget.customHistory.length != oldWidget.customHistory.length) {
+      if (widget.customHistory.isNotEmpty) {
+        setState(() {
+          _selectedType = PriceType.customPrice;
+        });
+      }
+    }
+  }
+
   void _determineBestInitialType() {
+    if (_hasData(PriceType.customPrice)) {
+      _selectedType = PriceType.customPrice;
+      return;
+    }
     for (var type in PriceType.values) {
       if (_hasData(type)) {
         _selectedType = type;
@@ -41,19 +65,12 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
 
   bool _hasData(PriceType type) {
     switch (type) {
-      case PriceType.cmTrend:
-        return widget.cmHistory.any((p) => (p.trend ?? 0) > 0);
-      case PriceType.cmTrendHolo:
-        return widget.cmHistory.any((p) => (p.trendHolo ?? 0) > 0);
-      
-      // cmReverse ENTFERNT
-      
-      case PriceType.tcgMarket:
-        return widget.tcgHistory.any((p) => (p.normalMarket ?? 0) > 0);
-      case PriceType.tcgMarketHolo:
-        return widget.tcgHistory.any((p) => (p.holoMarket ?? 0) > 0);
-      case PriceType.tcgMarketReverse:
-        return widget.tcgHistory.any((p) => (p.reverseMarket ?? 0) > 0);
+      case PriceType.cmTrend: return widget.cmHistory.any((p) => (p.trend ?? 0) > 0);
+      case PriceType.cmTrendHolo: return widget.cmHistory.any((p) => (p.trendHolo ?? 0) > 0);
+      case PriceType.tcgMarket: return widget.tcgHistory.any((p) => (p.normalMarket ?? 0) > 0);
+      case PriceType.tcgMarketHolo: return widget.tcgHistory.any((p) => (p.holoMarket ?? 0) > 0);
+      case PriceType.tcgMarketReverse: return widget.tcgHistory.any((p) => (p.reverseMarket ?? 0) > 0);
+      case PriceType.customPrice: return widget.customHistory.any((p) => p.price > 0);
     }
   }
 
@@ -149,6 +166,12 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
+              // --- NEU: Eigener Preis Chip (In Gold!) ---
+              if (_hasData(PriceType.customPrice)) _buildTypeChip("Eigener Preis", PriceType.customPrice),
+              
+              if (_hasData(PriceType.customPrice) && (_hasAnyCmData() || _hasAnyTcgData()))
+                Container(width: 1, height: 16, color: Colors.grey[300], margin: const EdgeInsets.symmetric(horizontal: 4)),
+
               // Cardmarket
               if (_hasData(PriceType.cmTrend)) _buildTypeChip("CM Trend", PriceType.cmTrend),
               if (_hasData(PriceType.cmTrendHolo)) _buildTypeChip("CM Holo", PriceType.cmTrendHolo),
@@ -190,32 +213,30 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
         ? DateTime(2000) 
         : now.subtract(Duration(days: _monthsFilter * 30));
 
-    // Listen kopieren & sortieren
     final cmList = List.of(widget.cmHistory)..sort((a,b) => a.fetchedAt.compareTo(b.fetchedAt));
     final tcgList = List.of(widget.tcgHistory)..sort((a,b) => a.fetchedAt.compareTo(b.fetchedAt));
+    final customList = List.of(widget.customHistory)..sort((a,b) => a.fetchedAt.compareTo(b.fetchedAt)); 
 
-    // --- HELPER: NUR EINEN WERT PRO TAG ---
-    // Diese Map speichert nur den *letzten* Wert für einen Tag (Key: "2026-02-15")
     final Map<String, double> dailyValues = {};
 
     void addValue(DateTime date, double? val) {
       if (val == null || val <= 0) return;
       if (date.isBefore(cutoffDate)) return;
       
-      // Datum ohne Uhrzeit als Key (z.B. "2024-10-30")
-      final dateKey = "${date.year}-${date.month}-${date.day}";
-      // Überschreibt vorherige Werte desselben Tages -> Nur der letzte bleibt!
-      dailyValues[dateKey] = val; 
+      final dateKey = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+      dailyValues[dateKey] = val; // Der LETZTE Wert überschreibt den vorherigen am selben Tag
     }
-    // --------------------------------------
 
-    if (_selectedType.name.startsWith('cm')) {
+    if (_selectedType == PriceType.customPrice) {
+      for (var p in customList) {
+        addValue(p.fetchedAt, p.price);
+      }
+    } else if (_selectedType.name.startsWith('cm')) {
       for (var p in cmList) {
         double? val;
         switch (_selectedType) {
           case PriceType.cmTrend: val = p.trend; break;
           case PriceType.cmTrendHolo: val = p.trendHolo; break;
-          // case PriceType.cmReverse: val = p.reverseHoloTrend; break; // Falls DB erweitert wird
           default: break;
         }
         addValue(p.fetchedAt, val);
@@ -233,11 +254,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
       }
     }
 
-    // Map in Spots umwandeln und sortieren
-    // Wir müssen das Datum aus dem String key rekonstruieren oder wir speichern es besser separat.
-    // Einfacher: Wir iterieren über die Keys, parsen das Datum und bauen den Spot.
-    
-    final sortedKeys = dailyValues.keys.toList()..sort(); // Datum-Strings sortieren (YYYY-MM-DD sortiert sich korrekt lexikalisch)
+    final sortedKeys = dailyValues.keys.toList()..sort(); 
 
     for (var key in sortedKeys) {
       final parts = key.split('-');
@@ -250,6 +267,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
   }
 
   Color _getColorForType(PriceType type) {
+    if (type == PriceType.customPrice) return Colors.amber[700]!; 
     if (type.name.startsWith('cm')) return Colors.blue[700]!;
     return Colors.teal[700]!;
   }

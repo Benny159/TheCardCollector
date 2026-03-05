@@ -13,10 +13,10 @@ part 'app_database.g.dart';
   Cards, 
   CardSets, 
   UserCards, 
+  CustomCardPrices,
   CardMarketPrices, 
   TcgPlayerPrices, 
   PortfolioHistory,
-  // NEU:
   Binders,
   BinderCards,
   BinderHistory,
@@ -25,9 +25,9 @@ part 'app_database.g.dart';
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
-  // Wir springen auf Version 20 für den "Hard Reset"
+  // Wir springen auf Version 41
   @override
-  int get schemaVersion => 40; 
+  int get schemaVersion => 41; 
 
   @override
   MigrationStrategy get migration {
@@ -36,8 +36,10 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        if (from < 40) {
-          await m.addColumn(binders, binders.isFavorite);
+        // --- NEU: Version 41 ---
+        if (from < 41) {
+          await m.addColumn(cards, cards.preferredPriceSource);
+          await m.createTable(customCardPrices);
         }
       },
       beforeOpen: (details) async {

@@ -595,6 +595,14 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
   late final GeneratedColumn<String> cardType = GeneratedColumn<String>(
       'card_type', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _preferredPriceSourceMeta =
+      const VerificationMeta('preferredPriceSource');
+  @override
+  late final GeneratedColumn<String> preferredPriceSource =
+      GeneratedColumn<String>('preferred_price_source', aliasedName, false,
+          type: DriftSqlType.string,
+          requiredDuringInsert: false,
+          defaultValue: const Constant('cardmarket'));
   static const VerificationMeta _imageUrlMeta =
       const VerificationMeta('imageUrl');
   @override
@@ -695,6 +703,7 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
         nameDe,
         number,
         cardType,
+        preferredPriceSource,
         imageUrl,
         imageUrlDe,
         artist,
@@ -748,6 +757,12 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
     if (data.containsKey('card_type')) {
       context.handle(_cardTypeMeta,
           cardType.isAcceptableOrUnknown(data['card_type']!, _cardTypeMeta));
+    }
+    if (data.containsKey('preferred_price_source')) {
+      context.handle(
+          _preferredPriceSourceMeta,
+          preferredPriceSource.isAcceptableOrUnknown(
+              data['preferred_price_source']!, _preferredPriceSourceMeta));
     }
     if (data.containsKey('image_url')) {
       context.handle(_imageUrlMeta,
@@ -834,6 +849,9 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
           .read(DriftSqlType.string, data['${effectivePrefix}number'])!,
       cardType: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}card_type']),
+      preferredPriceSource: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}preferred_price_source'])!,
       imageUrl: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}image_url'])!,
       imageUrlDe: attachedDatabase.typeMapping
@@ -874,6 +892,7 @@ class Card extends DataClass implements Insertable<Card> {
   final String? nameDe;
   final String number;
   final String? cardType;
+  final String preferredPriceSource;
   final String imageUrl;
   final String? imageUrlDe;
   final String? artist;
@@ -893,6 +912,7 @@ class Card extends DataClass implements Insertable<Card> {
       this.nameDe,
       required this.number,
       this.cardType,
+      required this.preferredPriceSource,
       required this.imageUrl,
       this.imageUrlDe,
       this.artist,
@@ -918,6 +938,7 @@ class Card extends DataClass implements Insertable<Card> {
     if (!nullToAbsent || cardType != null) {
       map['card_type'] = Variable<String>(cardType);
     }
+    map['preferred_price_source'] = Variable<String>(preferredPriceSource);
     map['image_url'] = Variable<String>(imageUrl);
     if (!nullToAbsent || imageUrlDe != null) {
       map['image_url_de'] = Variable<String>(imageUrlDe);
@@ -954,6 +975,7 @@ class Card extends DataClass implements Insertable<Card> {
       cardType: cardType == null && nullToAbsent
           ? const Value.absent()
           : Value(cardType),
+      preferredPriceSource: Value(preferredPriceSource),
       imageUrl: Value(imageUrl),
       imageUrlDe: imageUrlDe == null && nullToAbsent
           ? const Value.absent()
@@ -987,6 +1009,8 @@ class Card extends DataClass implements Insertable<Card> {
       nameDe: serializer.fromJson<String?>(json['nameDe']),
       number: serializer.fromJson<String>(json['number']),
       cardType: serializer.fromJson<String?>(json['cardType']),
+      preferredPriceSource:
+          serializer.fromJson<String>(json['preferredPriceSource']),
       imageUrl: serializer.fromJson<String>(json['imageUrl']),
       imageUrlDe: serializer.fromJson<String?>(json['imageUrlDe']),
       artist: serializer.fromJson<String?>(json['artist']),
@@ -1011,6 +1035,7 @@ class Card extends DataClass implements Insertable<Card> {
       'nameDe': serializer.toJson<String?>(nameDe),
       'number': serializer.toJson<String>(number),
       'cardType': serializer.toJson<String?>(cardType),
+      'preferredPriceSource': serializer.toJson<String>(preferredPriceSource),
       'imageUrl': serializer.toJson<String>(imageUrl),
       'imageUrlDe': serializer.toJson<String?>(imageUrlDe),
       'artist': serializer.toJson<String?>(artist),
@@ -1033,6 +1058,7 @@ class Card extends DataClass implements Insertable<Card> {
           Value<String?> nameDe = const Value.absent(),
           String? number,
           Value<String?> cardType = const Value.absent(),
+          String? preferredPriceSource,
           String? imageUrl,
           Value<String?> imageUrlDe = const Value.absent(),
           Value<String?> artist = const Value.absent(),
@@ -1052,6 +1078,7 @@ class Card extends DataClass implements Insertable<Card> {
         nameDe: nameDe.present ? nameDe.value : this.nameDe,
         number: number ?? this.number,
         cardType: cardType.present ? cardType.value : this.cardType,
+        preferredPriceSource: preferredPriceSource ?? this.preferredPriceSource,
         imageUrl: imageUrl ?? this.imageUrl,
         imageUrlDe: imageUrlDe.present ? imageUrlDe.value : this.imageUrlDe,
         artist: artist.present ? artist.value : this.artist,
@@ -1074,6 +1101,9 @@ class Card extends DataClass implements Insertable<Card> {
       nameDe: data.nameDe.present ? data.nameDe.value : this.nameDe,
       number: data.number.present ? data.number.value : this.number,
       cardType: data.cardType.present ? data.cardType.value : this.cardType,
+      preferredPriceSource: data.preferredPriceSource.present
+          ? data.preferredPriceSource.value
+          : this.preferredPriceSource,
       imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
       imageUrlDe:
           data.imageUrlDe.present ? data.imageUrlDe.value : this.imageUrlDe,
@@ -1106,6 +1136,7 @@ class Card extends DataClass implements Insertable<Card> {
           ..write('nameDe: $nameDe, ')
           ..write('number: $number, ')
           ..write('cardType: $cardType, ')
+          ..write('preferredPriceSource: $preferredPriceSource, ')
           ..write('imageUrl: $imageUrl, ')
           ..write('imageUrlDe: $imageUrlDe, ')
           ..write('artist: $artist, ')
@@ -1130,6 +1161,7 @@ class Card extends DataClass implements Insertable<Card> {
       nameDe,
       number,
       cardType,
+      preferredPriceSource,
       imageUrl,
       imageUrlDe,
       artist,
@@ -1152,6 +1184,7 @@ class Card extends DataClass implements Insertable<Card> {
           other.nameDe == this.nameDe &&
           other.number == this.number &&
           other.cardType == this.cardType &&
+          other.preferredPriceSource == this.preferredPriceSource &&
           other.imageUrl == this.imageUrl &&
           other.imageUrlDe == this.imageUrlDe &&
           other.artist == this.artist &&
@@ -1173,6 +1206,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
   final Value<String?> nameDe;
   final Value<String> number;
   final Value<String?> cardType;
+  final Value<String> preferredPriceSource;
   final Value<String> imageUrl;
   final Value<String?> imageUrlDe;
   final Value<String?> artist;
@@ -1193,6 +1227,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.nameDe = const Value.absent(),
     this.number = const Value.absent(),
     this.cardType = const Value.absent(),
+    this.preferredPriceSource = const Value.absent(),
     this.imageUrl = const Value.absent(),
     this.imageUrlDe = const Value.absent(),
     this.artist = const Value.absent(),
@@ -1214,6 +1249,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.nameDe = const Value.absent(),
     required String number,
     this.cardType = const Value.absent(),
+    this.preferredPriceSource = const Value.absent(),
     required String imageUrl,
     this.imageUrlDe = const Value.absent(),
     this.artist = const Value.absent(),
@@ -1239,6 +1275,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
     Expression<String>? nameDe,
     Expression<String>? number,
     Expression<String>? cardType,
+    Expression<String>? preferredPriceSource,
     Expression<String>? imageUrl,
     Expression<String>? imageUrlDe,
     Expression<String>? artist,
@@ -1260,6 +1297,8 @@ class CardsCompanion extends UpdateCompanion<Card> {
       if (nameDe != null) 'name_de': nameDe,
       if (number != null) 'number': number,
       if (cardType != null) 'card_type': cardType,
+      if (preferredPriceSource != null)
+        'preferred_price_source': preferredPriceSource,
       if (imageUrl != null) 'image_url': imageUrl,
       if (imageUrlDe != null) 'image_url_de': imageUrlDe,
       if (artist != null) 'artist': artist,
@@ -1283,6 +1322,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
       Value<String?>? nameDe,
       Value<String>? number,
       Value<String?>? cardType,
+      Value<String>? preferredPriceSource,
       Value<String>? imageUrl,
       Value<String?>? imageUrlDe,
       Value<String?>? artist,
@@ -1303,6 +1343,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
       nameDe: nameDe ?? this.nameDe,
       number: number ?? this.number,
       cardType: cardType ?? this.cardType,
+      preferredPriceSource: preferredPriceSource ?? this.preferredPriceSource,
       imageUrl: imageUrl ?? this.imageUrl,
       imageUrlDe: imageUrlDe ?? this.imageUrlDe,
       artist: artist ?? this.artist,
@@ -1339,6 +1380,10 @@ class CardsCompanion extends UpdateCompanion<Card> {
     }
     if (cardType.present) {
       map['card_type'] = Variable<String>(cardType.value);
+    }
+    if (preferredPriceSource.present) {
+      map['preferred_price_source'] =
+          Variable<String>(preferredPriceSource.value);
     }
     if (imageUrl.present) {
       map['image_url'] = Variable<String>(imageUrl.value);
@@ -1391,6 +1436,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
           ..write('nameDe: $nameDe, ')
           ..write('number: $number, ')
           ..write('cardType: $cardType, ')
+          ..write('preferredPriceSource: $preferredPriceSource, ')
           ..write('imageUrl: $imageUrl, ')
           ..write('imageUrlDe: $imageUrlDe, ')
           ..write('artist: $artist, ')
@@ -1775,6 +1821,265 @@ class UserCardsCompanion extends UpdateCompanion<UserCard> {
           ..write('language: $language, ')
           ..write('variant: $variant, ')
           ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CustomCardPricesTable extends CustomCardPrices
+    with TableInfo<$CustomCardPricesTable, CustomCardPrice> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CustomCardPricesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _cardIdMeta = const VerificationMeta('cardId');
+  @override
+  late final GeneratedColumn<String> cardId = GeneratedColumn<String>(
+      'card_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES cards (id)'));
+  static const VerificationMeta _fetchedAtMeta =
+      const VerificationMeta('fetchedAt');
+  @override
+  late final GeneratedColumn<DateTime> fetchedAt = GeneratedColumn<DateTime>(
+      'fetched_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _priceMeta = const VerificationMeta('price');
+  @override
+  late final GeneratedColumn<double> price = GeneratedColumn<double>(
+      'price', aliasedName, false,
+      type: DriftSqlType.double, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [id, cardId, fetchedAt, price];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'custom_card_prices';
+  @override
+  VerificationContext validateIntegrity(Insertable<CustomCardPrice> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('card_id')) {
+      context.handle(_cardIdMeta,
+          cardId.isAcceptableOrUnknown(data['card_id']!, _cardIdMeta));
+    } else if (isInserting) {
+      context.missing(_cardIdMeta);
+    }
+    if (data.containsKey('fetched_at')) {
+      context.handle(_fetchedAtMeta,
+          fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta));
+    } else if (isInserting) {
+      context.missing(_fetchedAtMeta);
+    }
+    if (data.containsKey('price')) {
+      context.handle(
+          _priceMeta, price.isAcceptableOrUnknown(data['price']!, _priceMeta));
+    } else if (isInserting) {
+      context.missing(_priceMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CustomCardPrice map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CustomCardPrice(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      cardId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}card_id'])!,
+      fetchedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}fetched_at'])!,
+      price: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}price'])!,
+    );
+  }
+
+  @override
+  $CustomCardPricesTable createAlias(String alias) {
+    return $CustomCardPricesTable(attachedDatabase, alias);
+  }
+}
+
+class CustomCardPrice extends DataClass implements Insertable<CustomCardPrice> {
+  final int id;
+  final String cardId;
+  final DateTime fetchedAt;
+  final double price;
+  const CustomCardPrice(
+      {required this.id,
+      required this.cardId,
+      required this.fetchedAt,
+      required this.price});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['card_id'] = Variable<String>(cardId);
+    map['fetched_at'] = Variable<DateTime>(fetchedAt);
+    map['price'] = Variable<double>(price);
+    return map;
+  }
+
+  CustomCardPricesCompanion toCompanion(bool nullToAbsent) {
+    return CustomCardPricesCompanion(
+      id: Value(id),
+      cardId: Value(cardId),
+      fetchedAt: Value(fetchedAt),
+      price: Value(price),
+    );
+  }
+
+  factory CustomCardPrice.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CustomCardPrice(
+      id: serializer.fromJson<int>(json['id']),
+      cardId: serializer.fromJson<String>(json['cardId']),
+      fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
+      price: serializer.fromJson<double>(json['price']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'cardId': serializer.toJson<String>(cardId),
+      'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
+      'price': serializer.toJson<double>(price),
+    };
+  }
+
+  CustomCardPrice copyWith(
+          {int? id, String? cardId, DateTime? fetchedAt, double? price}) =>
+      CustomCardPrice(
+        id: id ?? this.id,
+        cardId: cardId ?? this.cardId,
+        fetchedAt: fetchedAt ?? this.fetchedAt,
+        price: price ?? this.price,
+      );
+  CustomCardPrice copyWithCompanion(CustomCardPricesCompanion data) {
+    return CustomCardPrice(
+      id: data.id.present ? data.id.value : this.id,
+      cardId: data.cardId.present ? data.cardId.value : this.cardId,
+      fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
+      price: data.price.present ? data.price.value : this.price,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomCardPrice(')
+          ..write('id: $id, ')
+          ..write('cardId: $cardId, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('price: $price')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, cardId, fetchedAt, price);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CustomCardPrice &&
+          other.id == this.id &&
+          other.cardId == this.cardId &&
+          other.fetchedAt == this.fetchedAt &&
+          other.price == this.price);
+}
+
+class CustomCardPricesCompanion extends UpdateCompanion<CustomCardPrice> {
+  final Value<int> id;
+  final Value<String> cardId;
+  final Value<DateTime> fetchedAt;
+  final Value<double> price;
+  const CustomCardPricesCompanion({
+    this.id = const Value.absent(),
+    this.cardId = const Value.absent(),
+    this.fetchedAt = const Value.absent(),
+    this.price = const Value.absent(),
+  });
+  CustomCardPricesCompanion.insert({
+    this.id = const Value.absent(),
+    required String cardId,
+    required DateTime fetchedAt,
+    required double price,
+  })  : cardId = Value(cardId),
+        fetchedAt = Value(fetchedAt),
+        price = Value(price);
+  static Insertable<CustomCardPrice> custom({
+    Expression<int>? id,
+    Expression<String>? cardId,
+    Expression<DateTime>? fetchedAt,
+    Expression<double>? price,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (cardId != null) 'card_id': cardId,
+      if (fetchedAt != null) 'fetched_at': fetchedAt,
+      if (price != null) 'price': price,
+    });
+  }
+
+  CustomCardPricesCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? cardId,
+      Value<DateTime>? fetchedAt,
+      Value<double>? price}) {
+    return CustomCardPricesCompanion(
+      id: id ?? this.id,
+      cardId: cardId ?? this.cardId,
+      fetchedAt: fetchedAt ?? this.fetchedAt,
+      price: price ?? this.price,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (cardId.present) {
+      map['card_id'] = Variable<String>(cardId.value);
+    }
+    if (fetchedAt.present) {
+      map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
+    }
+    if (price.present) {
+      map['price'] = Variable<double>(price.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomCardPricesCompanion(')
+          ..write('id: $id, ')
+          ..write('cardId: $cardId, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('price: $price')
           ..write(')'))
         .toString();
   }
@@ -5069,6 +5374,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CardSetsTable cardSets = $CardSetsTable(this);
   late final $CardsTable cards = $CardsTable(this);
   late final $UserCardsTable userCards = $UserCardsTable(this);
+  late final $CustomCardPricesTable customCardPrices =
+      $CustomCardPricesTable(this);
   late final $CardMarketPricesTable cardMarketPrices =
       $CardMarketPricesTable(this);
   late final $TcgPlayerPricesTable tcgPlayerPrices =
@@ -5087,6 +5394,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         cardSets,
         cards,
         userCards,
+        customCardPrices,
         cardMarketPrices,
         tcgPlayerPrices,
         portfolioHistory,
@@ -5358,6 +5666,7 @@ typedef $$CardsTableCreateCompanionBuilder = CardsCompanion Function({
   Value<String?> nameDe,
   required String number,
   Value<String?> cardType,
+  Value<String> preferredPriceSource,
   required String imageUrl,
   Value<String?> imageUrlDe,
   Value<String?> artist,
@@ -5379,6 +5688,7 @@ typedef $$CardsTableUpdateCompanionBuilder = CardsCompanion Function({
   Value<String?> nameDe,
   Value<String> number,
   Value<String?> cardType,
+  Value<String> preferredPriceSource,
   Value<String> imageUrl,
   Value<String?> imageUrlDe,
   Value<String?> artist,
@@ -5417,6 +5727,7 @@ class $$CardsTableTableManager extends RootTableManager<
             Value<String?> nameDe = const Value.absent(),
             Value<String> number = const Value.absent(),
             Value<String?> cardType = const Value.absent(),
+            Value<String> preferredPriceSource = const Value.absent(),
             Value<String> imageUrl = const Value.absent(),
             Value<String?> imageUrlDe = const Value.absent(),
             Value<String?> artist = const Value.absent(),
@@ -5438,6 +5749,7 @@ class $$CardsTableTableManager extends RootTableManager<
             nameDe: nameDe,
             number: number,
             cardType: cardType,
+            preferredPriceSource: preferredPriceSource,
             imageUrl: imageUrl,
             imageUrlDe: imageUrlDe,
             artist: artist,
@@ -5459,6 +5771,7 @@ class $$CardsTableTableManager extends RootTableManager<
             Value<String?> nameDe = const Value.absent(),
             required String number,
             Value<String?> cardType = const Value.absent(),
+            Value<String> preferredPriceSource = const Value.absent(),
             required String imageUrl,
             Value<String?> imageUrlDe = const Value.absent(),
             Value<String?> artist = const Value.absent(),
@@ -5480,6 +5793,7 @@ class $$CardsTableTableManager extends RootTableManager<
             nameDe: nameDe,
             number: number,
             cardType: cardType,
+            preferredPriceSource: preferredPriceSource,
             imageUrl: imageUrl,
             imageUrlDe: imageUrlDe,
             artist: artist,
@@ -5522,6 +5836,11 @@ class $$CardsTableFilterComposer
 
   ColumnFilters<String> get cardType => $state.composableBuilder(
       column: $state.table.cardType,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get preferredPriceSource => $state.composableBuilder(
+      column: $state.table.preferredPriceSource,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -5610,6 +5929,20 @@ class $$CardsTableFilterComposer
     return f(composer);
   }
 
+  ComposableFilter customCardPricesRefs(
+      ComposableFilter Function($$CustomCardPricesTableFilterComposer f) f) {
+    final $$CustomCardPricesTableFilterComposer composer =
+        $state.composerBuilder(
+            composer: this,
+            getCurrentColumn: (t) => t.id,
+            referencedTable: $state.db.customCardPrices,
+            getReferencedColumn: (t) => t.cardId,
+            builder: (joinBuilder, parentComposers) =>
+                $$CustomCardPricesTableFilterComposer(ComposerState($state.db,
+                    $state.db.customCardPrices, joinBuilder, parentComposers)));
+    return f(composer);
+  }
+
   ComposableFilter cardMarketPricesRefs(
       ComposableFilter Function($$CardMarketPricesTableFilterComposer f) f) {
     final $$CardMarketPricesTableFilterComposer composer =
@@ -5677,6 +6010,11 @@ class $$CardsTableOrderingComposer
 
   ColumnOrderings<String> get cardType => $state.composableBuilder(
       column: $state.table.cardType,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get preferredPriceSource => $state.composableBuilder(
+      column: $state.table.preferredPriceSource,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
@@ -5903,6 +6241,127 @@ class $$UserCardsTableOrderingComposer
 
   ColumnOrderings<DateTime> get createdAt => $state.composableBuilder(
       column: $state.table.createdAt,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  $$CardsTableOrderingComposer get cardId {
+    final $$CardsTableOrderingComposer composer = $state.composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.cardId,
+        referencedTable: $state.db.cards,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder, parentComposers) => $$CardsTableOrderingComposer(
+            ComposerState(
+                $state.db, $state.db.cards, joinBuilder, parentComposers)));
+    return composer;
+  }
+}
+
+typedef $$CustomCardPricesTableCreateCompanionBuilder
+    = CustomCardPricesCompanion Function({
+  Value<int> id,
+  required String cardId,
+  required DateTime fetchedAt,
+  required double price,
+});
+typedef $$CustomCardPricesTableUpdateCompanionBuilder
+    = CustomCardPricesCompanion Function({
+  Value<int> id,
+  Value<String> cardId,
+  Value<DateTime> fetchedAt,
+  Value<double> price,
+});
+
+class $$CustomCardPricesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $CustomCardPricesTable,
+    CustomCardPrice,
+    $$CustomCardPricesTableFilterComposer,
+    $$CustomCardPricesTableOrderingComposer,
+    $$CustomCardPricesTableCreateCompanionBuilder,
+    $$CustomCardPricesTableUpdateCompanionBuilder> {
+  $$CustomCardPricesTableTableManager(
+      _$AppDatabase db, $CustomCardPricesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          filteringComposer:
+              $$CustomCardPricesTableFilterComposer(ComposerState(db, table)),
+          orderingComposer:
+              $$CustomCardPricesTableOrderingComposer(ComposerState(db, table)),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> cardId = const Value.absent(),
+            Value<DateTime> fetchedAt = const Value.absent(),
+            Value<double> price = const Value.absent(),
+          }) =>
+              CustomCardPricesCompanion(
+            id: id,
+            cardId: cardId,
+            fetchedAt: fetchedAt,
+            price: price,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String cardId,
+            required DateTime fetchedAt,
+            required double price,
+          }) =>
+              CustomCardPricesCompanion.insert(
+            id: id,
+            cardId: cardId,
+            fetchedAt: fetchedAt,
+            price: price,
+          ),
+        ));
+}
+
+class $$CustomCardPricesTableFilterComposer
+    extends FilterComposer<_$AppDatabase, $CustomCardPricesTable> {
+  $$CustomCardPricesTableFilterComposer(super.$state);
+  ColumnFilters<int> get id => $state.composableBuilder(
+      column: $state.table.id,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<DateTime> get fetchedAt => $state.composableBuilder(
+      column: $state.table.fetchedAt,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get price => $state.composableBuilder(
+      column: $state.table.price,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  $$CardsTableFilterComposer get cardId {
+    final $$CardsTableFilterComposer composer = $state.composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.cardId,
+        referencedTable: $state.db.cards,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder, parentComposers) => $$CardsTableFilterComposer(
+            ComposerState(
+                $state.db, $state.db.cards, joinBuilder, parentComposers)));
+    return composer;
+  }
+}
+
+class $$CustomCardPricesTableOrderingComposer
+    extends OrderingComposer<_$AppDatabase, $CustomCardPricesTable> {
+  $$CustomCardPricesTableOrderingComposer(super.$state);
+  ColumnOrderings<int> get id => $state.composableBuilder(
+      column: $state.table.id,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<DateTime> get fetchedAt => $state.composableBuilder(
+      column: $state.table.fetchedAt,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get price => $state.composableBuilder(
+      column: $state.table.price,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
@@ -7325,6 +7784,8 @@ class $AppDatabaseManager {
       $$CardsTableTableManager(_db, _db.cards);
   $$UserCardsTableTableManager get userCards =>
       $$UserCardsTableTableManager(_db, _db.userCards);
+  $$CustomCardPricesTableTableManager get customCardPrices =>
+      $$CustomCardPricesTableTableManager(_db, _db.customCardPrices);
   $$CardMarketPricesTableTableManager get cardMarketPrices =>
       $$CardMarketPricesTableTableManager(_db, _db.cardMarketPrices);
   $$TcgPlayerPricesTableTableManager get tcgPlayerPrices =>

@@ -50,7 +50,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
               const Text("Voll", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               Switch(
                 value: widget.binder.isFull,
-                activeColor: Colors.redAccent,
+                activeThumbColor: Colors.redAccent,
                 onChanged: (val) async {
                   final db = ref.read(databaseProvider);
                   await BinderService(db).toggleBinderFullStatus(widget.binder.id, val);
@@ -678,8 +678,9 @@ class _BinderStatsContent extends ConsumerWidget {
                  final last = history.last.value;
                  final prev = history[history.length - 2].value;
                  change = last - prev;
-                 if (prev > 0) percent = (change / prev) * 100;
-                 else if (change > 0) percent = 100.0; 
+                 if (prev > 0) {
+                   percent = (change / prev) * 100;
+                 } else if (change > 0) percent = 100.0; 
                }
 
              final isPositive = change >= -0.01;
@@ -786,8 +787,9 @@ class _BinderHistoryChart extends StatelessWidget {
     double maxY = spots.map((e) => e.y).reduce((a, b) => a > b ? a : b);
 
     if (minY == maxY) { 
-      if (minY == 0) maxY = 10; 
-      else { minY = minY * 0.8; maxY = maxY * 1.2; }
+      if (minY == 0) {
+        maxY = 10;
+      } else { minY = minY * 0.8; maxY = maxY * 1.2; }
     }
     
     final deltaY = maxY - minY;

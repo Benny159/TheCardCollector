@@ -52,9 +52,32 @@ class CardDetailScreen extends ConsumerStatefulWidget {
 
 class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   int _refreshId = 0;
+  
+  // --- NEU: Lokale Variablen für sofortiges UI Update ---
+  late String _currentPreferredSource;
+  late TextEditingController _customPriceController;
+  double? _currentCustomPrice;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPreferredSource = widget.card.preferredPriceSource;
+    _currentCustomPrice = widget.card.customPrice; // Holt den anfänglichen Preis
+    _customPriceController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _customPriceController.dispose();
+    super.dispose();
+  }
 
   Future<void> _forceRefresh() async {
     await Future.delayed(const Duration(milliseconds: 300));
+    
+    // --- SICHERHEITS-CHECK ---
+    if (!mounted) return;
+
     ref.invalidate(cardBindersProvider(widget.card.id));
     ref.invalidate(searchResultsProvider);
     ref.invalidate(cardsForSetProvider(widget.card.setId));
@@ -62,11 +85,33 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     ref.invalidate(inventoryProvider); 
     createPortfolioSnapshot(ref);
 
-    if (mounted) {
-      setState(() {
-        _refreshId++; 
-      });
-    }
+    setState(() {
+      _refreshId++; 
+    });
+  }
+
+  // --- NEU: Aktualisiert Quelle UND rechnet alle Binder neu durch! ---
+  Future<void> _updatePreferredSource(String source) async {
+    setState(() => _currentPreferredSource = source);
+    final dbInst = ref.read(databaseProvider);
+    
+    // 1. In Datenbank speichern
+    await (dbInst.update(dbInst.cards)..where((t) => t.id.equals(widget.card.id)))
+        .write(CardsCompanion(preferredPriceSource: drift.Value(source)));
+    
+    // 2. WICHTIG: Alle Binder-Werte neu berechnen!
+    await BinderService(dbInst).recalculateAllBinders();
+    
+    // --- SICHERHEITS-CHECK ---
+    if (!mounted) return;
+    
+    // 3. Provider aktualisieren
+    ref.invalidate(cardPriceHistoryProvider(widget.card.id));
+    ref.invalidate(searchResultsProvider);
+    ref.invalidate(inventoryProvider);
+    createPortfolioSnapshot(ref); 
+    
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Preisquelle für Berechnungen aktualisiert!"), duration: Duration(seconds: 1)));
   }
 
   @override
@@ -225,10 +270,19 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (widget.card.cardmarket != null) _buildCardmarketSection(context, widget.card.cardmarket!),
-                        if (widget.card.tcgplayer != null) _buildTcgPlayerSection(context, widget.card.tcgplayer!),
                         
-                        // Besitz-Box (Rechts, bündig unter den Tabellen!)
+                        // 1. EIGENER PREIS TABELLE
+                        _buildCustomPriceSection(),
+
+                        // 2. CARDMARKET TABELLE
+                        if (widget.card.cardmarket != null) 
+                          _buildCardmarketSection(context, widget.card.cardmarket!),
+                        
+                        // 3. TCGPLAYER TABELLE
+                        if (widget.card.tcgplayer != null) 
+                          _buildTcgPlayerSection(context, widget.card.tcgplayer!),
+                        
+                        // 4. BESITZ BOX
                         inventoryAsync.when(
                           data: (items) => _buildCollectionBox(context, ref, items),
                           loading: () => const SizedBox.shrink(),
@@ -247,7 +301,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
               child: _buildChartSection(historyAsync),
             ),
 
-            const SizedBox(height: 80), // Platz für FAB
+            const SizedBox(height: 80), 
           ],
         ),
       ),
@@ -287,7 +341,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text("Preisverlauf", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            Text("Quelle: TCGdex", style: TextStyle(color: Colors.grey, fontSize: 10)),
+            Text("Alle Quellen", style: TextStyle(color: Colors.grey, fontSize: 10)),
           ],
         ),
         const SizedBox(height: 6),
@@ -304,8 +358,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
             data: (data) => PriceHistoryChart(
               cmHistory: (data['cm'] as List).cast<CardMarketPrice>(),
               tcgHistory: (data['tcg'] as List).cast<TcgPlayerPrice>(),
+              customHistory: (data['custom'] as List).cast<CustomCardPrice>(),
             ),
-            // Das sorgt dafür, dass das Laden nicht flackert
             loading: () => const SizedBox(height: 250, child: Center(child: CircularProgressIndicator())),
             error: (e, s) => const SizedBox(height: 250, child: Center(child: Text("Verlauf nicht verfügbar", style: TextStyle(fontSize: 10)))),
           ),
@@ -314,28 +368,39 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     );
   }
 
-  Widget _buildPriceSectionContainer(BuildContext context, {required String title, required Color color, required String lastUpdate, required List<Widget> children}) {
+  // --- DIE PREIS TABELLEN ---
+
+  Widget _buildPriceSectionContainer(BuildContext context, {required String title, required Color color, required String sourceKey, String? lastUpdate, required List<Widget> children}) {
     if (children.isEmpty) return const SizedBox.shrink();
+    
+    final bool isSelected = _currentPreferredSource == sourceKey;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white, 
         borderRadius: BorderRadius.circular(10), 
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: isSelected ? color : color.withOpacity(0.3), width: isSelected ? 2.0 : 1.0),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))],
       ),
       child: Column(
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: const BorderRadius.vertical(top: Radius.circular(10))),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11)),
-                if (lastUpdate.isNotEmpty) Text(lastUpdate.split('T')[0], style: TextStyle(color: color.withOpacity(0.6), fontSize: 9)),
-              ],
+          // Header mit Klick-Funktion, um es auszuwählen
+          GestureDetector(
+            onTap: () => _updatePreferredSource(sourceKey),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              decoration: BoxDecoration(color: color.withOpacity(isSelected ? 0.2 : 0.05), borderRadius: const BorderRadius.vertical(top: Radius.circular(8))),
+              child: Row(
+                children: [
+                  Icon(isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked, color: color, size: 14),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11))),
+                  if (lastUpdate != null && lastUpdate.isNotEmpty) 
+                    Text(lastUpdate.split('T')[0], style: TextStyle(color: color.withOpacity(0.6), fontSize: 9)),
+                ],
+              ),
             ),
           ),
           Padding(
@@ -360,9 +425,63 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     );
   }
 
+  // --- DIE NEUE CUSTOM PREIS TABELLE ---
+  Widget _buildCustomPriceSection() {
+    return _buildPriceSectionContainer(
+      context, 
+      title: "Eigener Preis", 
+      color: Colors.amber[800]!, 
+      sourceKey: 'custom',
+      children: [
+        // Wir nutzen hier die lokale Variable, damit das UI SOFORT updatet!
+        if (_currentCustomPrice != null && _currentCustomPrice! > 0)
+           _priceRow("Aktueller Wert", _currentCustomPrice!),
+        
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 32,
+                  child: TextField(
+                    controller: _customPriceController, // <-- Controller verbunden!
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: const TextStyle(fontSize: 11),
+                    decoration: InputDecoration(
+                      hintText: "Neuer Preis (€)...",
+                      hintStyle: const TextStyle(fontSize: 10),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                    ),
+                    onSubmitted: (val) => _saveCustomPrice(val, ref),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // --- SPEICHERN BUTTON FÜRS HANDY ---
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.amber[800],
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  minimumSize: const Size(0, 32),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))
+                ),
+                onPressed: () => _saveCustomPrice(_customPriceController.text, ref),
+                child: const Text("Speichern", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+              )
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildCardmarketSection(BuildContext context, ApiCardMarket cm) {
     return _buildPriceSectionContainer(
-      context, title: "Cardmarket (EU)", color: Colors.blue[800]!, lastUpdate: cm.updatedAt,
+      context, title: "Cardmarket (EU)", color: Colors.blue[800]!, sourceKey: 'cardmarket', lastUpdate: cm.updatedAt,
       children: [
         if (cm.trendPrice != null && cm.trendPrice! > 0) _priceRow("Trend (Normal)", cm.trendPrice!),
         if (cm.trendHolo != null && cm.trendHolo! > 0) _priceRow("Trend (Holo)", cm.trendHolo!),
@@ -376,7 +495,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   Widget _buildTcgPlayerSection(BuildContext context, ApiTcgPlayer tcg) {
     return _buildPriceSectionContainer(
-      context, title: "TCGPlayer (US)", color: Colors.teal[700]!, lastUpdate: tcg.updatedAt,
+      context, title: "TCGPlayer (US)", color: Colors.teal[700]!, sourceKey: 'tcgplayer', lastUpdate: tcg.updatedAt,
       children: [
         if (tcg.prices?.normal?.market != null && tcg.prices!.normal!.market! > 0) _priceRow("Market (Normal)", tcg.prices!.normal!.market!),
         if (tcg.prices?.holofoil?.market != null && tcg.prices!.holofoil!.market! > 0) _priceRow("Market (Holo)", tcg.prices!.holofoil!.market!),
@@ -412,9 +531,47 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     );
   }
 
-  // --- DIE SAMMLUNGS-BOX (Jetzt perfekt für die rechte Spalte) ---
+  // --- NEU: EIGENER PREIS SPEICHER LOGIK ---
+ Future<void> _saveCustomPrice(String value, WidgetRef ref) async {
+    if (value.isEmpty) return;
+    
+    final double? parsed = double.tryParse(value.replaceAll(',', '.'));
+    if (parsed != null && parsed >= 0) {
+      final dbInst = ref.read(databaseProvider);
+      
+      await dbInst.into(dbInst.customCardPrices).insert(
+        CustomCardPricesCompanion.insert(
+          cardId: widget.card.id,
+          fetchedAt: DateTime.now(),
+          price: parsed,
+        )
+      );
 
-  // --- DIE SAMMLUNGS-BOX (Jetzt mit dynamischem Scrolling ab ~4 Karten!) ---
+      setState(() {
+        _currentCustomPrice = parsed;
+      });
+      _customPriceController.clear();
+      FocusScope.of(context).unfocus(); 
+      
+      if (_currentPreferredSource != 'custom') {
+          await _updatePreferredSource('custom'); 
+      } else {
+          await BinderService(dbInst).recalculateAllBinders();
+          
+          // --- SICHERHEITS-CHECK ---
+          if (!mounted) return;
+          
+          ref.invalidate(cardPriceHistoryProvider(widget.card.id));
+          ref.invalidate(searchResultsProvider);
+          ref.invalidate(inventoryProvider);
+          createPortfolioSnapshot(ref);
+          
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Eigener Preis gespeichert!")));
+      }
+    }
+  }
+
+  // --- DIE SAMMLUNGS-BOX ---
 
   Widget _buildCollectionBox(BuildContext context, WidgetRef ref, List<UserCard> items) {
     if (items.isEmpty) {
@@ -428,7 +585,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     final totalCount = items.fold(0, (sum, item) => sum + item.quantity);
     
     return Container(
-      // Kein margin links/rechts, damit sie bündig mit den Tabellen ist!
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white, 
@@ -439,7 +595,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header mit Titel und kompaktem "Verschieben" Button
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -478,10 +633,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
           ),
           const Divider(color: Colors.black12, height: 16),
           
-          // --- HIER IST DIE MAGIE: ConstrainedBox mit ScrollView ---
           ConstrainedBox(
-            // Max-Höhe von 120 Pixel entspricht ziemlich genau 3 Karten-Einträgen.
-            // Bei 1-3 wächst die Box flexibel. Ab 4 greift die Scroll-Funktion!
             constraints: const BoxConstraints(maxHeight: 120), 
             child: RawScrollbar(
               thumbColor: Colors.green.withOpacity(0.4),
@@ -506,7 +658,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                         GestureDetector(
                           onTap: () => _decreaseOrDeleteItem(context, ref, item),
                           child: const Padding(
-                            padding: EdgeInsets.only(left: 4.0, right: 8.0), // Leichtes padding rechts wegen Scrollbar
+                            padding: EdgeInsets.only(left: 4.0, right: 8.0),
                             child: Icon(Icons.remove_circle_outline, color: Colors.red, size: 16),
                           ),
                         ),
@@ -518,14 +670,13 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
             ),
           ),
           
-          // Integriertes Binder Widget (Bleibt statisch unten kleben, scrollt nicht mit!)
           BinderLocationWidget(cardId: widget.card.id),
         ],
       ),
     );
   }
 
-  // --- DIE ALTE LOGIK FÜR LÖSCHEN ETC. (Bleibt unangetastet) ---
+  // --- DIE ALTE LOGIK FÜR LÖSCHEN ETC. ---
 
   Future<void> _decreaseOrDeleteItem(BuildContext context, WidgetRef ref, UserCard item) async {
     final db = ref.read(databaseProvider);
@@ -626,9 +777,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   }
 
   Future<void> _updateCardData(BuildContext context, WidgetRef ref) async {
-    final db = ref.read(databaseProvider);
+    final dbInst = ref.read(databaseProvider);
     final dexApi = ref.read(tcgDexApiClientProvider);
-    final importer = SetImporter(dexApi, db);
+    final importer = SetImporter(dexApi, dbInst);
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aktualisiere Daten...')));
     try {
       await importer.importCardsForSet(widget.card.setId);

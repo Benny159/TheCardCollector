@@ -28,6 +28,8 @@ class Cards extends Table {
   TextColumn get nameDe => text().nullable()(); 
   TextColumn get number => text()(); 
   TextColumn get cardType => text().nullable()();
+
+  TextColumn get preferredPriceSource => text().withDefault(const Constant('cardmarket'))();
   
   // BILDER: Beide Sprachen
   TextColumn get imageUrl => text()();    // Englisch
@@ -50,6 +52,14 @@ class Cards extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+// --- NEU: Tabelle für eigene Preise ---
+class CustomCardPrices extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get cardId => text().references(Cards, #id)();
+  DateTimeColumn get fetchedAt => dateTime()();
+  RealColumn get price => real()();
 }
 
 // --- TABELLE 3: CARDMARKET PREISE (EUR) ---
