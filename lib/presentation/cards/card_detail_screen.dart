@@ -109,6 +109,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     ref.invalidate(cardPriceHistoryProvider(widget.card.id));
     ref.invalidate(searchResultsProvider);
     ref.invalidate(inventoryProvider);
+    ref.invalidate(cardsForSetProvider(widget.card.setId));
     createPortfolioSnapshot(ref); 
     
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Preisquelle für Berechnungen aktualisiert!"), duration: Duration(seconds: 1)));
@@ -532,13 +533,14 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   }
 
   // --- NEU: EIGENER PREIS SPEICHER LOGIK ---
- Future<void> _saveCustomPrice(String value, WidgetRef ref) async {
+Future<void> _saveCustomPrice(String value, WidgetRef ref) async {
     if (value.isEmpty) return;
     
     final double? parsed = double.tryParse(value.replaceAll(',', '.'));
     if (parsed != null && parsed >= 0) {
       final dbInst = ref.read(databaseProvider);
       
+      // 1. Neuen Preis in die Historie einfügen
       await dbInst.into(dbInst.customCardPrices).insert(
         CustomCardPricesCompanion.insert(
           cardId: widget.card.id,
@@ -547,27 +549,33 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         )
       );
 
+      // 2. DAS IST DER FIX: Ein Update auf der Haupt-Karte erzwingen!
+      // Das teilt der Datenbank und allen Riverpod-Streams mit, dass sich die Karte 
+      // geändert hat. Die vorherige Seite lädt dadurch neu und reicht beim 
+      // nächsten Klick die aktuellen Daten rein.
+      await (dbInst.update(dbInst.cards)..where((t) => t.id.equals(widget.card.id)))
+          .write(const CardsCompanion(preferredPriceSource: drift.Value('custom')));
+
       setState(() {
         _currentCustomPrice = parsed;
+        _currentPreferredSource = 'custom';
       });
       _customPriceController.clear();
       FocusScope.of(context).unfocus(); 
       
-      if (_currentPreferredSource != 'custom') {
-          await _updatePreferredSource('custom'); 
-      } else {
-          await BinderService(dbInst).recalculateAllBinders();
-          
-          // --- SICHERHEITS-CHECK ---
-          if (!mounted) return;
-          
-          ref.invalidate(cardPriceHistoryProvider(widget.card.id));
-          ref.invalidate(searchResultsProvider);
-          ref.invalidate(inventoryProvider);
-          createPortfolioSnapshot(ref);
-          
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Eigener Preis gespeichert!")));
-      }
+      // 3. Binder Werte anpassen
+      await BinderService(dbInst).recalculateAllBinders();
+      
+      // --- SICHERHEITS-CHECK ---
+      if (!mounted) return;
+      
+      // 4. Das zwingt das Diagramm sich exakt JETZT neu zu zeichnen
+      ref.invalidate(cardPriceHistoryProvider(widget.card.id));
+      
+      ref.invalidate(searchResultsProvider);
+      ref.invalidate(cardsForSetProvider(widget.card.setId));
+      
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Eigener Preis gespeichert!")));
     }
   }
 

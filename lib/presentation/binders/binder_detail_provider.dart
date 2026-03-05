@@ -93,10 +93,12 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
     
     List<CardMarketPrice> cmPrices = [];
     List<TcgPlayerPrice> tcgPrices = [];
+    List<CustomCardPrice> customPrices = []; // <--- NEU
     
     if (cardIds.isNotEmpty) {
       cmPrices = await (db.select(db.cardMarketPrices)..where((t) => t.cardId.isIn(cardIds))).get();
       tcgPrices = await (db.select(db.tcgPlayerPrices)..where((t) => t.cardId.isIn(cardIds))).get();
+      customPrices = await (db.select(db.customCardPrices)..where((t) => t.cardId.isIn(cardIds))).get(); // <--- NEU
     }
 
     final cmMap = <String, CardMarketPrice>{};
@@ -107,6 +109,11 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
     final tcgMap = <String, TcgPlayerPrice>{};
     for (var p in tcgPrices) {
       if (!tcgMap.containsKey(p.cardId) || p.fetchedAt.isAfter(tcgMap[p.cardId]!.fetchedAt)) tcgMap[p.cardId] = p;
+    }
+
+    final customMap = <String, CustomCardPrice>{}; // <--- NEU
+    for (var p in customPrices) {
+      if (!customMap.containsKey(p.cardId) || p.fetchedAt.isAfter(customMap[p.cardId]!.fetchedAt)) customMap[p.cardId] = p;
     }
 
     final Map<int, BinderSlotData> uniqueSlotsMap = {};
@@ -121,6 +128,7 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
       if (card != null && !bc.isPlaceholder) {
         final cmPrice = cmMap[card.id];
         final tcgPrice = tcgMap[card.id];
+        final customPrice = customMap[card.id]?.price; // <--- NEU
         
         bool baseIsHolo = !card.hasNormal && card.hasHolo;
         final variant = bc.variant ?? 'Normal';
@@ -128,23 +136,37 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
         final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
         final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
         final isReverse = variant == 'Reverse Holo';
+        
+        // --- NEU: PREFERENZ CHECKEN GENAU WIE IM BINDER_SERVICE ---
+        final pref = card.preferredPriceSource; 
 
-        if (card.hasFirstEdition) {
-          if (isHolo) {
-            price = isFirstEd ? (cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0) : (cmPrice?.trendHolo ?? tcgPrice?.holoMarket ?? 0.0);
-          } else {
-            price = isFirstEd ? (cmPrice?.trendHolo ?? tcgPrice?.normalMarket ?? 0.0) : (cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0);
-          }
+        if (pref == 'custom' && customPrice != null && customPrice > 0) {
+            price = customPrice;
         } 
-        else if (isReverse) {
-          price = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? tcgPrice?.reverseMarket ?? 0.0;
-        } else if (isHolo) {
-          price = baseIsHolo ? (cmPrice?.trend ?? tcgPrice?.holoMarket ?? 0.0) : (cmPrice?.trendHolo ?? tcgPrice?.holoMarket ?? 0.0);
-        } else {
-          price = cmPrice?.trend ?? tcgPrice?.normalMarket ?? 0.0;
+        else if (pref == 'tcgplayer') {
+            if (isReverse) price = tcgPrice?.reverseMarket ?? 0.0;
+            else if (isHolo) price = tcgPrice?.holoMarket ?? 0.0;
+            else price = tcgPrice?.normalMarket ?? 0.0;
+        } 
+        else {
+            if (card.hasFirstEdition) {
+              if (isHolo) {
+                price = isFirstEd ? (cmPrice?.trend ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
+              } else {
+                price = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
+              }
+            } 
+            else if (isReverse) {
+              price = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? 0.0;
+            } else if (isHolo && !baseIsHolo) {
+              price = cmPrice?.trendHolo ?? 0.0;
+            } else {
+              price = cmPrice?.trend ?? 0.0;
+            }
         }
         
-        if (price == 0.0) price = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? 0.0;
+        // Fallback
+        if (price == 0.0) price = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? customPrice ?? 0.0;
       }
 
       uniqueSlotsMap[bc.id] = BinderSlotData(binderCard: bc, card: card, marketPrice: price);
