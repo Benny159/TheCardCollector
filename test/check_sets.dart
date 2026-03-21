@@ -1,49 +1,25 @@
-import 'package:dio/dio.dart';
 import 'dart:convert';
-
-// Ausführen im Terminal mit: 
-// dart test/inspect_api.dart
-// (oder flutter test test/inspect_api.dart)
+import 'package:http/http.dart' as http;
 
 void main() async {
-  final dio = Dio();
-  const encoder = JsonEncoder.withIndent('  ');
+  print('=== 🚀 POKEMONTCG.IO API RAW DATA CHECK ===\n');
 
-  // Wir nehmen Glurak (Charizard) aus dem Base Set als perfektes Beispiel
-  const String targetId = 'base1-4'; 
-  const String url = 'https://api.tcgdex.net/v2/en/cards/$targetId';
+  // Wir testen das Base Set Glurak (ID: base1-4)
+  final cardId = 'base1-4'; 
+  final url = Uri.parse('https://api.pokemontcg.io/v2/cards/$cardId');
 
-  print('\n🔍 --- DETAIL-CHECK FÜR KARTE: $targetId ---');
-  print('Request: GET $url');
+  print('Lade Daten von: $url');
   
-  try {
-    final response = await dio.get(url);
-    Map<String, dynamic> data = Map<String, dynamic>.from(response.data);
-
-    // Große Listen (wie Attacken) kürzen, damit das Terminal nicht platzt
-    if (data.containsKey('attacks')) data['attacks'] = '[... Attacken versteckt ...]';
-    if (data.containsKey('weaknesses')) data['weaknesses'] = '[... Schwächen versteckt ...]';
-    if (data.containsKey('retreat')) data['retreat'] = '[... Rückzug versteckt ...]';
-    if (data.containsKey('legal')) data['legal'] = '[... Legalität versteckt ...]';
-
-    print('\n📦 KARTEN METADATEN:');
-    print(encoder.convert(data));
-
-    print('\n-------------------------------------------------------');
-    print('ANALYSE FÜR FILTER/SORTIERUNG:');
-    print('Kategorie: ${data['category']}'); // Wichtig für: Pokemon, Trainer, Energy
-    if (data.containsKey('types')) {
-      print('Typen:     ${data['types']}'); // Wichtig für: [Fire], [Water], etc.
-    } else {
-      print('Kein Element-Typ gefunden (wahrscheinlich Trainer-Karte).');
-    }
-    print('-------------------------------------------------------');
-
-  } catch (e) {
-    if (e is DioException && e.response?.statusCode == 404) {
-      print('❌ Fehler: Karte "$targetId" wurde nicht gefunden (404).');
-    } else {
-      print('❌ Fehler beim Laden: $e');
-    }
+  // Info: pokemontcg.io erlaubt ein paar Aufrufe ohne API-Key. Für mehr braucht man einen kostenlosen Key.
+  final response = await http.get(url);
+  
+  if (response.statusCode == 200) {
+    final data = jsonDecode(response.body);
+    print('\n🃏 KARTEN-DATEN (pokemontcg.io):');
+    print(const JsonEncoder.withIndent('  ').convert(data['data']));
+  } else {
+    print('Fehler: ${response.statusCode} - ${response.body}');
   }
+  
+  print('\n=== CHECK BEENDET ===');
 }

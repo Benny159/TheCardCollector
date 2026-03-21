@@ -562,11 +562,15 @@ class BinderService {
       return;
     }
 
-    // --- BATCH FETCHING: Holt alle Daten auf einen Schlag! (Macht die App 100x schneller) ---
     final cardIds = slots.map((s) => s.cardId).whereType<String>().toSet().toList();
+    // --- NEU: Wir laden alle UserCards der Slots auf einen Schlag ---
+    final userCardIds = slots.map((s) => s.userCardId).whereType<int>().toSet().toList();
     
     final cardsList = await (db.select(db.cards)..where((t) => t.id.isIn(cardIds))).get();
     final cardMap = {for (var c in cardsList) c.id: c};
+
+    final userCardsList = await (db.select(db.userCards)..where((t) => t.id.isIn(userCardIds))).get();
+    final userCardMap = {for (var u in userCardsList) u.id: u};
 
     final cmList = await (db.select(db.cardMarketPrices)..where((t) => t.cardId.isIn(cardIds))).get();
     final cmMap = <String, CardMarketPrice>{};
@@ -585,7 +589,6 @@ class BinderService {
     for (var p in customList) {
       if (!customMap.containsKey(p.cardId) || p.fetchedAt.isAfter(customMap[p.cardId]!.fetchedAt)) customMap[p.cardId] = p;
     }
-    // ----------------------------------------------------------------------------------------
 
     for (var slot in slots) {
       final cardId = slot.cardId;
@@ -594,43 +597,50 @@ class BinderService {
       final card = cardMap[cardId];
       if (card == null) continue;
 
+      // Das spezifische Inventar-Objekt für diesen Slot
+      final userCard = slot.userCardId != null ? userCardMap[slot.userCardId!] : null;
+
       final cmPrice = cmMap[cardId];
       final tcgPrice = tcgMap[cardId];
       final customPriceRow = customMap[cardId];
 
       double singlePrice = 0.0;
       bool baseIsHolo = !card.hasNormal && card.hasHolo;
-      final variant = slot.variant ?? 'Normal'; 
+      final variant = userCard?.variant ?? slot.variant ?? 'Normal'; 
       
       final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
       final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
       final isReverse = variant == 'Reverse Holo';
       
-      final pref = card.preferredPriceSource;
-      final customPrice = customPriceRow?.price;
+      // --- WERT BERECHNUNG MIT JOKER ---
+      if (userCard != null && userCard.customPrice != null && userCard.customPrice! > 0) {
+          singlePrice = userCard.customPrice!;
+      } else {
+          final pref = card.preferredPriceSource;
+          final customPrice = customPriceRow?.price;
 
-      if (pref == 'custom' && customPrice != null && customPrice > 0) {
-          singlePrice = customPrice;
-      } 
-      else if (pref == 'tcgplayer') {
-          if (isReverse) singlePrice = tcgPrice?.reverseMarket ?? 0.0;
-          else if (isHolo) singlePrice = tcgPrice?.holoMarket ?? 0.0;
-          else singlePrice = tcgPrice?.normalMarket ?? 0.0;
-      } 
-      else {
-          if (card.hasFirstEdition) {
-             if (isHolo) singlePrice = isFirstEd ? (cmPrice?.trend ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
-             else singlePrice = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
-          } else if (isReverse) {
-             singlePrice = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? 0.0;
-          } else if (isHolo && !baseIsHolo) {
-             singlePrice = cmPrice?.trendHolo ?? 0.0;
-          } else {
-             singlePrice = cmPrice?.trend ?? 0.0;
+          if (pref == 'custom' && customPrice != null && customPrice > 0) {
+              singlePrice = customPrice;
+          } 
+          else if (pref == 'tcgplayer') {
+              if (isReverse) singlePrice = tcgPrice?.reverseMarket ?? 0.0;
+              else if (isHolo) singlePrice = tcgPrice?.holoMarket ?? 0.0;
+              else singlePrice = tcgPrice?.normalMarket ?? 0.0;
+          } 
+          else {
+              if (card.hasFirstEdition) {
+                 if (isHolo) singlePrice = isFirstEd ? (cmPrice?.trend ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
+                 else singlePrice = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
+              } else if (isReverse) {
+                 singlePrice = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? 0.0;
+              } else if (isHolo && !baseIsHolo) {
+                 singlePrice = cmPrice?.trendHolo ?? 0.0;
+              } else {
+                 singlePrice = cmPrice?.trend ?? 0.0;
+              }
           }
+          if (singlePrice == 0.0) singlePrice = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? customPrice ?? 0.0;
       }
-
-      if (singlePrice == 0.0) singlePrice = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? customPrice ?? 0.0;
       total += singlePrice;
     }
 

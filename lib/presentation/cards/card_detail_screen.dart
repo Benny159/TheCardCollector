@@ -88,6 +88,37 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     super.dispose();
   }
 
+  // --- NEU: CARDMARKET & TCGPLAYER LINK GENERATOREN ---
+  void _openCardmarket(ApiCard card) {
+    String baseUrl = card.cardmarket?.url ?? "";
+    
+    if (baseUrl.isNotEmpty) {
+      if (baseUrl.contains('?')) {
+        baseUrl += "&sellerCountry=7&language=3";
+      } else {
+        baseUrl += "?sellerCountry=7&language=3";
+      }
+    } else {
+      final searchName = Uri.encodeComponent(card.name);
+      final setnumber = card.number.isNotEmpty ? " ${card.number}" : "";
+      baseUrl = "https://www.cardmarket.com/de/Pokemon/Products/Singles?searchString=$searchName$setnumber&sellerCountry=7&language=3";
+    }
+    
+    _launchURL(baseUrl);
+  }
+
+  void _openTcgPlayer(ApiCard card) {
+    String baseUrl = card.tcgplayer?.url ?? "";
+    
+    if (baseUrl.isEmpty) {
+      final searchName = Uri.encodeComponent(card.name);
+      final setnumber = card.number.isNotEmpty ? " ${card.number}" : "";
+      baseUrl = "https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&q=$searchName$setnumber";
+    }
+    
+    _launchURL(baseUrl);
+  }
+
   Future<void> _forceRefresh() async {
     await Future.delayed(const Duration(milliseconds: 300));
     
@@ -222,6 +253,18 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                               _buildTag(Icons.star, widget.card.rarity, color: Colors.orange[800]),
                             if (widget.card.number.isNotEmpty)
                               _buildTag(Icons.numbers, "${widget.card.number} / ${widget.card.setPrintedTotal}", color: Colors.purple),
+                            _buildTag(
+                              Icons.shopping_cart, 
+                              "Cardmarket", 
+                              color: Colors.blue[800], 
+                              onTap: () => _openCardmarket(widget.card)
+                            ),
+                            _buildTag(
+                              Icons.storefront, 
+                              "TCGPlayer", 
+                              color: Colors.teal[700], 
+                              onTap: () => _openTcgPlayer(widget.card)
+                            ),
                           ],
                         ),
 

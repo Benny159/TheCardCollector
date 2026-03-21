@@ -208,6 +208,19 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
               title: Text(slot.binderCard.placeholderLabel ?? "Slot", style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Text(slot.binderCard.isPlaceholder ? "Leer (Platzhalter)" : "Befüllt"),
             ),
+            
+            if (slot.userCard != null) ...[
+               const Divider(),
+               ListTile(
+                 leading: const Icon(Icons.star, color: Colors.amber),
+                 title: Text("${slot.userCard!.variant} (${slot.userCard!.condition} • ${slot.userCard!.language})", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                 subtitle: Text([
+                   if (slot.userCard!.gradingCompany != null) "${slot.userCard!.gradingCompany} ${slot.userCard!.gradingScore ?? ''}",
+                   if (slot.userCard!.customPrice != null && slot.userCard!.customPrice! > 0) "Spezieller Wert: ${slot.userCard!.customPrice!.toStringAsFixed(2)} €"
+                 ].join("\n"), style: TextStyle(color: Colors.amber[800])),
+               ),
+            ],
+            
             const Divider(),
             
             if (slot.binderCard.isPlaceholder) ...[
@@ -230,7 +243,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
             ],
               
             if (!slot.binderCard.isPlaceholder) ...[
-              // --- NEU: KARTE ANSCHAUEN ---
               ListTile(
                 leading: const Icon(Icons.zoom_in, color: Colors.purple),
                 title: const Text("Karte im Detail anschauen"),
