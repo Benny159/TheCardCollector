@@ -531,10 +531,15 @@ class BinderService {
     );
   }
   
-  Future<void> fillSlot(int slotId, String cardId, {String? variant}) async {
-    if (!await isCardAvailable(cardId)) throw Exception("Keine Karte mehr verfügbar!");
+  Future<void> fillSlot(int slotId, String cardId, int userCardId, {String? variant}) async {
+    if (!await isUserCardAvailable(userCardId)) throw Exception("Diese spezifische Karte ist nicht mehr verfügbar!");
     await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
-      BinderCardsCompanion(cardId: Value(cardId), isPlaceholder: const Value(false), variant: variant != null ? Value(variant) : const Value.absent())
+      BinderCardsCompanion(
+        cardId: Value(cardId), 
+        userCardId: Value(userCardId),
+        isPlaceholder: const Value(false), 
+        variant: variant != null ? Value(variant) : const Value.absent()
+      )
     );
     final slot = await (db.select(db.binderCards)..where((t) => t.id.equals(slotId))).getSingle();
     await recalculateBinderValue(slot.binderId);
@@ -552,18 +557,46 @@ class BinderService {
     final slots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId) & t.isPlaceholder.equals(false))).get();
     double total = 0.0;
 
+    if (slots.isEmpty) {
+      await (db.update(db.binders)..where((t) => t.id.equals(binderId))).write(const BindersCompanion(totalValue: Value(0.0)));
+      return;
+    }
+
+    // --- BATCH FETCHING: Holt alle Daten auf einen Schlag! (Macht die App 100x schneller) ---
+    final cardIds = slots.map((s) => s.cardId).whereType<String>().toSet().toList();
+    
+    final cardsList = await (db.select(db.cards)..where((t) => t.id.isIn(cardIds))).get();
+    final cardMap = {for (var c in cardsList) c.id: c};
+
+    final cmList = await (db.select(db.cardMarketPrices)..where((t) => t.cardId.isIn(cardIds))).get();
+    final cmMap = <String, CardMarketPrice>{};
+    for (var p in cmList) {
+      if (!cmMap.containsKey(p.cardId) || p.fetchedAt.isAfter(cmMap[p.cardId]!.fetchedAt)) cmMap[p.cardId] = p;
+    }
+
+    final tcgList = await (db.select(db.tcgPlayerPrices)..where((t) => t.cardId.isIn(cardIds))).get();
+    final tcgMap = <String, TcgPlayerPrice>{};
+    for (var p in tcgList) {
+      if (!tcgMap.containsKey(p.cardId) || p.fetchedAt.isAfter(tcgMap[p.cardId]!.fetchedAt)) tcgMap[p.cardId] = p;
+    }
+
+    final customList = await (db.select(db.customCardPrices)..where((t) => t.cardId.isIn(cardIds))).get();
+    final customMap = <String, CustomCardPrice>{};
+    for (var p in customList) {
+      if (!customMap.containsKey(p.cardId) || p.fetchedAt.isAfter(customMap[p.cardId]!.fetchedAt)) customMap[p.cardId] = p;
+    }
+    // ----------------------------------------------------------------------------------------
+
     for (var slot in slots) {
       final cardId = slot.cardId;
       if (cardId == null) continue;
 
-      final card = await (db.select(db.cards)..where((t) => t.id.equals(cardId))).getSingleOrNull();
+      final card = cardMap[cardId];
       if (card == null) continue;
 
-      final cmPrice = await (db.select(db.cardMarketPrices)..where((t) => t.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
-      final tcgPrice = await (db.select(db.tcgPlayerPrices)..where((t) => t.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
-      
-      // --- NEU: Eigener Preis aus der DB laden ---
-      final customPriceRow = await (db.select(db.customCardPrices)..where((t) => t.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
+      final cmPrice = cmMap[cardId];
+      final tcgPrice = tcgMap[cardId];
+      final customPriceRow = customMap[cardId];
 
       double singlePrice = 0.0;
       bool baseIsHolo = !card.hasNormal && card.hasHolo;
@@ -573,7 +606,6 @@ class BinderService {
       final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
       final isReverse = variant == 'Reverse Holo';
       
-      // --- NEU: PREFERENZ CHECKEN ---
       final pref = card.preferredPriceSource;
       final customPrice = customPriceRow?.price;
 
@@ -598,7 +630,6 @@ class BinderService {
           }
       }
 
-      // Fallback
       if (singlePrice == 0.0) singlePrice = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? customPrice ?? 0.0;
       total += singlePrice;
     }
@@ -620,6 +651,20 @@ class BinderService {
     final allBinders = await db.select(db.binders).get();
     for (var binder in allBinders) {
       await recalculateBinderValue(binder.id);
+    }
+  }
+
+  Future<void> recalculateBindersForCard(String cardId) async {
+    // 1. Finde alle Binder, in denen diese Karte liegt
+    final usedSlotsQuery = db.select(db.binderCards)..where((t) => t.cardId.equals(cardId) & t.isPlaceholder.equals(false));
+    final usedSlots = await usedSlotsQuery.get();
+    
+    // 2. Sammle die eindeutigen Binder-IDs
+    final Set<int> affectedBinderIds = usedSlots.map((s) => s.binderId).toSet();
+    
+    // 3. Berechne NUR diese Binder neu
+    for (var binderId in affectedBinderIds) {
+      await recalculateBinderValue(binderId);
     }
   }
 
@@ -887,8 +932,8 @@ class BinderService {
   // BULK BOX MANAGEMENT (Listen-Inventar, Trennkarten & SORTIERUNG)
   // =====================================================================
 
-  Future<void> addCardToBulkBox(int binderId, String cardId, String variant) async {
-    if (!await isCardAvailable(cardId)) throw Exception("Keine Karte mehr verfügbar!");
+  Future<void> addCardToBulkBox(int binderId, String cardId, int userCardId, String variant) async {
+    if (!await isUserCardAvailable(userCardId)) throw Exception("Diese spezifische Karte ist nicht mehr verfügbar!");
     final existingSlots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
     
     await db.into(db.binderCards).insert(
@@ -898,6 +943,7 @@ class BinderService {
         slotIndex: existingSlots.length,
         isPlaceholder: const Value(false),
         cardId: Value(cardId),
+        userCardId: Value(userCardId),
         variant: Value(variant),
       )
     );
@@ -998,6 +1044,49 @@ class BinderService {
     await (db.update(db.binders)..where((t) => t.id.equals(binderId))).write(
       BindersCompanion(isFavorite: Value(isFavorite))
     );
+  }
+
+  // Holt exakt die Karten (mit Grading & Preis), die noch nicht vergeben sind!
+  Future<List<UserCard>> getAvailableUserCards(String cardId) async {
+    final userCards = await (db.select(db.userCards)..where((t) => t.cardId.equals(cardId))).get();
+    final binderCards = await (db.select(db.binderCards)..where((t) => t.cardId.equals(cardId) & t.isPlaceholder.equals(false))).get();
+    
+    Map<int, int> usedById = {};
+    Map<String, int> usedByVariant = {};
+
+    for (var bc in binderCards) {
+      if (bc.userCardId != null) {
+        usedById[bc.userCardId!] = (usedById[bc.userCardId!] ?? 0) + 1;
+      } else {
+        // Fallback für alte Karten in der Datenbank, bevor wir das Update gemacht haben
+        final v = bc.variant ?? 'Normal';
+        usedByVariant[v] = (usedByVariant[v] ?? 0) + 1;
+      }
+    }
+    
+    List<UserCard> available = [];
+    for (var uc in userCards) {
+      int used = usedById[uc.id] ?? 0;
+      int availableQty = uc.quantity - used;
+
+      if (availableQty > 0 && usedByVariant.containsKey(uc.variant) && usedByVariant[uc.variant]! > 0) {
+          int reduce = availableQty < usedByVariant[uc.variant]! ? availableQty : usedByVariant[uc.variant]!;
+          usedByVariant[uc.variant] = usedByVariant[uc.variant]! - reduce;
+          availableQty -= reduce;
+      }
+
+      if (availableQty > 0) {
+        available.add(uc);
+      }
+    }
+    return available;
+  }
+
+  Future<bool> isUserCardAvailable(int userCardId) async {
+    final uc = await (db.select(db.userCards)..where((t) => t.id.equals(userCardId))).getSingleOrNull();
+    if (uc == null) return false;
+    final usedCountList = await (db.select(db.binderCards)..where((t) => t.userCardId.equals(userCardId) & t.isPlaceholder.equals(false))).get();
+    return uc.quantity > usedCountList.length;
   }
 }
 

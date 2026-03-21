@@ -303,9 +303,8 @@ class InventoryItem {
   final int quantity;
   final String variant;
   final double totalValue;
-  
-  // NEU: In welchem Binder steckt diese spezifische Karte?
   final String? binderName; 
+  final UserCard userCard;
 
   InventoryItem({
     required this.card,
@@ -314,6 +313,7 @@ class InventoryItem {
     required this.variant,
     required this.totalValue,
     this.binderName, // NEU
+    required this.userCard,
   });
 }
 enum InventorySort { value, name, rarity, type }
@@ -377,46 +377,48 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
       );
 
       // --- PREIS LOGIK (Respektiert die bevorzugte Quelle!) ---
-      double singlePrice = 0.0;
-      bool baseIsHolo = !dbCard.hasNormal && dbCard.hasHolo;
-      final variant = userCard.variant;
+     double singlePrice = 0.0;
       
-      final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
-      final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
-      final isReverse = variant == 'Reverse Holo';
-
-      final pref = dbCard.preferredPriceSource;
-
-      if (pref == 'custom' && apiCard.customPrice != null) {
-          singlePrice = apiCard.customPrice!;
+      // 1. DER JOKER: Hat genau diese physische Karte einen spezifischen Wert?
+      if (userCard.customPrice != null && userCard.customPrice! > 0) {
+          singlePrice = userCard.customPrice!;
       } 
-      else if (pref == 'tcgplayer') {
-          // TCGPlayer fokussiert
-          if (isReverse) {
-            singlePrice = apiCard.tcgplayer?.prices?.reverseHolofoil?.market ?? 0.0;
-          } else if (isHolo) singlePrice = apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
-          else singlePrice = apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
-      } 
+      // 2. Ansonsten: Fallback auf das globale System
       else {
-          // Cardmarket fokussiert (Standard)
-          if (dbCard.hasFirstEdition) {
-             if (isHolo) {
-               singlePrice = isFirstEd ? (apiCard.cardmarket?.trendPrice ?? 0.0) : (apiCard.cardmarket?.trendHolo ?? 0.0);
-             } else {
-               singlePrice = isFirstEd ? (apiCard.cardmarket?.trendHolo ?? 0.0) : (apiCard.cardmarket?.trendPrice ?? 0.0);
-             }
-          } else if (isReverse) {
-             singlePrice = apiCard.cardmarket?.reverseHoloTrend ?? apiCard.cardmarket?.trendHolo ?? 0.0;
-          } else if (isHolo && !baseIsHolo) {
-             singlePrice = apiCard.cardmarket?.trendHolo ?? 0.0;
-          } else {
-             singlePrice = apiCard.cardmarket?.trendPrice ?? 0.0;
-          }
-      }
+          bool baseIsHolo = !dbCard.hasNormal && dbCard.hasHolo;
+          final variant = userCard.variant;
+          
+          final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
+          final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
+          final isReverse = variant == 'Reverse Holo';
 
-      // Absoluter Fallback, falls die gewählte Quelle 0.0 liefert
-      if (singlePrice == 0.0) {
-         singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.normal?.market ?? apiCard.customPrice ?? 0.0;
+          final pref = dbCard.preferredPriceSource;
+
+          if (pref == 'custom' && apiCard.customPrice != null) {
+              singlePrice = apiCard.customPrice!;
+          } 
+          else if (pref == 'tcgplayer') {
+              if (isReverse) singlePrice = apiCard.tcgplayer?.prices?.reverseHolofoil?.market ?? 0.0;
+              else if (isHolo) singlePrice = apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
+              else singlePrice = apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
+          } 
+          else {
+              if (dbCard.hasFirstEdition) {
+                 if (isHolo) singlePrice = isFirstEd ? (apiCard.cardmarket?.trendPrice ?? 0.0) : (apiCard.cardmarket?.trendHolo ?? 0.0);
+                 else singlePrice = isFirstEd ? (apiCard.cardmarket?.trendHolo ?? 0.0) : (apiCard.cardmarket?.trendPrice ?? 0.0);
+              } else if (isReverse) {
+                 singlePrice = apiCard.cardmarket?.reverseHoloTrend ?? apiCard.cardmarket?.trendHolo ?? 0.0;
+              } else if (isHolo && !baseIsHolo) {
+                 singlePrice = apiCard.cardmarket?.trendHolo ?? 0.0;
+              } else {
+                 singlePrice = apiCard.cardmarket?.trendPrice ?? 0.0;
+              }
+          }
+
+          // Letzter Notnagel
+          if (singlePrice == 0.0) {
+             singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.normal?.market ?? apiCard.customPrice ?? 0.0;
+          }
       }
       // --------------------------------------------------------
 
@@ -442,7 +444,7 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
 
         items.add(InventoryItem(
           card: apiCard, set: apiSet, quantity: assignedQty, variant: userCard.variant,
-          totalValue: singlePrice * assignedQty, binderName: binderName, 
+          totalValue: singlePrice * assignedQty, binderName: binderName, userCard: userCard,
         ));
       }
 
@@ -451,7 +453,7 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
       if (looseQty > 0) {
         items.add(InventoryItem(
           card: apiCard, set: apiSet, quantity: looseQty, variant: userCard.variant,
-          totalValue: singlePrice * looseQty, binderName: null, 
+          totalValue: singlePrice * looseQty, binderName: null, userCard: userCard,
         ));
       }
     }

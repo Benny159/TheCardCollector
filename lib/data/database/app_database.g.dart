@@ -1518,9 +1518,37 @@ class $UserCardsTable extends UserCards
       type: DriftSqlType.dateTime,
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
+  static const VerificationMeta _customPriceMeta =
+      const VerificationMeta('customPrice');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, cardId, quantity, condition, language, variant, createdAt];
+  late final GeneratedColumn<double> customPrice = GeneratedColumn<double>(
+      'custom_price', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _gradingCompanyMeta =
+      const VerificationMeta('gradingCompany');
+  @override
+  late final GeneratedColumn<String> gradingCompany = GeneratedColumn<String>(
+      'grading_company', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _gradingScoreMeta =
+      const VerificationMeta('gradingScore');
+  @override
+  late final GeneratedColumn<String> gradingScore = GeneratedColumn<String>(
+      'grading_score', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        cardId,
+        quantity,
+        condition,
+        language,
+        variant,
+        createdAt,
+        customPrice,
+        gradingCompany,
+        gradingScore
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1560,6 +1588,24 @@ class $UserCardsTable extends UserCards
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
     }
+    if (data.containsKey('custom_price')) {
+      context.handle(
+          _customPriceMeta,
+          customPrice.isAcceptableOrUnknown(
+              data['custom_price']!, _customPriceMeta));
+    }
+    if (data.containsKey('grading_company')) {
+      context.handle(
+          _gradingCompanyMeta,
+          gradingCompany.isAcceptableOrUnknown(
+              data['grading_company']!, _gradingCompanyMeta));
+    }
+    if (data.containsKey('grading_score')) {
+      context.handle(
+          _gradingScoreMeta,
+          gradingScore.isAcceptableOrUnknown(
+              data['grading_score']!, _gradingScoreMeta));
+    }
     return context;
   }
 
@@ -1583,6 +1629,12 @@ class $UserCardsTable extends UserCards
           .read(DriftSqlType.string, data['${effectivePrefix}variant'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      customPrice: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}custom_price']),
+      gradingCompany: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}grading_company']),
+      gradingScore: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}grading_score']),
     );
   }
 
@@ -1600,6 +1652,9 @@ class UserCard extends DataClass implements Insertable<UserCard> {
   final String language;
   final String variant;
   final DateTime createdAt;
+  final double? customPrice;
+  final String? gradingCompany;
+  final String? gradingScore;
   const UserCard(
       {required this.id,
       required this.cardId,
@@ -1607,7 +1662,10 @@ class UserCard extends DataClass implements Insertable<UserCard> {
       required this.condition,
       required this.language,
       required this.variant,
-      required this.createdAt});
+      required this.createdAt,
+      this.customPrice,
+      this.gradingCompany,
+      this.gradingScore});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1618,6 +1676,15 @@ class UserCard extends DataClass implements Insertable<UserCard> {
     map['language'] = Variable<String>(language);
     map['variant'] = Variable<String>(variant);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || customPrice != null) {
+      map['custom_price'] = Variable<double>(customPrice);
+    }
+    if (!nullToAbsent || gradingCompany != null) {
+      map['grading_company'] = Variable<String>(gradingCompany);
+    }
+    if (!nullToAbsent || gradingScore != null) {
+      map['grading_score'] = Variable<String>(gradingScore);
+    }
     return map;
   }
 
@@ -1630,6 +1697,15 @@ class UserCard extends DataClass implements Insertable<UserCard> {
       language: Value(language),
       variant: Value(variant),
       createdAt: Value(createdAt),
+      customPrice: customPrice == null && nullToAbsent
+          ? const Value.absent()
+          : Value(customPrice),
+      gradingCompany: gradingCompany == null && nullToAbsent
+          ? const Value.absent()
+          : Value(gradingCompany),
+      gradingScore: gradingScore == null && nullToAbsent
+          ? const Value.absent()
+          : Value(gradingScore),
     );
   }
 
@@ -1644,6 +1720,9 @@ class UserCard extends DataClass implements Insertable<UserCard> {
       language: serializer.fromJson<String>(json['language']),
       variant: serializer.fromJson<String>(json['variant']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      customPrice: serializer.fromJson<double?>(json['customPrice']),
+      gradingCompany: serializer.fromJson<String?>(json['gradingCompany']),
+      gradingScore: serializer.fromJson<String?>(json['gradingScore']),
     );
   }
   @override
@@ -1657,6 +1736,9 @@ class UserCard extends DataClass implements Insertable<UserCard> {
       'language': serializer.toJson<String>(language),
       'variant': serializer.toJson<String>(variant),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'customPrice': serializer.toJson<double?>(customPrice),
+      'gradingCompany': serializer.toJson<String?>(gradingCompany),
+      'gradingScore': serializer.toJson<String?>(gradingScore),
     };
   }
 
@@ -1667,7 +1749,10 @@ class UserCard extends DataClass implements Insertable<UserCard> {
           String? condition,
           String? language,
           String? variant,
-          DateTime? createdAt}) =>
+          DateTime? createdAt,
+          Value<double?> customPrice = const Value.absent(),
+          Value<String?> gradingCompany = const Value.absent(),
+          Value<String?> gradingScore = const Value.absent()}) =>
       UserCard(
         id: id ?? this.id,
         cardId: cardId ?? this.cardId,
@@ -1676,6 +1761,11 @@ class UserCard extends DataClass implements Insertable<UserCard> {
         language: language ?? this.language,
         variant: variant ?? this.variant,
         createdAt: createdAt ?? this.createdAt,
+        customPrice: customPrice.present ? customPrice.value : this.customPrice,
+        gradingCompany:
+            gradingCompany.present ? gradingCompany.value : this.gradingCompany,
+        gradingScore:
+            gradingScore.present ? gradingScore.value : this.gradingScore,
       );
   UserCard copyWithCompanion(UserCardsCompanion data) {
     return UserCard(
@@ -1686,6 +1776,14 @@ class UserCard extends DataClass implements Insertable<UserCard> {
       language: data.language.present ? data.language.value : this.language,
       variant: data.variant.present ? data.variant.value : this.variant,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      customPrice:
+          data.customPrice.present ? data.customPrice.value : this.customPrice,
+      gradingCompany: data.gradingCompany.present
+          ? data.gradingCompany.value
+          : this.gradingCompany,
+      gradingScore: data.gradingScore.present
+          ? data.gradingScore.value
+          : this.gradingScore,
     );
   }
 
@@ -1698,14 +1796,17 @@ class UserCard extends DataClass implements Insertable<UserCard> {
           ..write('condition: $condition, ')
           ..write('language: $language, ')
           ..write('variant: $variant, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('customPrice: $customPrice, ')
+          ..write('gradingCompany: $gradingCompany, ')
+          ..write('gradingScore: $gradingScore')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      id, cardId, quantity, condition, language, variant, createdAt);
+  int get hashCode => Object.hash(id, cardId, quantity, condition, language,
+      variant, createdAt, customPrice, gradingCompany, gradingScore);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1716,7 +1817,10 @@ class UserCard extends DataClass implements Insertable<UserCard> {
           other.condition == this.condition &&
           other.language == this.language &&
           other.variant == this.variant &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.customPrice == this.customPrice &&
+          other.gradingCompany == this.gradingCompany &&
+          other.gradingScore == this.gradingScore);
 }
 
 class UserCardsCompanion extends UpdateCompanion<UserCard> {
@@ -1727,6 +1831,9 @@ class UserCardsCompanion extends UpdateCompanion<UserCard> {
   final Value<String> language;
   final Value<String> variant;
   final Value<DateTime> createdAt;
+  final Value<double?> customPrice;
+  final Value<String?> gradingCompany;
+  final Value<String?> gradingScore;
   const UserCardsCompanion({
     this.id = const Value.absent(),
     this.cardId = const Value.absent(),
@@ -1735,6 +1842,9 @@ class UserCardsCompanion extends UpdateCompanion<UserCard> {
     this.language = const Value.absent(),
     this.variant = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.customPrice = const Value.absent(),
+    this.gradingCompany = const Value.absent(),
+    this.gradingScore = const Value.absent(),
   });
   UserCardsCompanion.insert({
     this.id = const Value.absent(),
@@ -1744,6 +1854,9 @@ class UserCardsCompanion extends UpdateCompanion<UserCard> {
     this.language = const Value.absent(),
     this.variant = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.customPrice = const Value.absent(),
+    this.gradingCompany = const Value.absent(),
+    this.gradingScore = const Value.absent(),
   }) : cardId = Value(cardId);
   static Insertable<UserCard> custom({
     Expression<int>? id,
@@ -1753,6 +1866,9 @@ class UserCardsCompanion extends UpdateCompanion<UserCard> {
     Expression<String>? language,
     Expression<String>? variant,
     Expression<DateTime>? createdAt,
+    Expression<double>? customPrice,
+    Expression<String>? gradingCompany,
+    Expression<String>? gradingScore,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1762,6 +1878,9 @@ class UserCardsCompanion extends UpdateCompanion<UserCard> {
       if (language != null) 'language': language,
       if (variant != null) 'variant': variant,
       if (createdAt != null) 'created_at': createdAt,
+      if (customPrice != null) 'custom_price': customPrice,
+      if (gradingCompany != null) 'grading_company': gradingCompany,
+      if (gradingScore != null) 'grading_score': gradingScore,
     });
   }
 
@@ -1772,7 +1891,10 @@ class UserCardsCompanion extends UpdateCompanion<UserCard> {
       Value<String>? condition,
       Value<String>? language,
       Value<String>? variant,
-      Value<DateTime>? createdAt}) {
+      Value<DateTime>? createdAt,
+      Value<double?>? customPrice,
+      Value<String?>? gradingCompany,
+      Value<String?>? gradingScore}) {
     return UserCardsCompanion(
       id: id ?? this.id,
       cardId: cardId ?? this.cardId,
@@ -1781,6 +1903,9 @@ class UserCardsCompanion extends UpdateCompanion<UserCard> {
       language: language ?? this.language,
       variant: variant ?? this.variant,
       createdAt: createdAt ?? this.createdAt,
+      customPrice: customPrice ?? this.customPrice,
+      gradingCompany: gradingCompany ?? this.gradingCompany,
+      gradingScore: gradingScore ?? this.gradingScore,
     );
   }
 
@@ -1808,6 +1933,15 @@ class UserCardsCompanion extends UpdateCompanion<UserCard> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (customPrice.present) {
+      map['custom_price'] = Variable<double>(customPrice.value);
+    }
+    if (gradingCompany.present) {
+      map['grading_company'] = Variable<String>(gradingCompany.value);
+    }
+    if (gradingScore.present) {
+      map['grading_score'] = Variable<String>(gradingScore.value);
+    }
     return map;
   }
 
@@ -1820,7 +1954,10 @@ class UserCardsCompanion extends UpdateCompanion<UserCard> {
           ..write('condition: $condition, ')
           ..write('language: $language, ')
           ..write('variant: $variant, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('customPrice: $customPrice, ')
+          ..write('gradingCompany: $gradingCompany, ')
+          ..write('gradingScore: $gradingScore')
           ..write(')'))
         .toString();
   }
@@ -4565,6 +4702,12 @@ class $BinderCardsTable extends BinderCards
   late final GeneratedColumn<String> variant = GeneratedColumn<String>(
       'variant', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _userCardIdMeta =
+      const VerificationMeta('userCardId');
+  @override
+  late final GeneratedColumn<int> userCardId = GeneratedColumn<int>(
+      'user_card_id', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -4574,7 +4717,8 @@ class $BinderCardsTable extends BinderCards
         cardId,
         isPlaceholder,
         placeholderLabel,
-        variant
+        variant,
+        userCardId
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4627,6 +4771,12 @@ class $BinderCardsTable extends BinderCards
       context.handle(_variantMeta,
           variant.isAcceptableOrUnknown(data['variant']!, _variantMeta));
     }
+    if (data.containsKey('user_card_id')) {
+      context.handle(
+          _userCardIdMeta,
+          userCardId.isAcceptableOrUnknown(
+              data['user_card_id']!, _userCardIdMeta));
+    }
     return context;
   }
 
@@ -4652,6 +4802,8 @@ class $BinderCardsTable extends BinderCards
           DriftSqlType.string, data['${effectivePrefix}placeholder_label']),
       variant: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}variant']),
+      userCardId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}user_card_id']),
     );
   }
 
@@ -4670,6 +4822,7 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
   final bool isPlaceholder;
   final String? placeholderLabel;
   final String? variant;
+  final int? userCardId;
   const BinderCard(
       {required this.id,
       required this.binderId,
@@ -4678,7 +4831,8 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
       this.cardId,
       required this.isPlaceholder,
       this.placeholderLabel,
-      this.variant});
+      this.variant,
+      this.userCardId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -4695,6 +4849,9 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
     }
     if (!nullToAbsent || variant != null) {
       map['variant'] = Variable<String>(variant);
+    }
+    if (!nullToAbsent || userCardId != null) {
+      map['user_card_id'] = Variable<int>(userCardId);
     }
     return map;
   }
@@ -4714,6 +4871,9 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
       variant: variant == null && nullToAbsent
           ? const Value.absent()
           : Value(variant),
+      userCardId: userCardId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(userCardId),
     );
   }
 
@@ -4729,6 +4889,7 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
       isPlaceholder: serializer.fromJson<bool>(json['isPlaceholder']),
       placeholderLabel: serializer.fromJson<String?>(json['placeholderLabel']),
       variant: serializer.fromJson<String?>(json['variant']),
+      userCardId: serializer.fromJson<int?>(json['userCardId']),
     );
   }
   @override
@@ -4743,6 +4904,7 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
       'isPlaceholder': serializer.toJson<bool>(isPlaceholder),
       'placeholderLabel': serializer.toJson<String?>(placeholderLabel),
       'variant': serializer.toJson<String?>(variant),
+      'userCardId': serializer.toJson<int?>(userCardId),
     };
   }
 
@@ -4754,7 +4916,8 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
           Value<String?> cardId = const Value.absent(),
           bool? isPlaceholder,
           Value<String?> placeholderLabel = const Value.absent(),
-          Value<String?> variant = const Value.absent()}) =>
+          Value<String?> variant = const Value.absent(),
+          Value<int?> userCardId = const Value.absent()}) =>
       BinderCard(
         id: id ?? this.id,
         binderId: binderId ?? this.binderId,
@@ -4766,6 +4929,7 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
             ? placeholderLabel.value
             : this.placeholderLabel,
         variant: variant.present ? variant.value : this.variant,
+        userCardId: userCardId.present ? userCardId.value : this.userCardId,
       );
   BinderCard copyWithCompanion(BinderCardsCompanion data) {
     return BinderCard(
@@ -4781,6 +4945,8 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
           ? data.placeholderLabel.value
           : this.placeholderLabel,
       variant: data.variant.present ? data.variant.value : this.variant,
+      userCardId:
+          data.userCardId.present ? data.userCardId.value : this.userCardId,
     );
   }
 
@@ -4794,14 +4960,15 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
           ..write('cardId: $cardId, ')
           ..write('isPlaceholder: $isPlaceholder, ')
           ..write('placeholderLabel: $placeholderLabel, ')
-          ..write('variant: $variant')
+          ..write('variant: $variant, ')
+          ..write('userCardId: $userCardId')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, binderId, pageIndex, slotIndex, cardId,
-      isPlaceholder, placeholderLabel, variant);
+      isPlaceholder, placeholderLabel, variant, userCardId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4813,7 +4980,8 @@ class BinderCard extends DataClass implements Insertable<BinderCard> {
           other.cardId == this.cardId &&
           other.isPlaceholder == this.isPlaceholder &&
           other.placeholderLabel == this.placeholderLabel &&
-          other.variant == this.variant);
+          other.variant == this.variant &&
+          other.userCardId == this.userCardId);
 }
 
 class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
@@ -4825,6 +4993,7 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
   final Value<bool> isPlaceholder;
   final Value<String?> placeholderLabel;
   final Value<String?> variant;
+  final Value<int?> userCardId;
   const BinderCardsCompanion({
     this.id = const Value.absent(),
     this.binderId = const Value.absent(),
@@ -4834,6 +5003,7 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
     this.isPlaceholder = const Value.absent(),
     this.placeholderLabel = const Value.absent(),
     this.variant = const Value.absent(),
+    this.userCardId = const Value.absent(),
   });
   BinderCardsCompanion.insert({
     this.id = const Value.absent(),
@@ -4844,6 +5014,7 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
     this.isPlaceholder = const Value.absent(),
     this.placeholderLabel = const Value.absent(),
     this.variant = const Value.absent(),
+    this.userCardId = const Value.absent(),
   })  : binderId = Value(binderId),
         pageIndex = Value(pageIndex),
         slotIndex = Value(slotIndex);
@@ -4856,6 +5027,7 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
     Expression<bool>? isPlaceholder,
     Expression<String>? placeholderLabel,
     Expression<String>? variant,
+    Expression<int>? userCardId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4866,6 +5038,7 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
       if (isPlaceholder != null) 'is_placeholder': isPlaceholder,
       if (placeholderLabel != null) 'placeholder_label': placeholderLabel,
       if (variant != null) 'variant': variant,
+      if (userCardId != null) 'user_card_id': userCardId,
     });
   }
 
@@ -4877,7 +5050,8 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
       Value<String?>? cardId,
       Value<bool>? isPlaceholder,
       Value<String?>? placeholderLabel,
-      Value<String?>? variant}) {
+      Value<String?>? variant,
+      Value<int?>? userCardId}) {
     return BinderCardsCompanion(
       id: id ?? this.id,
       binderId: binderId ?? this.binderId,
@@ -4887,6 +5061,7 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
       isPlaceholder: isPlaceholder ?? this.isPlaceholder,
       placeholderLabel: placeholderLabel ?? this.placeholderLabel,
       variant: variant ?? this.variant,
+      userCardId: userCardId ?? this.userCardId,
     );
   }
 
@@ -4917,6 +5092,9 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
     if (variant.present) {
       map['variant'] = Variable<String>(variant.value);
     }
+    if (userCardId.present) {
+      map['user_card_id'] = Variable<int>(userCardId.value);
+    }
     return map;
   }
 
@@ -4930,7 +5108,8 @@ class BinderCardsCompanion extends UpdateCompanion<BinderCard> {
           ..write('cardId: $cardId, ')
           ..write('isPlaceholder: $isPlaceholder, ')
           ..write('placeholderLabel: $placeholderLabel, ')
-          ..write('variant: $variant')
+          ..write('variant: $variant, ')
+          ..write('userCardId: $userCardId')
           ..write(')'))
         .toString();
   }
@@ -6099,6 +6278,9 @@ typedef $$UserCardsTableCreateCompanionBuilder = UserCardsCompanion Function({
   Value<String> language,
   Value<String> variant,
   Value<DateTime> createdAt,
+  Value<double?> customPrice,
+  Value<String?> gradingCompany,
+  Value<String?> gradingScore,
 });
 typedef $$UserCardsTableUpdateCompanionBuilder = UserCardsCompanion Function({
   Value<int> id,
@@ -6108,6 +6290,9 @@ typedef $$UserCardsTableUpdateCompanionBuilder = UserCardsCompanion Function({
   Value<String> language,
   Value<String> variant,
   Value<DateTime> createdAt,
+  Value<double?> customPrice,
+  Value<String?> gradingCompany,
+  Value<String?> gradingScore,
 });
 
 class $$UserCardsTableTableManager extends RootTableManager<
@@ -6134,6 +6319,9 @@ class $$UserCardsTableTableManager extends RootTableManager<
             Value<String> language = const Value.absent(),
             Value<String> variant = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
+            Value<double?> customPrice = const Value.absent(),
+            Value<String?> gradingCompany = const Value.absent(),
+            Value<String?> gradingScore = const Value.absent(),
           }) =>
               UserCardsCompanion(
             id: id,
@@ -6143,6 +6331,9 @@ class $$UserCardsTableTableManager extends RootTableManager<
             language: language,
             variant: variant,
             createdAt: createdAt,
+            customPrice: customPrice,
+            gradingCompany: gradingCompany,
+            gradingScore: gradingScore,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -6152,6 +6343,9 @@ class $$UserCardsTableTableManager extends RootTableManager<
             Value<String> language = const Value.absent(),
             Value<String> variant = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
+            Value<double?> customPrice = const Value.absent(),
+            Value<String?> gradingCompany = const Value.absent(),
+            Value<String?> gradingScore = const Value.absent(),
           }) =>
               UserCardsCompanion.insert(
             id: id,
@@ -6161,6 +6355,9 @@ class $$UserCardsTableTableManager extends RootTableManager<
             language: language,
             variant: variant,
             createdAt: createdAt,
+            customPrice: customPrice,
+            gradingCompany: gradingCompany,
+            gradingScore: gradingScore,
           ),
         ));
 }
@@ -6195,6 +6392,21 @@ class $$UserCardsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $state.composableBuilder(
       column: $state.table.createdAt,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<double> get customPrice => $state.composableBuilder(
+      column: $state.table.customPrice,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get gradingCompany => $state.composableBuilder(
+      column: $state.table.gradingCompany,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get gradingScore => $state.composableBuilder(
+      column: $state.table.gradingScore,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -6241,6 +6453,21 @@ class $$UserCardsTableOrderingComposer
 
   ColumnOrderings<DateTime> get createdAt => $state.composableBuilder(
       column: $state.table.createdAt,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<double> get customPrice => $state.composableBuilder(
+      column: $state.table.customPrice,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get gradingCompany => $state.composableBuilder(
+      column: $state.table.gradingCompany,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get gradingScore => $state.composableBuilder(
+      column: $state.table.gradingScore,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
@@ -7395,6 +7622,7 @@ typedef $$BinderCardsTableCreateCompanionBuilder = BinderCardsCompanion
   Value<bool> isPlaceholder,
   Value<String?> placeholderLabel,
   Value<String?> variant,
+  Value<int?> userCardId,
 });
 typedef $$BinderCardsTableUpdateCompanionBuilder = BinderCardsCompanion
     Function({
@@ -7406,6 +7634,7 @@ typedef $$BinderCardsTableUpdateCompanionBuilder = BinderCardsCompanion
   Value<bool> isPlaceholder,
   Value<String?> placeholderLabel,
   Value<String?> variant,
+  Value<int?> userCardId,
 });
 
 class $$BinderCardsTableTableManager extends RootTableManager<
@@ -7433,6 +7662,7 @@ class $$BinderCardsTableTableManager extends RootTableManager<
             Value<bool> isPlaceholder = const Value.absent(),
             Value<String?> placeholderLabel = const Value.absent(),
             Value<String?> variant = const Value.absent(),
+            Value<int?> userCardId = const Value.absent(),
           }) =>
               BinderCardsCompanion(
             id: id,
@@ -7443,6 +7673,7 @@ class $$BinderCardsTableTableManager extends RootTableManager<
             isPlaceholder: isPlaceholder,
             placeholderLabel: placeholderLabel,
             variant: variant,
+            userCardId: userCardId,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -7453,6 +7684,7 @@ class $$BinderCardsTableTableManager extends RootTableManager<
             Value<bool> isPlaceholder = const Value.absent(),
             Value<String?> placeholderLabel = const Value.absent(),
             Value<String?> variant = const Value.absent(),
+            Value<int?> userCardId = const Value.absent(),
           }) =>
               BinderCardsCompanion.insert(
             id: id,
@@ -7463,6 +7695,7 @@ class $$BinderCardsTableTableManager extends RootTableManager<
             isPlaceholder: isPlaceholder,
             placeholderLabel: placeholderLabel,
             variant: variant,
+            userCardId: userCardId,
           ),
         ));
 }
@@ -7497,6 +7730,11 @@ class $$BinderCardsTableFilterComposer
 
   ColumnFilters<String> get variant => $state.composableBuilder(
       column: $state.table.variant,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<int> get userCardId => $state.composableBuilder(
+      column: $state.table.userCardId,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -7555,6 +7793,11 @@ class $$BinderCardsTableOrderingComposer
 
   ColumnOrderings<String> get variant => $state.composableBuilder(
       column: $state.table.variant,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<int> get userCardId => $state.composableBuilder(
+      column: $state.table.userCardId,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 

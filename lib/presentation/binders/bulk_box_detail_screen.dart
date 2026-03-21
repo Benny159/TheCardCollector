@@ -518,32 +518,52 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
           )
         );
 
-        final availableVariants = await service.getAvailableVariantsForCard(pickedCard.id);
+        // Wir holen die kompletten UserCards, nicht nur Strings!
+        final availableCards = await service.getAvailableUserCards(pickedCard.id);
 
-        if (availableVariants.isEmpty) {
+        if (availableCards.isEmpty) {
           if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Keine freie Karte im Inventar.")));
           return; 
         }
 
-        String? selectedVariant;
-        if (availableVariants.length == 1) {
-          selectedVariant = availableVariants.first;
+        UserCard? selectedCard;
+        if (availableCards.length == 1) {
+          selectedCard = availableCards.first;
         } else {
           if (!mounted) return;
-          selectedVariant = await showDialog<String>(
+          selectedCard = await showDialog<UserCard>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: const Text("Welche Variante?"),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: availableVariants.map((v) => ListTile(title: Text(v), onTap: () => Navigator.pop(ctx, v))).toList(),
+              title: const Text("Welches Exemplar?"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: availableCards.map((uc) {
+                     String label = "${uc.variant} (${uc.condition} • ${uc.language})";
+                     if (uc.gradingCompany != null && uc.gradingCompany != 'Kein Grading') {
+                       label += "\n${uc.gradingCompany} ${uc.gradingScore ?? ''}";
+                     }
+                     if (uc.customPrice != null && uc.customPrice! > 0) {
+                       label += " • ${uc.customPrice!.toStringAsFixed(2)}€";
+                     }
+
+                     return ListTile(
+                       leading: const Icon(Icons.style, color: Colors.blueAccent),
+                       title: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                       isThreeLine: uc.gradingCompany != null,
+                       onTap: () => Navigator.pop(ctx, uc),
+                     );
+                  }).toList(),
+                ),
               ),
+              actions: [TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text("Abbrechen"))],
             ),
           );
         }
 
-        if (selectedVariant != null) {
-          await service.addCardToBulkBox(widget.binder.id, pickedCard.id, selectedVariant);
+        if (selectedCard != null) {
+          // ID wird hier perfekt an die AddCardToBulkBox Methode übergeben!
+          await service.addCardToBulkBox(widget.binder.id, pickedCard.id, selectedCard.id, selectedCard.variant);
           if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
         }
       } catch (e) {

@@ -126,6 +126,10 @@ class UserCards extends Table {
   TextColumn get language => text().withDefault(const Constant('Deutsch'))();
   TextColumn get variant => text().withDefault(const Constant('Normal'))(); 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  RealColumn get customPrice => real().nullable()();
+  TextColumn get gradingCompany => text().nullable()();
+  TextColumn get gradingScore => text().nullable()();
 }
 
 // --- TABELLE 6: PORTFOLIO HISTORIE ---
@@ -176,21 +180,14 @@ class BinderHistory extends Table {
 @DataClassName('BinderCard')
 class BinderCards extends Table {
   IntColumn get id => integer().autoIncrement()();
-  
-  // Verknüpfung zum Binder
   IntColumn get binderId => integer().references(Binders, #id, onDelete: KeyAction.cascade)();
-  
-  // Position
-  IntColumn get pageIndex => integer()(); // Seite 0, 1, 2...
-  IntColumn get slotIndex => integer()(); // Slot 0 bis (rows*cols)-1
-  
-  // Inhalt (Kann eine echte Karte sein ODER ein Platzhalter)
+  IntColumn get pageIndex => integer()();
+  IntColumn get slotIndex => integer()();
   TextColumn get cardId => text().nullable().references(Cards, #id)();
-  
-  // Falls es ein Platzhalter ist (z.B. für National Dex Planung, aber Karte fehlt noch)
   BoolColumn get isPlaceholder => boolean().withDefault(const Constant(false))();
   TextColumn get placeholderLabel => text().nullable()(); // z.B. "Glurak #006"
   TextColumn get variant => text().nullable()();
+  IntColumn get userCardId => integer().nullable()(); 
 }
 
 class Pokedex extends Table {

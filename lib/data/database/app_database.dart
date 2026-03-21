@@ -25,9 +25,9 @@ part 'app_database.g.dart';
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
-  // Wir springen auf Version 41
+  // Wir springen auf Version 42
   @override
-  int get schemaVersion => 41; 
+  int get schemaVersion => 42; 
 
   @override
   MigrationStrategy get migration {
@@ -36,10 +36,14 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        // --- NEU: Version 41 ---
-        if (from < 41) {
-          await m.addColumn(cards, cards.preferredPriceSource);
-          await m.createTable(customCardPrices);
+        // ... (Deine bisherigen Migrationsschritte bis 41 bleiben hier stehen!) ...
+        
+        // --- NEU: Version 42 ---
+        if (from < 42) {
+          await m.addColumn(userCards, userCards.customPrice);
+          await m.addColumn(userCards, userCards.gradingCompany);
+          await m.addColumn(userCards, userCards.gradingScore);
+          await m.addColumn(binderCards, binderCards.userCardId);
         }
       },
       beforeOpen: (details) async {

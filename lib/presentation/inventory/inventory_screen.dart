@@ -10,7 +10,6 @@ import 'inventory_bottom_sheet.dart';
 
 final inventorySearchProvider = StateProvider<String>((ref) => '');
 
-// --- NEU: Ein Enum für die Gruppierung ---
 enum InventoryGroupMode { none, bySet, byBinder }
 final inventoryGroupModeProvider = StateProvider<InventoryGroupMode>((ref) => InventoryGroupMode.none);
 
@@ -59,18 +58,21 @@ class InventoryScreen extends ConsumerWidget {
             }).toList();
           }
 
-          // --- NEU: KARTEN WIEDER ZUSAMMENFASSEN ---
-          // Wenn wir NICHT nach Binder sortieren, verschmelzen wir gesplittete 
-          // Karten wieder zu einem einzigen Eintrag.
+          // 2. KARTEN ZUSAMMENFASSEN (mit Grading/Preis Trennung!)
           if (groupMode != InventoryGroupMode.byBinder) {
             final Map<String, InventoryItem> mergedMap = {};
             
             for (final item in filteredItems) {
-              // Der Schlüssel ist Karte + Variante (z.B. Schiggy_Reverse Holo)
-              final key = "${item.card.id}_${item.variant}";
+              // --- NEU: Grading und CustomPreis in den Verschmelzungs-Schlüssel aufnehmen ---
+              // Eine PSA 10 Karte wird niemals mit einer normalen verschmolzen!
+              final company = item.userCard.gradingCompany ?? 'none';
+              final score = item.userCard.gradingScore ?? 'none';
+              final cPrice = item.userCard.customPrice?.toStringAsFixed(2) ?? 'none';
+              
+              final key = "${item.card.id}_${item.variant}_${company}_${score}_$cPrice";
+              // --------------------------------------------------------------------------------
               
               if (mergedMap.containsKey(key)) {
-                // Karte existiert schon -> Menge und Wert addieren!
                 final existing = mergedMap[key]!;
                 mergedMap[key] = InventoryItem(
                   card: existing.card,
@@ -78,10 +80,10 @@ class InventoryScreen extends ConsumerWidget {
                   quantity: existing.quantity + item.quantity,
                   variant: existing.variant,
                   totalValue: existing.totalValue + item.totalValue,
-                  binderName: null, // Bindername ist hier egal
+                  binderName: null,
+                  userCard: existing.userCard, // Das Objekt bleibt gleich (inkl. Grading)
                 );
               } else {
-                // Erste Karte dieser Art -> Einfügen
                 mergedMap[key] = InventoryItem(
                   card: item.card,
                   set: item.set,
@@ -89,18 +91,18 @@ class InventoryScreen extends ConsumerWidget {
                   variant: item.variant,
                   totalValue: item.totalValue,
                   binderName: null, 
+                  userCard: item.userCard,
                 );
               }
             }
-            // Wir überschreiben unsere Liste mit den zusammengefassten Karten
             filteredItems = mergedMap.values.toList();
           }
 
-          // 2. STATISTIK (Gesamt)
+          // 3. STATISTIK (Gesamt)
           final int totalCards = filteredItems.fold(0, (sum, item) => sum + item.quantity);
           final double totalValue = filteredItems.fold(0.0, (sum, item) => sum + item.totalValue);
 
-          // 3. SORTIEREN
+          // 4. SORTIEREN
           final sortedItems = List<InventoryItem>.from(filteredItems);
           sortedItems.sort((a, b) {
             switch (sortMode) {
@@ -110,15 +112,12 @@ class InventoryScreen extends ConsumerWidget {
                 return (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
               case InventorySort.rarity:
                 return (b.card.rarity).compareTo(a.card.rarity); 
-              // --- NEU: SORTIERUNG NACH TYP ---
               case InventorySort.type:
-                final tA = a.card.cardType ?? 'ZZZ'; // Fallback für Karten ohne Typ (z.B. Energie) rutschen nach hinten
+                final tA = a.card.cardType ?? 'ZZZ'; 
                 final tB = b.card.cardType ?? 'ZZZ';
                 final typeComp = tA.compareTo(tB);
                 if (typeComp != 0) return typeComp;
-                // Wenn beide Feuer sind, sortiere intern alphabetisch nach Name
                 return (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
-              // --------------------------------
               default:
                 return 0;
             }
@@ -131,7 +130,7 @@ class InventoryScreen extends ConsumerWidget {
               _buildFilterBar(context, ref, sortMode, groupMode),
               const Divider(height: 1),
 
-              // 4. ANZEIGEN JE NACH MODUS
+              // 5. ANZEIGEN JE NACH MODUS
               Expanded(
                 child: sortedItems.isEmpty 
                   ? const Center(child: Text("Keine Ergebnisse für deine Suche."))
@@ -149,7 +148,7 @@ class InventoryScreen extends ConsumerWidget {
   Widget _buildContent(List<InventoryItem> items, InventoryGroupMode mode) {
     if (mode == InventoryGroupMode.bySet) return _buildGroupedBySet(items);
     if (mode == InventoryGroupMode.byBinder) return _buildGroupedByBinder(items);
-    return _buildGrid(items); // Flache Liste
+    return _buildGrid(items); 
   }
 
   Widget _buildHeaderStats(BuildContext context, int count, double value) {
@@ -177,14 +176,12 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
- Widget _buildSearchBar(BuildContext context, WidgetRef ref, String currentText) {
+  Widget _buildSearchBar(BuildContext context, WidgetRef ref, String currentText) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
       child: LayoutBuilder(
         builder: (context, constraints) => RawAutocomplete<String>(
-          // --- FIX: Wir lassen RawAutocomplete den Controller selbst bauen ---
           initialValue: TextEditingValue(text: currentText),
-          
           optionsBuilder: (TextEditingValue textEditingValue) {
             final query = textEditingValue.text.trim().toLowerCase();
             if (query.length < 2) return const Iterable<String>.empty();
@@ -281,7 +278,6 @@ class InventoryScreen extends ConsumerWidget {
               DropdownMenuItem(value: InventorySort.value, child: Text("Wert")),
               DropdownMenuItem(value: InventorySort.name, child: Text("Name")),
               DropdownMenuItem(value: InventorySort.rarity, child: Text("Seltenheit")),
-              // --- NEU ---
               DropdownMenuItem(value: InventorySort.type, child: Text("Element")),
             ],
             onChanged: (val) {
@@ -289,8 +285,6 @@ class InventoryScreen extends ConsumerWidget {
             },
           ),
           const Spacer(),
-          
-          // NEU: Segmented Button für 3 Ansichten
           SegmentedButton<InventoryGroupMode>(
             segments: const [
               ButtonSegment(value: InventoryGroupMode.none, icon: Icon(Icons.grid_view, size: 16)),
@@ -389,12 +383,9 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  // --- NEU: NACH BINDERN GRUPPIERT ---
   Widget _buildGroupedByBinder(List<InventoryItem> items) {
-    // Gruppiere nach Binder-Name (null bedeutet "Lose im Inventar")
     final grouped = groupBy(items, (item) => item.binderName ?? "Nicht im Binder");
     
-    // Wir sortieren alphabetisch, aber "Nicht im Binder" ganz ans Ende!
     final sortedKeys = grouped.keys.toList()..sort((a, b) {
       if (a == "Nicht im Binder") return 1;
       if (b == "Nicht im Binder") return -1;
@@ -415,14 +406,14 @@ class InventoryScreen extends ConsumerWidget {
 
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          elevation: isLoose ? 0 : 2, // Binder etwas hervorheben
+          elevation: isLoose ? 0 : 2, 
           color: isLoose ? Colors.grey[50] : Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: isLoose ? BorderSide(color: Colors.grey[300]!) : BorderSide.none,
           ),
           child: ExpansionTile(
-            initiallyExpanded: !isLoose, // Binder standardmäßig aufklappen
+            initiallyExpanded: !isLoose, 
             leading: CircleAvatar(
               backgroundColor: isLoose ? Colors.grey[300] : Colors.blueAccent.withOpacity(0.2),
               child: Icon(
@@ -458,7 +449,7 @@ class InventoryScreen extends ConsumerWidget {
   }
 }
 
-// --- DAS KARTEN-TILE (Mit Holo Effekt) ---
+// --- DAS KARTEN-TILE (Mit Holo Effekt & PSA Sternchen!) ---
 class _InventoryCardTile extends ConsumerWidget {
   final InventoryItem item;
 
@@ -466,10 +457,13 @@ class _InventoryCardTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Holo-Check
     final bool isReverseHolo = item.variant == 'Reverse Holo';
     final bool isHolo = item.variant == 'Holo';
     final bool showEffect = isReverseHolo || isHolo;
+
+    // --- NEU: Prüfen, ob die Karte etwas Besonderes ist ---
+    final bool hasSpecificPrice = item.userCard.customPrice != null && item.userCard.customPrice! > 0;
+    final bool isGraded = item.userCard.gradingCompany != null && item.userCard.gradingCompany != 'Kein Grading';
 
     final displayImage = item.card.displayImage;
 
@@ -486,7 +480,12 @@ class _InventoryCardTile extends ConsumerWidget {
       },
       child: Card(
         clipBehavior: Clip.antiAlias,
-        elevation: 2,
+        elevation: isGraded ? 6 : 2, // Gegraded = Besserer Schatten!
+        shape: RoundedRectangleBorder(
+           borderRadius: BorderRadius.circular(12),
+           // Orange Border für gegradete Karten!
+           side: isGraded ? BorderSide(color: Colors.orange[400]!, width: 1.5) : BorderSide.none
+        ),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -502,6 +501,20 @@ class _InventoryCardTile extends ConsumerWidget {
               },
             ),
             
+            // Grading Score oben links (z.B. "PSA 10")
+            if (isGraded)
+              Positioned(
+                top: 4, left: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.orange[800], borderRadius: BorderRadius.circular(6)),
+                  child: Text(
+                    "${item.userCard.gradingCompany} ${item.userCard.gradingScore ?? ''}".trim(), 
+                    style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)
+                  ),
+                ),
+              ),
+
             Positioned(
               top: 4, right: 4,
               child: Container(
@@ -535,10 +548,21 @@ class _InventoryCardTile extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    Text(
-                      "${item.totalValue.toStringAsFixed(2)}€",
-                      style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                    ),
+                    // --- NEU: Sternchen bei Spezifischem Preis ---
+                    Row(
+                      children: [
+                         if (hasSpecificPrice) const Icon(Icons.star, color: Colors.amber, size: 10),
+                         if (hasSpecificPrice) const SizedBox(width: 2),
+                         Text(
+                          "${item.totalValue.toStringAsFixed(2)}€",
+                          style: TextStyle(
+                             color: hasSpecificPrice ? Colors.amberAccent : Colors.lightGreenAccent, 
+                             fontSize: 10, 
+                             fontWeight: FontWeight.bold
+                          ),
+                        ),
+                      ],
+                    )
                   ],
                 ),
               ),

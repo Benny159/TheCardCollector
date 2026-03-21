@@ -470,39 +470,54 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         );
 
         if (onlyOwned) {
-           final availableVariants = await service.getAvailableVariantsForCard(pickedCard.id);
+           // --- NEU: WIR LADEN DIE KONKRETEN KARTEN AUS DEM INVENTAR ---
+           final availableCards = await service.getAvailableUserCards(pickedCard.id);
 
-           if (availableVariants.isEmpty) {
+           if (availableCards.isEmpty) {
              _showSwapDialog(slot.binderCard.id, pickedCard.id); 
              return; 
            }
 
-           String? selectedVariant;
+           UserCard? selectedCard;
            
-           if (availableVariants.length == 1) {
-             selectedVariant = availableVariants.first;
+           if (availableCards.length == 1) {
+             selectedCard = availableCards.first;
            } else {
              if (!mounted) return;
-             selectedVariant = await showDialog<String>(
+             selectedCard = await showDialog<UserCard>(
                context: context,
                builder: (ctx) => AlertDialog(
-                 title: const Text("Welche Variante?"),
-                 content: Column(
-                   mainAxisSize: MainAxisSize.min,
-                   children: availableVariants.map((variant) => ListTile(
-                     leading: const Icon(Icons.style, color: Colors.blueAccent),
-                     title: Text(variant, style: const TextStyle(fontWeight: FontWeight.bold)),
-                     onTap: () => Navigator.pop(ctx, variant),
-                   )).toList(),
+                 title: const Text("Welches Exemplar?"),
+                 content: SingleChildScrollView(
+                   child: Column(
+                     mainAxisSize: MainAxisSize.min,
+                     children: availableCards.map((uc) {
+                        // Tolles Label für den Dialog bauen (wie im AssignToBinderSheet)
+                        String label = "${uc.variant} (${uc.condition} • ${uc.language})";
+                        if (uc.gradingCompany != null && uc.gradingCompany != 'Kein Grading') {
+                          label += "\n${uc.gradingCompany} ${uc.gradingScore ?? ''}";
+                        }
+                        if (uc.customPrice != null && uc.customPrice! > 0) {
+                          label += " • ${uc.customPrice!.toStringAsFixed(2)}€";
+                        }
+
+                        return ListTile(
+                          leading: const Icon(Icons.style, color: Colors.blueAccent),
+                          title: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          isThreeLine: uc.gradingCompany != null,
+                          onTap: () => Navigator.pop(ctx, uc),
+                        );
+                     }).toList(),
+                   ),
                  ),
                  actions: [TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text("Abbrechen"))],
                ),
              );
-             if (selectedVariant == null) return; 
+             if (selectedCard == null) return; 
            }
 
-           await service.fillSlot(slot.binderCard.id, pickedCard.id, variant: selectedVariant);
-           if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$selectedVariant Karte hinzugefügt!")));
+           await service.fillSlot(slot.binderCard.id, pickedCard.id, selectedCard.id, variant: selectedCard.variant);
+           if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${selectedCard.variant} Karte hinzugefügt!")));
         } else {
            String label = pickedCard.nameDe ?? pickedCard.name;
            await service.configureSlot(slot.binderCard.id, pickedCard.id, label);

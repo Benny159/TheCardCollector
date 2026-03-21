@@ -229,7 +229,8 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
 
     if (_selectedType == PriceType.customPrice) {
       for (var p in customList) {
-        addValue(p.fetchedAt, p.price);
+        final dateKey = "${p.fetchedAt.year}-${p.fetchedAt.month.toString().padLeft(2, '0')}-${p.fetchedAt.day.toString().padLeft(2, '0')}";
+        dailyValues[dateKey] = p.price;
       }
     } else if (_selectedType.name.startsWith('cm')) {
       for (var p in cmList) {

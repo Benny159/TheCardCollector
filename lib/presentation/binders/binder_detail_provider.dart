@@ -81,12 +81,12 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
 
   final query = db.select(db.binderCards).join([
     leftOuterJoin(db.cards, db.cards.id.equalsExp(db.binderCards.cardId)),
+    innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId)), // <--- DAS IST DER FIX!
   ]);
 
   query.where(db.binderCards.binderId.equals(binderId));
   query.orderBy([OrderingTerm(expression: db.binderCards.pageIndex), OrderingTerm(expression: db.binderCards.slotIndex)]);
 
-  // --- DIE MAGIE: .watch() statt .get() ---
   return query.watch().asyncMap((rows) async {
     
     final cardIds = rows.map((r) => r.readTableOrNull(db.cards)?.id).whereType<String>().toSet().toList();
@@ -111,7 +111,8 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
       if (!tcgMap.containsKey(p.cardId) || p.fetchedAt.isAfter(tcgMap[p.cardId]!.fetchedAt)) tcgMap[p.cardId] = p;
     }
 
-    final customMap = <String, CustomCardPrice>{}; // <--- NEU
+    // --- NEU: Eigener Preis Map ---
+    final customMap = <String, CustomCardPrice>{};
     for (var p in customPrices) {
       if (!customMap.containsKey(p.cardId) || p.fetchedAt.isAfter(customMap[p.cardId]!.fetchedAt)) customMap[p.cardId] = p;
     }
@@ -128,7 +129,7 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
       if (card != null && !bc.isPlaceholder) {
         final cmPrice = cmMap[card.id];
         final tcgPrice = tcgMap[card.id];
-        final customPrice = customMap[card.id]?.price; // <--- NEU
+        final customPriceRow = customMap[card.id]; // <--- NEU
         
         bool baseIsHolo = !card.hasNormal && card.hasHolo;
         final variant = bc.variant ?? 'Normal';
@@ -137,8 +138,9 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
         final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
         final isReverse = variant == 'Reverse Holo';
         
-        // --- NEU: PREFERENZ CHECKEN GENAU WIE IM BINDER_SERVICE ---
-        final pref = card.preferredPriceSource; 
+        // --- NEU: Die "Bevorzugte Quelle" prüfen ---
+        final pref = card.preferredPriceSource;
+        final customPrice = customPriceRow?.price;
 
         if (pref == 'custom' && customPrice != null && customPrice > 0) {
             price = customPrice;
@@ -150,22 +152,17 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
         } 
         else {
             if (card.hasFirstEdition) {
-              if (isHolo) {
-                price = isFirstEd ? (cmPrice?.trend ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
-              } else {
-                price = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
-              }
-            } 
-            else if (isReverse) {
-              price = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? 0.0;
+               if (isHolo) price = isFirstEd ? (cmPrice?.trend ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
+               else price = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
+            } else if (isReverse) {
+               price = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? 0.0;
             } else if (isHolo && !baseIsHolo) {
-              price = cmPrice?.trendHolo ?? 0.0;
+               price = cmPrice?.trendHolo ?? 0.0;
             } else {
-              price = cmPrice?.trend ?? 0.0;
+               price = cmPrice?.trend ?? 0.0;
             }
         }
         
-        // Fallback
         if (price == 0.0) price = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? customPrice ?? 0.0;
       }
 

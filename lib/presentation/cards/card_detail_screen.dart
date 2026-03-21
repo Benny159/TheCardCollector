@@ -16,6 +16,7 @@ import '../inventory/inventory_bottom_sheet.dart';
 import '../search/card_search_screen.dart';
 import '../sets/set_detail_screen.dart';
 import '../inventory/assign_to_binder_sheet.dart';
+import '../binders/binder_list_screen.dart';
 import 'price_history_chart.dart'; 
 
 // --- PROVIDER ---
@@ -62,8 +63,23 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   void initState() {
     super.initState();
     _currentPreferredSource = widget.card.preferredPriceSource;
-    _currentCustomPrice = widget.card.customPrice; // Holt den anfänglichen Preis
+    _currentCustomPrice = widget.card.customPrice; 
     _customPriceController = TextEditingController();
+    
+    _loadLatestCustomPrice();
+  }
+
+  Future<void> _loadLatestCustomPrice() async {
+    final db = ref.read(databaseProvider);
+    final latest = await (db.select(db.customCardPrices)
+      ..where((t) => t.cardId.equals(widget.card.id))
+      ..orderBy([(t) => drift.OrderingTerm(expression: t.fetchedAt, mode: drift.OrderingMode.desc)])
+      ..limit(1)
+    ).getSingleOrNull();
+    
+    if (latest != null && mounted) {
+      setState(() => _currentCustomPrice = latest.price);
+    }
   }
 
   @override
@@ -75,7 +91,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   Future<void> _forceRefresh() async {
     await Future.delayed(const Duration(milliseconds: 300));
     
-    // --- SICHERHEITS-CHECK ---
     if (!mounted) return;
 
     ref.invalidate(cardBindersProvider(widget.card.id));
@@ -83,36 +98,31 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     ref.invalidate(cardsForSetProvider(widget.card.setId));
     ref.invalidate(setStatsProvider(widget.card.setId));
     ref.invalidate(inventoryProvider); 
-    createPortfolioSnapshot(ref);
 
     setState(() {
       _refreshId++; 
     });
   }
 
-  // --- NEU: Aktualisiert Quelle UND rechnet alle Binder neu durch! ---
   Future<void> _updatePreferredSource(String source) async {
     setState(() => _currentPreferredSource = source);
     final dbInst = ref.read(databaseProvider);
     
-    // 1. In Datenbank speichern
+    // 1. In DB speichern
     await (dbInst.update(dbInst.cards)..where((t) => t.id.equals(widget.card.id)))
         .write(CardsCompanion(preferredPriceSource: drift.Value(source)));
     
-    // 2. WICHTIG: Alle Binder-Werte neu berechnen!
-    await BinderService(dbInst).recalculateAllBinders();
+    // 2. NUR betroffene Binder neu berechnen (blitzschnell!)
+    await BinderService(dbInst).recalculateBindersForCard(widget.card.id);
     
-    // --- SICHERHEITS-CHECK ---
     if (!mounted) return;
     
-    // 3. Provider aktualisieren
+    // 3. UI updaten
     ref.invalidate(cardPriceHistoryProvider(widget.card.id));
     ref.invalidate(searchResultsProvider);
     ref.invalidate(inventoryProvider);
-    ref.invalidate(cardsForSetProvider(widget.card.setId));
-    createPortfolioSnapshot(ref); 
     
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Preisquelle für Berechnungen aktualisiert!"), duration: Duration(seconds: 1)));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Preisquelle aktualisiert!"), duration: Duration(seconds: 1)));
   }
 
   @override
@@ -532,15 +542,14 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     );
   }
 
-  // --- NEU: EIGENER PREIS SPEICHER LOGIK ---
-Future<void> _saveCustomPrice(String value, WidgetRef ref) async {
+  Future<void> _saveCustomPrice(String value, WidgetRef ref) async {
     if (value.isEmpty) return;
     
     final double? parsed = double.tryParse(value.replaceAll(',', '.'));
     if (parsed != null && parsed >= 0) {
       final dbInst = ref.read(databaseProvider);
       
-      // 1. Neuen Preis in die Historie einfügen
+      // 1. Echten Preis eintragen
       await dbInst.into(dbInst.customCardPrices).insert(
         CustomCardPricesCompanion.insert(
           cardId: widget.card.id,
@@ -549,38 +558,77 @@ Future<void> _saveCustomPrice(String value, WidgetRef ref) async {
         )
       );
 
-      // 2. DAS IST DER FIX: Ein Update auf der Haupt-Karte erzwingen!
-      // Das teilt der Datenbank und allen Riverpod-Streams mit, dass sich die Karte 
-      // geändert hat. Die vorherige Seite lädt dadurch neu und reicht beim 
-      // nächsten Klick die aktuellen Daten rein.
-      await (dbInst.update(dbInst.cards)..where((t) => t.id.equals(widget.card.id)))
-          .write(const CardsCompanion(preferredPriceSource: drift.Value('custom')));
-
-      setState(() {
-        _currentCustomPrice = parsed;
-        _currentPreferredSource = 'custom';
-      });
+      setState(() => _currentCustomPrice = parsed);
       _customPriceController.clear();
       FocusScope.of(context).unfocus(); 
       
-      // 3. Binder Werte anpassen
-      await BinderService(dbInst).recalculateAllBinders();
-      
-      // --- SICHERHEITS-CHECK ---
-      if (!mounted) return;
-      
-      // 4. Das zwingt das Diagramm sich exakt JETZT neu zu zeichnen
-      ref.invalidate(cardPriceHistoryProvider(widget.card.id));
-      
-      ref.invalidate(searchResultsProvider);
-      ref.invalidate(cardsForSetProvider(widget.card.setId));
-      
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Eigener Preis gespeichert!")));
+      await (dbInst.update(dbInst.cards)..where((t) => t.id.equals(widget.card.id)))
+          .write(CardsCompanion(preferredPriceSource: drift.Value(_currentPreferredSource)));
+
+      if (_currentPreferredSource != 'custom') {
+          await _updatePreferredSource('custom'); 
+      } else {
+          // Jetzt geht die Berechnung in Millisekunden!
+          await BinderService(dbInst).recalculateBindersForCard(widget.card.id);
+          
+          if (!mounted) return;
+          
+          ref.invalidate(cardPriceHistoryProvider(widget.card.id));
+          ref.invalidate(searchResultsProvider);
+          ref.invalidate(inventoryProvider);
+          
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Eigener Preis gespeichert!")));
+      }
     }
   }
 
   // --- DIE SAMMLUNGS-BOX ---
 
+// --- NEU: BERECHNET DEN WERT JEDER EINZELNEN KARTE IM INVENTAR ---
+  double _calculateItemPrice(UserCard item) {
+    // 1. Spezifischer Preis der physischen Karte (überschreibt ALLES)
+    if (item.customPrice != null && item.customPrice! > 0) {
+      return item.customPrice!;
+    }
+
+    // 2. Ansonsten: Fallback auf das globale System!
+    double price = 0.0;
+    final cmPrice = widget.card.cardmarket;
+    final tcgPrice = widget.card.tcgplayer;
+    bool baseIsHolo = !widget.card.hasNormal && widget.card.hasHolo;
+    final variant = item.variant;
+
+    final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
+    final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
+    final isReverse = variant == 'Reverse Holo';
+
+    final pref = _currentPreferredSource;
+
+    if (pref == 'custom' && _currentCustomPrice != null && _currentCustomPrice! > 0) {
+      price = _currentCustomPrice!;
+    } else if (pref == 'tcgplayer') {
+      if (isReverse) price = tcgPrice?.prices?.reverseHolofoil?.market ?? 0.0;
+      else if (isHolo) price = tcgPrice?.prices?.holofoil?.market ?? 0.0;
+      else price = tcgPrice?.prices?.normal?.market ?? 0.0;
+    } else {
+      if (widget.card.hasFirstEdition) {
+         if (isHolo) price = isFirstEd ? (cmPrice?.trendPrice ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
+         else price = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trendPrice ?? 0.0);
+      } else if (isReverse) {
+         price = cmPrice?.reverseHoloTrend ?? cmPrice?.trendHolo ?? 0.0;
+      } else if (isHolo && !baseIsHolo) {
+         price = cmPrice?.trendHolo ?? 0.0;
+      } else {
+         price = cmPrice?.trendPrice ?? 0.0;
+      }
+    }
+
+    if (price == 0.0) price = (isHolo ? tcgPrice?.prices?.holofoil?.market : tcgPrice?.prices?.normal?.market) ?? cmPrice?.trendPrice ?? _currentCustomPrice ?? 0.0;
+
+    return price;
+  }
+
+  // --- DIE NEUE SAMMLUNGS-TABELLE ---
   Widget _buildCollectionBox(BuildContext context, WidgetRef ref, List<UserCard> items) {
     if (items.isEmpty) {
       return Container(
@@ -591,6 +639,12 @@ Future<void> _saveCustomPrice(String value, WidgetRef ref) async {
     }
     
     final totalCount = items.fold(0, (sum, item) => sum + item.quantity);
+    
+    // Berechne den Gesamtwert des Inventars für diese Karte!
+    double inventoryTotalValue = 0.0;
+    for (var item in items) {
+      inventoryTotalValue += (_calculateItemPrice(item) * item.quantity);
+    }
     
     return Container(
       padding: const EdgeInsets.all(10),
@@ -610,8 +664,16 @@ Future<void> _saveCustomPrice(String value, WidgetRef ref) async {
                 child: Row(
                   children: [
                     const Icon(Icons.inventory_2_rounded, color: Colors.green, size: 14),
-                    const SizedBox(width: 4),
-                    Expanded(child: Text("Besitz: $totalCount", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green), overflow: TextOverflow.ellipsis)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Besitz: $totalCount", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green), overflow: TextOverflow.ellipsis),
+                          Text("Wert: ${inventoryTotalValue.toStringAsFixed(2)} €", style: TextStyle(fontSize: 10, color: Colors.green[800], fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -628,12 +690,9 @@ Future<void> _saveCustomPrice(String value, WidgetRef ref) async {
                       );
                     },
                     child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.blueGrey.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6)
-                      ),
-                      child: const Icon(Icons.move_to_inbox, size: 14, color: Colors.blueGrey),
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(color: Colors.blueGrey.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                      child: const Icon(Icons.move_to_inbox, size: 16, color: Colors.blueGrey),
                     ),
                   ),
                 ),
@@ -642,37 +701,84 @@ Future<void> _saveCustomPrice(String value, WidgetRef ref) async {
           const Divider(color: Colors.black12, height: 16),
           
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 120), 
+            constraints: const BoxConstraints(maxHeight: 180), 
             child: RawScrollbar(
               thumbColor: Colors.green.withOpacity(0.4),
               radius: const Radius.circular(4),
               thickness: 3,
               child: SingleChildScrollView(
                 child: Column(
-                  children: items.map((item) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2.0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                  children: items.map((item) {
+                    final itemPrice = _calculateItemPrice(item);
+                    final hasSpecificPrice = item.customPrice != null && item.customPrice! > 0;
+                    
+                    String details = "${item.condition} • ${item.language}";
+                    if (item.gradingCompany != null && item.gradingCompany != 'Kein Grading') {
+                       details += " • ${item.gradingCompany} ${item.gradingScore ?? ''}";
+                    }
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 6.0),
+                      padding: const EdgeInsets.all(6.0),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        border: Border.all(color: Colors.grey[200]!),
+                        borderRadius: BorderRadius.circular(8)
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text("${item.quantity}x ${item.variant}", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11), overflow: TextOverflow.ellipsis),
+                                Text(details, style: TextStyle(fontSize: 9, color: item.gradingCompany != null ? Colors.orange[800] : Colors.black54, fontWeight: item.gradingCompany != null ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis),
+                              ],
+                            ),
+                          ),
+                          
+                          // Preis-Anzeige
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Text("${item.quantity}x ${item.variant}", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11), overflow: TextOverflow.ellipsis),
-                              Text("${item.condition} • ${item.language}", style: const TextStyle(fontSize: 9, color: Colors.black54), overflow: TextOverflow.ellipsis),
+                              Row(
+                                children: [
+                                  if (hasSpecificPrice) const Icon(Icons.star, color: Colors.amber, size: 10),
+                                  if (hasSpecificPrice) const SizedBox(width: 2),
+                                  Text("${itemPrice.toStringAsFixed(2)} €", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: hasSpecificPrice ? Colors.amber[800] : Colors.black87)),
+                                ],
+                              ),
+                              if (item.quantity > 1) 
+                                Text("Gesamt: ${(itemPrice * item.quantity).toStringAsFixed(2)} €", style: const TextStyle(fontSize: 8, color: Colors.grey)),
                             ],
                           ),
-                        ),
-                        GestureDetector(
-                          onTap: () => _decreaseOrDeleteItem(context, ref, item),
-                          child: const Padding(
-                            padding: EdgeInsets.only(left: 4.0, right: 8.0),
-                            child: Icon(Icons.remove_circle_outline, color: Colors.red, size: 16),
+                          const SizedBox(width: 8),
+
+                          // Bearbeiten
+                          GestureDetector(
+                            onTap: () => _editUserCard(context, ref, item),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                              child: const Icon(Icons.edit, color: Colors.blue, size: 14),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  )).toList(),
+                          const SizedBox(width: 6),
+                          
+                          // Löschen
+                          GestureDetector(
+                            onTap: () => _decreaseOrDeleteItem(context, ref, item),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                              child: const Icon(Icons.delete_outline, color: Colors.red, size: 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
                 ),
               ),
             ),
@@ -680,6 +786,163 @@ Future<void> _saveCustomPrice(String value, WidgetRef ref) async {
           
           BinderLocationWidget(cardId: widget.card.id),
         ],
+      ),
+    );
+  }
+
+  // --- NEU: ALLES BEARBEITEN DIALOG ---
+  Future<void> _editUserCard(BuildContext context, WidgetRef ref, UserCard item) async {
+    final priceController = TextEditingController(text: item.customPrice?.toString() ?? '');
+    final scoreController = TextEditingController(text: item.gradingScore ?? '');
+    
+    String selectedCompany = item.gradingCompany ?? 'Kein Grading';
+    String selectedCond = item.condition;
+    String selectedLang = item.language;
+    String selectedVariant = item.variant;
+
+    // Standard-Listen
+    List<String> companies = ['Kein Grading', 'PSA', 'Beckett (BGS)', 'CGC', 'AP', 'PCA', 'GSG', 'EGS'];
+    List<String> conditions = ['Mint', 'Near Mint', 'Excellent', 'Good', 'Light Played', 'Played', 'Poor', 'NM', 'LP', 'EX'];
+    List<String> languages = ['Englisch', 'Deutsch', 'Japanisch', 'Französisch', 'Italienisch', 'Spanisch', 'Koreanisch'];
+    
+    // --- DER FIX: Dynamisches Hinzufügen fehlender Werte aus der Datenbank! ---
+    if (!companies.contains(selectedCompany)) companies.add(selectedCompany);
+    if (!conditions.contains(selectedCond)) conditions.add(selectedCond);
+    if (!languages.contains(selectedLang)) languages.add(selectedLang);
+
+    // Varianten dynamisch bauen
+    List<String> validVariants = [];
+    if (widget.card.hasNormal) validVariants.add('Normal');
+    if (widget.card.hasHolo) validVariants.add('Holo');
+    if (widget.card.hasReverse) validVariants.add('Reverse Holo');
+    if (widget.card.hasFirstEdition) validVariants.add('1st Edition');
+    if (validVariants.isEmpty) validVariants.add('Normal');
+    if (!validVariants.contains(selectedVariant)) validVariants.add(selectedVariant);
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: const Text("Inventar-Eintrag bearbeiten", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  
+                  // 1. KARTE EIGENSCHAFTEN
+                  const Text("Kartendetails", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: selectedVariant,
+                    decoration: InputDecoration(labelText: "Variante", border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
+                    items: validVariants.map((v) => DropdownMenuItem(value: v, child: Text(v, style: const TextStyle(fontSize: 13)))).toList(),
+                    onChanged: (val) => setStateDialog(() => selectedVariant = val!),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedLang,
+                          decoration: InputDecoration(labelText: "Sprache", border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
+                          items: languages.map((l) => DropdownMenuItem(value: l, child: Text(l, style: const TextStyle(fontSize: 12)))).toList(),
+                          onChanged: (val) => setStateDialog(() => selectedLang = val!),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedCond,
+                          decoration: InputDecoration(labelText: "Zustand", border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
+                          items: conditions.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12)))).toList(),
+                          onChanged: (val) => setStateDialog(() => selectedCond = val!),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  
+                  // 2. GRADING
+                  const Text("Grading (Optional)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: selectedCompany,
+                    decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
+                    items: companies.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13)))).toList(),
+                    onChanged: (val) => setStateDialog(() => selectedCompany = val!),
+                  ),
+                  const SizedBox(height: 10),
+                  if (selectedCompany != 'Kein Grading')
+                    TextField(
+                      controller: scoreController,
+                      decoration: InputDecoration(labelText: "Bewertung (z.B. 10, 9.5, GEM MT)", border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
+                    ),
+                  if (selectedCompany != 'Kein Grading') const SizedBox(height: 16),
+                  
+                  if (selectedCompany == 'Kein Grading') const SizedBox(height: 6),
+                  const Divider(),
+                  const SizedBox(height: 8),
+
+                  // 3. SPEZIFISCHER PREIS
+                  const Text("Individueller Wert (Optional)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.amber)),
+                  const SizedBox(height: 4),
+                  const Text("Überschreibt alle globalen Berechnungen für diese spezifische Karte.", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: priceController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: "Spezifischer Wert (€)",
+                      hintText: "z.B. 15.50",
+                      prefixIcon: const Icon(Icons.euro, size: 16),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Abbrechen")),
+              FilledButton(
+                onPressed: () async {
+                  final db = ref.read(databaseProvider);
+                  double? newPrice = double.tryParse(priceController.text.replaceAll(',', '.'));
+                  
+                  String? comp = selectedCompany == 'Kein Grading' ? null : selectedCompany;
+                  String? score = comp != null ? scoreController.text.trim() : null;
+
+                  await (db.update(db.userCards)..where((t) => t.id.equals(item.id))).write(
+                    UserCardsCompanion(
+                      variant: drift.Value(selectedVariant),
+                      language: drift.Value(selectedLang),
+                      condition: drift.Value(selectedCond),
+                      customPrice: drift.Value(newPrice),
+                      gradingCompany: drift.Value(comp),
+                      gradingScore: drift.Value(score),
+                    )
+                  );
+
+                  // Falls diese Karte in Ordnern liegt, updaten wir diese Ordner sofort im Hintergrund!
+                  BinderService(db).recalculateBindersForCard(widget.card.id);
+
+                  if (mounted) {
+                    ref.invalidate(cardInventoryProvider(widget.card.id));
+                    ref.invalidate(inventoryProvider); 
+                    Navigator.pop(ctx);
+                  }
+                },
+                child: const Text("Speichern"),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

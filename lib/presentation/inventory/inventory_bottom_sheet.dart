@@ -305,11 +305,17 @@ Future<void> _saveToInventory() async {
     final selectedBinderId = ref.read(lastSelectedBinderProvider);
     
     try {
+      // --- NEU: Wir fangen die ID der konkreten Karte ein! ---
+      int targetUserCardId;
+
       final existingEntry = await (db.select(db.userCards)
         ..where((tbl) => tbl.cardId.equals(widget.card.id))
         ..where((tbl) => tbl.variant.equals(_variant))
         ..where((tbl) => tbl.condition.equals(_condition))
         ..where((tbl) => tbl.language.equals(_language))
+        // Da wir hier neu hinzufügen, matchen wir nur mit Karten OHNE Sonder-Grading/Preis
+        ..where((tbl) => tbl.customPrice.isNull())
+        ..where((tbl) => tbl.gradingCompany.isNull())
       ).getSingleOrNull();
 
       if (existingEntry != null) {
@@ -317,8 +323,11 @@ Future<void> _saveToInventory() async {
         await (db.update(db.userCards)..where((tbl) => tbl.id.equals(existingEntry.id))).write(
           UserCardsCompanion(quantity: drift.Value(newQuantity)),
         );
+        // Wir nehmen die ID des bereits existierenden Eintrags
+        targetUserCardId = existingEntry.id; 
       } else {
-        await db.into(db.userCards).insert(
+        // insert() gibt uns die flammneue ID direkt zurück!
+        targetUserCardId = await db.into(db.userCards).insert(
           UserCardsCompanion.insert(
             cardId: widget.card.id,
             quantity: drift.Value(_quantity),
@@ -345,7 +354,8 @@ Future<void> _saveToInventory() async {
                return; 
             } else if (targetBinder.rowsPerPage == 0) {
                for (int i = 0; i < _quantity; i++) {
-                 await binderService.addCardToBulkBox(selectedBinderId, widget.card.id, _variant);
+                 // --- FIX: targetUserCardId wird an die Bulk Box übergeben! ---
+                 await binderService.addCardToBulkBox(selectedBinderId, widget.card.id, targetUserCardId, _variant);
                }
                _closeAndShowSuccess("\nund in die Bulk Box geworfen!", false);
                return; 
@@ -371,19 +381,17 @@ Future<void> _saveToInventory() async {
           return coreWords.isNotEmpty ? coreWords : words;
         }
 
-        // --- DER NEUE STRIKTE FORMEN-CHECKER (Verhindert Diebstahl) ---
         bool isFormMismatch(String pLabel) {
            final p = pLabel.toLowerCase();
            
            bool checkMatch(bool Function(String) condition) {
               bool cardHasIt = condition(cardNameEn) || condition(cardNameDe);
               bool placeholderHasIt = condition(p);
-              return cardHasIt != placeholderHasIt; // True, wenn es eine Abweichung gibt!
+              return cardHasIt != placeholderHasIt;
            }
 
            if (checkMatch((t) => t.contains('vmax'))) return true;
            if (checkMatch((t) => t.contains('vstar'))) return true;
-           // Mega ist tricky. Wir checken verschiedene Schreibweisen.
            if (checkMatch((t) => t.contains('mega') || t.startsWith('m ') || t.contains(' m ') || t.contains('m-') || t.contains('-mega'))) return true;
            if (checkMatch((t) => t.contains('primal') || t.contains('proto'))) return true;
            if (checkMatch((t) => t.contains('alola'))) return true;
@@ -393,7 +401,6 @@ Future<void> _saveToInventory() async {
 
            return false;
         }
-        // --------------------------------------------------------------
 
         final cWordsDe = getCoreWords(cardNameDe);
         final cWordsEn = getCoreWords(cardNameEn);
@@ -423,9 +430,7 @@ Future<void> _saveToInventory() async {
           pLabel = pLabel.toLowerCase();
           if (pLabel.isEmpty) return false;
 
-          // --- FIX: Strikter Check auf Megas/VMAX/Regionalformen! ---
           if (isFormMismatch(pLabel)) return false;
-          // ----------------------------------------------------------
           
           final pWords = getCoreWords(pLabel);
           if (pWords.isEmpty) return false;
@@ -461,7 +466,6 @@ Future<void> _saveToInventory() async {
             final slot = info.slot;
             final binder = info.binder;
 
-            // --- PHYSISCHE POSITION BERECHNEN ---
             final page = slot.pageIndex + 1;
             int row = 1;
             int col = 1;
@@ -475,12 +479,10 @@ Future<void> _saveToInventory() async {
             }
 
             final locationText = "${binder.name}\nSeite $page • Zeile $row • Spalte $col";
-            // ------------------------------------
 
             bool? userConfirmed = false;
 
             if (slot.isPlaceholder) {
-              // --- NEU: DIALOG FÜR LEERE SLOTS ---
               if (!mounted) continue;
               userConfirmed = await showDialog<bool>(
                 context: context,
@@ -553,7 +555,6 @@ Future<void> _saveToInventory() async {
                 )
               );
             } else {
-              // --- DIALOG FÜR BELEGTE SLOTS ---
               final oldCard = slot.cardId != null 
                   ? await (db.select(db.cards)..where((tbl) => tbl.id.equals(slot.cardId!))).getSingleOrNull()
                   : null;
@@ -634,7 +635,8 @@ Future<void> _saveToInventory() async {
 
             // Auswertung des Dialogs
             if (userConfirmed == true) {
-              await binderService.fillSlot(slot.id, widget.card.id, variant: _variant);
+              // --- FIX: targetUserCardId wird in den Slot sortiert! ---
+              await binderService.fillSlot(slot.id, widget.card.id, targetUserCardId, variant: _variant);
               slotsFilled++;
               quantityLeft--;
               binderService.recalculateBinderValue(slot.binderId);
