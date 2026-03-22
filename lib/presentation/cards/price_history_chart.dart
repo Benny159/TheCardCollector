@@ -6,19 +6,22 @@ import '../../data/database/app_database.dart';
 enum PriceType { 
   cmTrend, cmTrendHolo, 
   tcgMarket, tcgMarketHolo, tcgMarketReverse,
-  customPrice // <-- NEU
+  customPrice 
 }
 
 class PriceHistoryChart extends StatefulWidget {
   final List<CardMarketPrice> cmHistory;
   final List<TcgPlayerPrice> tcgHistory;
-  final List<CustomCardPrice> customHistory; // <-- NEU
+  final List<CustomCardPrice> customHistory;
+  // --- NEU: Wir übergeben die Inventar-Karten an den Graphen! ---
+  final List<UserCard> userCards; 
 
   const PriceHistoryChart({
     super.key, 
     required this.cmHistory, 
     required this.tcgHistory,
-    required this.customHistory, // <-- NEU
+    required this.customHistory,
+    this.userCards = const [], 
   });
 
   @override
@@ -28,24 +31,32 @@ class PriceHistoryChart extends StatefulWidget {
 class _PriceHistoryChartState extends State<PriceHistoryChart> {
   late PriceType _selectedType;
   int _monthsFilter = 3; 
+  
+  // --- NEU: Checkbox State für die Kauf-Markierungen ---
+  Set<int> _selectedUserCardIds = {};
 
   @override
   void initState() {
     super.initState();
     _determineBestInitialType();
+    // Standardmäßig zeigen wir die Kaufpunkte aller Karten an!
+    _selectedUserCardIds = widget.userCards.map((c) => c.id).toSet();
   }
 
-  // --- NEU: SOFORTIGES UPDATE BEI NEUEM PREIS ---
   @override
   void didUpdateWidget(PriceHistoryChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Wenn ein neuer Custom-Preis dazukam, sofort darauf umschalten!
     if (widget.customHistory.length != oldWidget.customHistory.length) {
       if (widget.customHistory.isNotEmpty) {
-        setState(() {
-          _selectedType = PriceType.customPrice;
-        });
+        setState(() => _selectedType = PriceType.customPrice);
       }
+    }
+    // Wenn neue Karten hinzukommen, Boxen updaten
+    if (widget.userCards.length != oldWidget.userCards.length) {
+      final newIds = widget.userCards.map((c) => c.id).toSet();
+      _selectedUserCardIds.retainAll(newIds); 
+      final addedIds = newIds.difference(oldWidget.userCards.map((c) => c.id).toSet());
+      _selectedUserCardIds.addAll(addedIds);
     }
   }
 
@@ -60,7 +71,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
         return;
       }
     }
-    _selectedType = PriceType.cmTrend; // Fallback
+    _selectedType = PriceType.cmTrend; 
   }
 
   bool _hasData(PriceType type) {
@@ -77,6 +88,14 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
   @override
   Widget build(BuildContext context) {
     final spots = _getSpots();
+
+    // Wir brauchen minX und maxX, damit die neuen Kauf-Linien den Graphen nicht sprengen!
+    double minX = spots.isNotEmpty ? spots.first.x : 0;
+    double maxX = spots.isNotEmpty ? spots.last.x : 0;
+    if (minX == maxX) {
+      minX -= 86400000;
+      maxX += 86400000;
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,9 +126,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 22,
-                      interval: (spots.last.x - spots.first.x) / 3 > 0 
-                                ? (spots.last.x - spots.first.x) / 3 
-                                : 1.0, 
+                      interval: (maxX - minX) / 3 > 0 ? (maxX - minX) / 3 : 1.0, 
                       getTitlesWidget: (value, meta) {
                         final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
                         return Padding(
@@ -121,6 +138,32 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                   ),
                 ),
                 borderData: FlBorderData(show: false),
+                
+                // --- NEU: KAUF-MARKIERUNGEN (Gestrichelte Linie) ---
+                extraLinesData: ExtraLinesData(
+                  verticalLines: widget.userCards
+                      .where((uc) => _selectedUserCardIds.contains(uc.id))
+                      .map((uc) {
+                        final xVal = uc.createdAt.millisecondsSinceEpoch.toDouble();
+                        // Nur einzeichnen, wenn sie im Zeitfilter liegt!
+                        if (xVal < minX || xVal > maxX) return null;
+                        return VerticalLine(
+                          x: xVal,
+                          color: Colors.green.withOpacity(0.6),
+                          strokeWidth: 2,
+                          dashArray: [4, 4],
+                          label: VerticalLineLabel(
+                            show: true,
+                            alignment: Alignment.bottomRight,
+                            padding: const EdgeInsets.only(left: 4, bottom: 4),
+                            style: const TextStyle(fontSize: 8, color: Colors.green, fontWeight: FontWeight.bold),
+                            labelResolver: (line) => "Erworben",
+                          )
+                        );
+                  }).whereType<VerticalLine>().toList(),
+                ),
+                // --------------------------------------------------
+
                 lineBarsData: [
                   LineChartBarData(
                     spots: spots,
@@ -161,33 +204,59 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
         
         const SizedBox(height: 8),
 
-        // FILTER CHIPS
+        // --- NEU: FILTER-CHECKBOXEN FÜR DIE INVENTAR-KARTEN ---
+        if (widget.userCards.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: widget.userCards.map((uc) {
+                  final isSelected = _selectedUserCardIds.contains(uc.id);
+                  String label = "${uc.variant} (${uc.condition})";
+                  if (uc.gradingCompany != null && uc.gradingCompany != 'Kein Grading') {
+                    label += " ${uc.gradingScore ?? ''}".trim();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6.0),
+                    child: FilterChip(
+                      label: Text(label, style: TextStyle(fontSize: 9, color: isSelected ? Colors.white : Colors.black87)),
+                      selected: isSelected,
+                      selectedColor: Colors.green[600],
+                      checkmarkColor: Colors.white,
+                      backgroundColor: Colors.grey[100],
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (val) {
+                        setState(() {
+                          if (val) _selectedUserCardIds.add(uc.id);
+                          else _selectedUserCardIds.remove(uc.id);
+                        });
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        // ------------------------------------------------------
+
+        // FILTER CHIPS (Datenquellen)
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              // --- NEU: Eigener Preis Chip (In Gold!) ---
               if (_hasData(PriceType.customPrice)) _buildTypeChip("Eigener Preis", PriceType.customPrice),
-              
               if (_hasData(PriceType.customPrice) && (_hasAnyCmData() || _hasAnyTcgData()))
                 Container(width: 1, height: 16, color: Colors.grey[300], margin: const EdgeInsets.symmetric(horizontal: 4)),
-
-              // Cardmarket
               if (_hasData(PriceType.cmTrend)) _buildTypeChip("CM Trend", PriceType.cmTrend),
               if (_hasData(PriceType.cmTrendHolo)) _buildTypeChip("CM Holo", PriceType.cmTrendHolo),
-              
-              // Trenner
               if (_hasAnyCmData() && _hasAnyTcgData())
                 Container(width: 1, height: 16, color: Colors.grey[300], margin: const EdgeInsets.symmetric(horizontal: 4)),
-
-              // TCGPlayer
               if (_hasData(PriceType.tcgMarket)) _buildTypeChip("TCG", PriceType.tcgMarket),
               if (_hasData(PriceType.tcgMarketHolo)) _buildTypeChip("TCG Holo", PriceType.tcgMarketHolo),
               if (_hasData(PriceType.tcgMarketReverse)) _buildTypeChip("TCG Rev.", PriceType.tcgMarketReverse),
-
               const SizedBox(width: 12),
-              
-              // Zeitfilter
               _buildTimeChip("1M", 1),
               const SizedBox(width: 4),
               _buildTimeChip("All", 999),
@@ -224,7 +293,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
       if (date.isBefore(cutoffDate)) return;
       
       final dateKey = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
-      dailyValues[dateKey] = val; // Der LETZTE Wert überschreibt den vorherigen am selben Tag
+      dailyValues[dateKey] = val;
     }
 
     if (_selectedType == PriceType.customPrice) {

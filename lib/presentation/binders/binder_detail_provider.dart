@@ -132,14 +132,18 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
                 price = customPrice;
             } 
             else if (pref == 'tcgplayer') {
-                if (isReverse) price = tcgPrice?.reverseMarket ?? 0.0;
-                else if (isHolo) price = tcgPrice?.holoMarket ?? 0.0;
+                if (isReverse) {
+                  price = tcgPrice?.reverseMarket ?? 0.0;
+                } else if (isHolo) price = tcgPrice?.holoMarket ?? 0.0;
                 else price = tcgPrice?.normalMarket ?? 0.0;
             } 
             else {
                 if (card.hasFirstEdition) {
-                   if (isHolo) price = isFirstEd ? (cmPrice?.trend ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
-                   else price = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
+                   if (isHolo) {
+                     price = isFirstEd ? (cmPrice?.trend ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
+                   } else {
+                     price = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
+                   }
                 } else if (isReverse) {
                    price = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? 0.0;
                 } else if (isHolo && !baseIsHolo) {

@@ -90,7 +90,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
           const Text("Welches exakte Exemplar möchtest du einsortieren?", style: TextStyle(fontSize: 12, color: Colors.grey)),
           const SizedBox(height: 4),
           DropdownButtonFormField<UserCard>(
-            value: _selectedCard,
+            initialValue: _selectedCard,
             isExpanded: true,
             isDense: true,
             decoration: InputDecoration(

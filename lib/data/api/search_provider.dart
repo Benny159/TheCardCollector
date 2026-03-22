@@ -398,14 +398,18 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
               singlePrice = apiCard.customPrice!;
           } 
           else if (pref == 'tcgplayer') {
-              if (isReverse) singlePrice = apiCard.tcgplayer?.prices?.reverseHolofoil?.market ?? 0.0;
-              else if (isHolo) singlePrice = apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
+              if (isReverse) {
+                singlePrice = apiCard.tcgplayer?.prices?.reverseHolofoil?.market ?? 0.0;
+              } else if (isHolo) singlePrice = apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
               else singlePrice = apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
           } 
           else {
               if (dbCard.hasFirstEdition) {
-                 if (isHolo) singlePrice = isFirstEd ? (apiCard.cardmarket?.trendPrice ?? 0.0) : (apiCard.cardmarket?.trendHolo ?? 0.0);
-                 else singlePrice = isFirstEd ? (apiCard.cardmarket?.trendHolo ?? 0.0) : (apiCard.cardmarket?.trendPrice ?? 0.0);
+                 if (isHolo) {
+                   singlePrice = isFirstEd ? (apiCard.cardmarket?.trendPrice ?? 0.0) : (apiCard.cardmarket?.trendHolo ?? 0.0);
+                 } else {
+                   singlePrice = isFirstEd ? (apiCard.cardmarket?.trendHolo ?? 0.0) : (apiCard.cardmarket?.trendPrice ?? 0.0);
+                 }
               } else if (isReverse) {
                  singlePrice = apiCard.cardmarket?.reverseHoloTrend ?? apiCard.cardmarket?.trendHolo ?? 0.0;
               } else if (isHolo && !baseIsHolo) {

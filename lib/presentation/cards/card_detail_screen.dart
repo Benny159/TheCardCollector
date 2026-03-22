@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:drift/drift.dart' as drift; 
+import 'package:intl/intl.dart'; // NEU für Datums-Formatierung
 
 import '../../data/api/search_provider.dart';
 import '../../data/api/tcgdex_api_client.dart';
@@ -54,7 +55,6 @@ class CardDetailScreen extends ConsumerStatefulWidget {
 class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   int _refreshId = 0;
   
-  // --- NEU: Lokale Variablen für sofortiges UI Update ---
   late String _currentPreferredSource;
   late TextEditingController _customPriceController;
   double? _currentCustomPrice;
@@ -88,37 +88,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     super.dispose();
   }
 
-  // --- NEU: CARDMARKET & TCGPLAYER LINK GENERATOREN ---
-  void _openCardmarket(ApiCard card) {
-    String baseUrl = card.cardmarket?.url ?? "";
-    
-    if (baseUrl.isNotEmpty) {
-      if (baseUrl.contains('?')) {
-        baseUrl += "&sellerCountry=7&language=3";
-      } else {
-        baseUrl += "?sellerCountry=7&language=3";
-      }
-    } else {
-      final searchName = Uri.encodeComponent(card.name);
-      final setnumber = card.number.isNotEmpty ? " ${card.number}" : "";
-      baseUrl = "https://www.cardmarket.com/de/Pokemon/Products/Singles?searchString=$searchName$setnumber&sellerCountry=7&language=3";
-    }
-    
-    _launchURL(baseUrl);
-  }
-
-  void _openTcgPlayer(ApiCard card) {
-    String baseUrl = card.tcgplayer?.url ?? "";
-    
-    if (baseUrl.isEmpty) {
-      final searchName = Uri.encodeComponent(card.name);
-      final setnumber = card.number.isNotEmpty ? " ${card.number}" : "";
-      baseUrl = "https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&q=$searchName$setnumber";
-    }
-    
-    _launchURL(baseUrl);
-  }
-
   Future<void> _forceRefresh() async {
     await Future.delayed(const Duration(milliseconds: 300));
     
@@ -139,16 +108,13 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     setState(() => _currentPreferredSource = source);
     final dbInst = ref.read(databaseProvider);
     
-    // 1. In DB speichern
     await (dbInst.update(dbInst.cards)..where((t) => t.id.equals(widget.card.id)))
         .write(CardsCompanion(preferredPriceSource: drift.Value(source)));
     
-    // 2. NUR betroffene Binder neu berechnen (blitzschnell!)
     await BinderService(dbInst).recalculateBindersForCard(widget.card.id);
     
     if (!mounted) return;
     
-    // 3. UI updaten
     ref.invalidate(cardPriceHistoryProvider(widget.card.id));
     ref.invalidate(searchResultsProvider);
     ref.invalidate(inventoryProvider);
@@ -207,13 +173,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   
-                  // --- LINKE SPALTE (Karte, Tags & Links) ---
+                  // --- LINKE SPALTE (Karte, Tags) ---
                   Expanded(
                     flex: 4, 
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Bild
                         GestureDetector(
                           onTap: () => _openFullscreenImage(context, displayImage),
                           child: Hero(
@@ -237,7 +202,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // Info-Tags unter dem Bild
                         Wrap(
                           spacing: 6,
                           runSpacing: 6,
@@ -253,6 +217,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                               _buildTag(Icons.star, widget.card.rarity, color: Colors.orange[800]),
                             if (widget.card.number.isNotEmpty)
                               _buildTag(Icons.numbers, "${widget.card.number} / ${widget.card.setPrintedTotal}", color: Colors.purple),
+                            
+                            // Shop Tags
                             _buildTag(
                               Icons.shopping_cart, 
                               "Cardmarket", 
@@ -268,7 +234,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                           ],
                         ),
 
-                        // Flavor Text
                         if (widget.card.flavorTextDe != null) 
                           Padding(
                             padding: const EdgeInsets.only(top: 10), 
@@ -278,70 +243,23 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                               textAlign: TextAlign.center,
                             )
                           ),
-
-                        // Shop Links kompakt nebeneinander
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            if (widget.card.cardmarket?.url.isNotEmpty == true)
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: () => _launchURL(widget.card.cardmarket!.url),
-                                  icon: const Icon(Icons.shopping_cart, size: 12),
-                                  label: const Text("CM", style: TextStyle(fontSize: 10)),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: Colors.blue[800],
-                                    padding: EdgeInsets.zero,
-                                    minimumSize: const Size(0, 32),
-                                  ),
-                                ),
-                              ),
-                            const SizedBox(width: 6),
-                            if (widget.card.tcgplayer?.url.isNotEmpty == true)
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: () => _launchURL(widget.card.tcgplayer!.url),
-                                  icon: const Icon(Icons.open_in_new, size: 12),
-                                  label: const Text("TCG", style: TextStyle(fontSize: 10)),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: Colors.teal[700],
-                                    padding: EdgeInsets.zero,
-                                    minimumSize: const Size(0, 32),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
                       ],
                     ),
                   ),
 
                   const SizedBox(width: 12),
 
-                  // --- RECHTE SPALTE (Preis-Tabellen & Besitz) ---
+                  // --- RECHTE SPALTE (NUR NOCH PREIS-TABELLEN) ---
                   Expanded(
                     flex: 5, 
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        
-                        // 1. EIGENER PREIS TABELLE
                         _buildCustomPriceSection(),
-
-                        // 2. CARDMARKET TABELLE
                         if (widget.card.cardmarket != null) 
                           _buildCardmarketSection(context, widget.card.cardmarket!),
-                        
-                        // 3. TCGPLAYER TABELLE
                         if (widget.card.tcgplayer != null) 
                           _buildTcgPlayerSection(context, widget.card.tcgplayer!),
-                        
-                        // 4. BESITZ BOX
-                        inventoryAsync.when(
-                          data: (items) => _buildCollectionBox(context, ref, items),
-                          loading: () => const SizedBox.shrink(),
-                          error: (err, stack) => Text("Fehler: $err", style: const TextStyle(fontSize: 10)),
-                        ),
                       ],
                     ),
                   ),
@@ -349,10 +267,22 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
               ),
             ),
             
-            // 3. CHART BEREICH (Unten, Volle Breite)
+            // 3. CHART BEREICH (Ganz unten, Volle Breite)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0),
-              child: _buildChartSection(historyAsync),
+              child: _buildChartSection(historyAsync, inventoryAsync),
+            ),
+            
+            const SizedBox(height: 12),
+
+            // 4. BESITZ BOX (Ganz unten positioniert!)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: inventoryAsync.when(
+                data: (items) => _buildCollectionBox(context, ref, items, historyAsync.valueOrNull as Map<String, dynamic>?),
+                loading: () => const SizedBox.shrink(),
+                error: (err, stack) => Text("Fehler: $err", style: const TextStyle(fontSize: 10)),
+              ),
             ),
 
             const SizedBox(height: 80), 
@@ -381,12 +311,41 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         ],
       ),
     );
-
     if (onTap != null) return GestureDetector(onTap: onTap, child: content);
     return content;
   }
 
-  Widget _buildChartSection(AsyncValue historyAsync) {
+  // --- NEU: ZUVERLÄSSIGE SHOP-LINKS (Such-Fallback) ---
+  void _openCardmarket(ApiCard card) {
+    String baseUrl = card.cardmarket?.url ?? "";
+    if (baseUrl.isNotEmpty) {
+      if (baseUrl.contains('?')) {
+        baseUrl += "&sellerCountry=7&language=3";
+      } else {
+        baseUrl += "?sellerCountry=7&language=3";
+      }
+    } else {
+      String fullSearchTerm = card.nameDe != null && card.nameDe!.isNotEmpty ? card.nameDe! : card.name;
+      if (card.number.isNotEmpty) fullSearchTerm += " ${card.number}";
+      final safeQuery = Uri.encodeQueryComponent(fullSearchTerm);
+      baseUrl = "https://www.cardmarket.com/de/Pokemon/Products/Singles?searchString=$safeQuery&sellerCountry=7&language=3";
+    }
+    _launchURL(baseUrl);
+  }
+
+  void _openTcgPlayer(ApiCard card) {
+    String baseUrl = card.tcgplayer?.url ?? "";
+    if (baseUrl.isEmpty) {
+      String fullSearchTerm = card.name;
+      if (card.number.isNotEmpty) fullSearchTerm += " ${card.number}";
+      final safeQuery = Uri.encodeQueryComponent(fullSearchTerm);
+      baseUrl = "https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&q=$safeQuery";
+    }
+    _launchURL(baseUrl);
+  }
+
+  // Diagramm mit Daten verknüpfen
+  Widget _buildChartSection(AsyncValue historyAsync, AsyncValue inventoryAsync) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -409,11 +368,15 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
             boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))],
           ),
           child: historyAsync.when(
-            data: (data) => PriceHistoryChart(
-              cmHistory: (data['cm'] as List).cast<CardMarketPrice>(),
-              tcgHistory: (data['tcg'] as List).cast<TcgPlayerPrice>(),
-              customHistory: (data['custom'] as List).cast<CustomCardPrice>(),
-            ),
+            data: (data) {
+              final userCards = inventoryAsync.valueOrNull ?? [];
+              return PriceHistoryChart(
+                cmHistory: (data['cm'] as List).cast<CardMarketPrice>(),
+                tcgHistory: (data['tcg'] as List).cast<TcgPlayerPrice>(),
+                customHistory: (data['custom'] as List).cast<CustomCardPrice>(),
+                userCards: userCards.cast<UserCard>(), // Inventar-Karten für die Linien!
+              );
+            },
             loading: () => const SizedBox(height: 250, child: Center(child: CircularProgressIndicator())),
             error: (e, s) => const SizedBox(height: 250, child: Center(child: Text("Verlauf nicht verfügbar", style: TextStyle(fontSize: 10)))),
           ),
@@ -439,7 +402,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       ),
       child: Column(
         children: [
-          // Header mit Klick-Funktion, um es auszuwählen
           GestureDetector(
             onTap: () => _updatePreferredSource(sourceKey),
             child: Container(
@@ -479,7 +441,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     );
   }
 
-  // --- DIE NEUE CUSTOM PREIS TABELLE ---
   Widget _buildCustomPriceSection() {
     return _buildPriceSectionContainer(
       context, 
@@ -487,7 +448,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       color: Colors.amber[800]!, 
       sourceKey: 'custom',
       children: [
-        // Wir nutzen hier die lokale Variable, damit das UI SOFORT updatet!
         if (_currentCustomPrice != null && _currentCustomPrice! > 0)
            _priceRow("Aktueller Wert", _currentCustomPrice!),
         
@@ -499,7 +459,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 child: SizedBox(
                   height: 32,
                   child: TextField(
-                    controller: _customPriceController, // <-- Controller verbunden!
+                    controller: _customPriceController, 
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     style: const TextStyle(fontSize: 11),
                     decoration: InputDecoration(
@@ -515,7 +475,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              // --- SPEICHERN BUTTON FÜRS HANDY ---
               FilledButton(
                 style: FilledButton.styleFrom(
                   backgroundColor: Colors.amber[800],
@@ -560,8 +519,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     );
   }
 
-  // --- SET HEADER ---
-
   Widget _buildSetHeader(BuildContext context, ApiSet? set) {
     if (set == null) return const SizedBox.shrink();
     final logo = set.logoUrlDe ?? set.logoUrl;
@@ -587,12 +544,10 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   Future<void> _saveCustomPrice(String value, WidgetRef ref) async {
     if (value.isEmpty) return;
-    
     final double? parsed = double.tryParse(value.replaceAll(',', '.'));
     if (parsed != null && parsed >= 0) {
       final dbInst = ref.read(databaseProvider);
       
-      // 1. Echten Preis eintragen
       await dbInst.into(dbInst.customCardPrices).insert(
         CustomCardPricesCompanion.insert(
           cardId: widget.card.id,
@@ -611,9 +566,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       if (_currentPreferredSource != 'custom') {
           await _updatePreferredSource('custom'); 
       } else {
-          // Jetzt geht die Berechnung in Millisekunden!
           await BinderService(dbInst).recalculateBindersForCard(widget.card.id);
-          
           if (!mounted) return;
           
           ref.invalidate(cardPriceHistoryProvider(widget.card.id));
@@ -627,14 +580,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   // --- DIE SAMMLUNGS-BOX ---
 
-// --- NEU: BERECHNET DEN WERT JEDER EINZELNEN KARTE IM INVENTAR ---
   double _calculateItemPrice(UserCard item) {
-    // 1. Spezifischer Preis der physischen Karte (überschreibt ALLES)
-    if (item.customPrice != null && item.customPrice! > 0) {
-      return item.customPrice!;
-    }
+    if (item.customPrice != null && item.customPrice! > 0) return item.customPrice!;
 
-    // 2. Ansonsten: Fallback auf das globale System!
     double price = 0.0;
     final cmPrice = widget.card.cardmarket;
     final tcgPrice = widget.card.tcgplayer;
@@ -667,12 +615,67 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     }
 
     if (price == 0.0) price = (isHolo ? tcgPrice?.prices?.holofoil?.market : tcgPrice?.prices?.normal?.market) ?? cmPrice?.trendPrice ?? _currentCustomPrice ?? 0.0;
-
     return price;
   }
 
+  // --- NEU: BERECHNET DEN HISTORISCHEN PREIS ZUM ZEITPUNKT DES ERWERBS ---
+  double? _getHistoricalPrice(UserCard item, Map<String, dynamic>? historyData) {
+    if (item.customPrice != null && item.customPrice! > 0) return item.customPrice; 
+    if (historyData == null) return null;
+
+    final pref = _currentPreferredSource;
+    bool baseIsHolo = !widget.card.hasNormal && widget.card.hasHolo;
+    final variant = item.variant;
+    
+    final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
+    final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
+    final isReverse = variant == 'Reverse Holo';
+
+    DateTime targetDate = item.createdAt;
+
+    if (pref == 'custom') {
+      final list = (historyData['custom'] as List).cast<CustomCardPrice>();
+      var closest = list.where((e) => e.fetchedAt.isBefore(targetDate) || e.fetchedAt.isAtSameMomentAs(targetDate)).toList();
+      if (closest.isEmpty) closest = list; 
+      if (closest.isNotEmpty) {
+        closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt));
+        return closest.first.price;
+      }
+    } else if (pref == 'tcgplayer') {
+      final list = (historyData['tcg'] as List).cast<TcgPlayerPrice>();
+      var closest = list.where((e) => e.fetchedAt.isBefore(targetDate) || e.fetchedAt.isAtSameMomentAs(targetDate)).toList();
+      if (closest.isEmpty) closest = list;
+      if (closest.isNotEmpty) {
+        closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt));
+        final p = closest.first;
+        if (isReverse) return p.reverseMarket ?? 0.0;
+        if (isHolo) return p.holoMarket ?? 0.0;
+        return p.normalMarket ?? 0.0;
+      }
+    } else {
+      final list = (historyData['cm'] as List).cast<CardMarketPrice>();
+      var closest = list.where((e) => e.fetchedAt.isBefore(targetDate) || e.fetchedAt.isAtSameMomentAs(targetDate)).toList();
+      if (closest.isEmpty) closest = list;
+      if (closest.isNotEmpty) {
+        closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt));
+        final p = closest.first;
+        if (widget.card.hasFirstEdition) {
+           if (isHolo) return isFirstEd ? (p.trend ?? 0.0) : (p.trendHolo ?? 0.0);
+           else return isFirstEd ? (p.trendHolo ?? 0.0) : (p.trend ?? 0.0);
+        } else if (isReverse) {
+           return p.trendReverse ?? p.trendHolo ?? 0.0;
+        } else if (isHolo && !baseIsHolo) {
+           return p.trendHolo ?? 0.0;
+        } else {
+           return p.trend ?? 0.0;
+        }
+      }
+    }
+    return null;
+  }
+
   // --- DIE NEUE SAMMLUNGS-TABELLE ---
-  Widget _buildCollectionBox(BuildContext context, WidgetRef ref, List<UserCard> items) {
+  Widget _buildCollectionBox(BuildContext context, WidgetRef ref, List<UserCard> items, Map<String, dynamic>? historyData) {
     if (items.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(12),
@@ -682,8 +685,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     }
     
     final totalCount = items.fold(0, (sum, item) => sum + item.quantity);
-    
-    // Berechne den Gesamtwert des Inventars für diese Karte!
     double inventoryTotalValue = 0.0;
     for (var item in items) {
       inventoryTotalValue += (_calculateItemPrice(item) * item.quantity);
@@ -744,7 +745,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
           const Divider(color: Colors.black12, height: 16),
           
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 180), 
+            constraints: const BoxConstraints(maxHeight: 280), // Größer, da jetzt mehr Text (Datum & Rendite) drin steht
             child: RawScrollbar(
               thumbColor: Colors.green.withOpacity(0.4),
               radius: const Radius.circular(4),
@@ -777,6 +778,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                               children: [
                                 Text("${item.quantity}x ${item.variant}", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11), overflow: TextOverflow.ellipsis),
                                 Text(details, style: TextStyle(fontSize: 9, color: item.gradingCompany != null ? Colors.orange[800] : Colors.black54, fontWeight: item.gradingCompany != null ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis),
+                                // --- NEU: ERWORBEN AM ---
+                                const SizedBox(height: 2),
+                                Text("Erworben: ${DateFormat('dd.MM.yyyy').format(item.createdAt)}", style: const TextStyle(fontSize: 8, color: Colors.grey)),
                               ],
                             ),
                           ),
@@ -794,11 +798,31 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                               ),
                               if (item.quantity > 1) 
                                 Text("Gesamt: ${(itemPrice * item.quantity).toStringAsFixed(2)} €", style: const TextStyle(fontSize: 8, color: Colors.grey)),
+                                
+                              // --- NEU: PERFORMANCE / RENDITE ---
+                              Builder(builder: (context) {
+                                final purchasePrice = _getHistoricalPrice(item, historyData);
+                                // Wenn ein fester Joker-Preis existiert, ändert er sich historisch nicht, daher Performance ausblenden.
+                                if (purchasePrice == null || purchasePrice == 0 || hasSpecificPrice) return const SizedBox.shrink(); 
+                                
+                                final change = itemPrice - purchasePrice;
+                                final percent = (change / purchasePrice) * 100;
+                                final isPositive = change >= 0;
+                                final color = isPositive ? Colors.green : Colors.red;
+                                final sign = isPositive ? "+" : "";
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 2.0),
+                                  child: Text(
+                                    "$sign${change.toStringAsFixed(2)}€ ($sign${percent.toStringAsFixed(1)}%)", 
+                                    style: TextStyle(fontSize: 8, color: color, fontWeight: FontWeight.bold)
+                                  ),
+                                );
+                              }),
                             ],
                           ),
                           const SizedBox(width: 8),
 
-                          // Bearbeiten
                           GestureDetector(
                             onTap: () => _editUserCard(context, ref, item),
                             child: Container(
@@ -809,7 +833,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                           ),
                           const SizedBox(width: 6),
                           
-                          // Löschen
                           GestureDetector(
                             onTap: () => _decreaseOrDeleteItem(context, ref, item),
                             child: Container(
@@ -833,7 +856,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     );
   }
 
-  // --- NEU: ALLES BEARBEITEN DIALOG ---
+  // --- NEU: ALLES BEARBEITEN DIALOG (inkl. Kaufdatum) ---
   Future<void> _editUserCard(BuildContext context, WidgetRef ref, UserCard item) async {
     final priceController = TextEditingController(text: item.customPrice?.toString() ?? '');
     final scoreController = TextEditingController(text: item.gradingScore ?? '');
@@ -842,18 +865,18 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     String selectedCond = item.condition;
     String selectedLang = item.language;
     String selectedVariant = item.variant;
+    
+    // --- NEU: Variable für das Kaufdatum ---
+    DateTime selectedDate = item.createdAt;
 
-    // Standard-Listen
     List<String> companies = ['Kein Grading', 'PSA', 'Beckett (BGS)', 'CGC', 'AP', 'PCA', 'GSG', 'EGS'];
-    List<String> conditions = ['Mint', 'Near Mint', 'Excellent', 'Good', 'Light Played', 'Played', 'Poor', 'NM', 'LP', 'EX'];
+    List<String> conditions = ['Mint' , 'Near Mint' , 'Excellent' , 'Good' , 'Light Played' , 'Played' , 'Poor'];
     List<String> languages = ['Englisch', 'Deutsch', 'Japanisch', 'Französisch', 'Italienisch', 'Spanisch', 'Koreanisch'];
     
-    // --- DER FIX: Dynamisches Hinzufügen fehlender Werte aus der Datenbank! ---
     if (!companies.contains(selectedCompany)) companies.add(selectedCompany);
     if (!conditions.contains(selectedCond)) conditions.add(selectedCond);
     if (!languages.contains(selectedLang)) languages.add(selectedLang);
 
-    // Varianten dynamisch bauen
     List<String> validVariants = [];
     if (widget.card.hasNormal) validVariants.add('Normal');
     if (widget.card.hasHolo) validVariants.add('Holo');
@@ -875,7 +898,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   
-                  // 1. KARTE EIGENSCHAFTEN
                   const Text("Kartendetails", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue)),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
@@ -906,11 +928,55 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 10),
+                  
+                  // --- NEU: DATUM AUSWÄHLEN ---
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(1996), // Niemand hat Pokemon-Karten vor 1996 gekauft ;)
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) {
+                        // Da die Uhrzeit beim reinen Datum auf 00:00 gesetzt wird, 
+                        // behalten wir die aktuelle Uhrzeit bei, um Datenbank-Konflikte zu vermeiden
+                        final newDateTime = DateTime(
+                          picked.year, picked.month, picked.day, 
+                          selectedDate.hour, selectedDate.minute, selectedDate.second
+                        );
+                        setStateDialog(() => selectedDate = newDateTime);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[400]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text("Erworben am", style: TextStyle(fontSize: 9, color: Colors.grey)),
+                              const SizedBox(height: 2),
+                              Text(DateFormat('dd.MM.yyyy').format(selectedDate), style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                            ],
+                          ),
+                          const Icon(Icons.calendar_today, size: 18, color: Colors.blue),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // ----------------------------
+
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 8),
                   
-                  // 2. GRADING
                   const Text("Grading (Optional)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange)),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
@@ -931,7 +997,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                   const Divider(),
                   const SizedBox(height: 8),
 
-                  // 3. SPEZIFISCHER PREIS
                   const Text("Individueller Wert (Optional)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.amber)),
                   const SizedBox(height: 4),
                   const Text("Überschreibt alle globalen Berechnungen für diese spezifische Karte.", style: TextStyle(fontSize: 10, color: Colors.grey)),
@@ -969,10 +1034,10 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                       customPrice: drift.Value(newPrice),
                       gradingCompany: drift.Value(comp),
                       gradingScore: drift.Value(score),
+                      createdAt: drift.Value(selectedDate), // <-- Speichert das neue Datum!
                     )
                   );
 
-                  // Falls diese Karte in Ordnern liegt, updaten wir diese Ordner sofort im Hintergrund!
                   BinderService(db).recalculateBindersForCard(widget.card.id);
 
                   if (mounted) {
@@ -989,8 +1054,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       ),
     );
   }
-
-  // --- DIE ALTE LOGIK FÜR LÖSCHEN ETC. ---
 
   Future<void> _decreaseOrDeleteItem(BuildContext context, WidgetRef ref, UserCard item) async {
     final db = ref.read(databaseProvider);
@@ -1115,7 +1178,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   }
 }
 
-// --- WIDGET FÜR BINDER LOCATION ---
 class BinderLocationWidget extends ConsumerWidget {
   final String cardId;
   const BinderLocationWidget({required this.cardId, super.key});

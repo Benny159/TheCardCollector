@@ -623,14 +623,18 @@ class BinderService {
               singlePrice = customPrice;
           } 
           else if (pref == 'tcgplayer') {
-              if (isReverse) singlePrice = tcgPrice?.reverseMarket ?? 0.0;
-              else if (isHolo) singlePrice = tcgPrice?.holoMarket ?? 0.0;
+              if (isReverse) {
+                singlePrice = tcgPrice?.reverseMarket ?? 0.0;
+              } else if (isHolo) singlePrice = tcgPrice?.holoMarket ?? 0.0;
               else singlePrice = tcgPrice?.normalMarket ?? 0.0;
           } 
           else {
               if (card.hasFirstEdition) {
-                 if (isHolo) singlePrice = isFirstEd ? (cmPrice?.trend ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
-                 else singlePrice = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
+                 if (isHolo) {
+                   singlePrice = isFirstEd ? (cmPrice?.trend ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
+                 } else {
+                   singlePrice = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
+                 }
               } else if (isReverse) {
                  singlePrice = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? 0.0;
               } else if (isHolo && !baseIsHolo) {

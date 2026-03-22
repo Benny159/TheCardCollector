@@ -5,7 +5,7 @@ void main() async {
   print('=== 🚀 POKEMONTCG.IO API RAW DATA CHECK ===\n');
 
   // Wir testen das Base Set Glurak (ID: base1-4)
-  final cardId = 'base1-4'; 
+  const cardId = 'base1-4'; 
   final url = Uri.parse('https://api.pokemontcg.io/v2/cards/$cardId');
 
   print('Lade Daten von: $url');

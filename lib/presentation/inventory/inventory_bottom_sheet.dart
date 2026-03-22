@@ -38,7 +38,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
   List<String> _availableVariants = [];
   late String _variant; 
 
-  final List<String> _conditions = ['NM', 'LP', 'MP', 'HP', 'DMG'];
+  final List<String> _conditions = ['Mint' , 'Near Mint' , 'Excellent' , 'Good' , 'Light Played' , 'Played' , 'Poor'];
   final List<String> _languages = ['Deutsch', 'Englisch', 'Japanisch'];
 
   @override
