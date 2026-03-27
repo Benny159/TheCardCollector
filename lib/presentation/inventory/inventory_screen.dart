@@ -108,8 +108,6 @@ class InventoryScreen extends ConsumerWidget {
             switch (sortMode) {
               case InventorySort.value:
                 return b.totalValue.compareTo(a.totalValue);
-              case InventorySort.performance:
-                return b.performance.compareTo(a.performance);
               case InventorySort.name:
                 return (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
               case InventorySort.rarity:
@@ -278,7 +276,6 @@ class InventoryScreen extends ConsumerWidget {
             style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500, fontSize: 13),
             items: const [
               DropdownMenuItem(value: InventorySort.value, child: Text("Wert")),
-              DropdownMenuItem(value: InventorySort.performance, child: Text("Wertsteigerung")),
               DropdownMenuItem(value: InventorySort.name, child: Text("Name")),
               DropdownMenuItem(value: InventorySort.rarity, child: Text("Seltenheit")),
               DropdownMenuItem(value: InventorySort.type, child: Text("Element")),

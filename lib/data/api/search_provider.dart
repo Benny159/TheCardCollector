@@ -319,7 +319,7 @@ class InventoryItem {
   });
 }
 // --- NEU: "performance" (Rendite) als Sortierkriterium hinzugefügt ---
-enum InventorySort { value, name, rarity, type, performance }
+enum InventorySort { value, name, rarity, type }
 final inventorySortProvider = StateProvider<InventorySort>((ref) => InventorySort.value);
 
 final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
@@ -556,6 +556,40 @@ final top10GainersProvider = Provider<List<InventoryItem>>((ref) {
 
       var sorted = mergedMap.values.where((item) => item.performance > 0).toList();
       sorted.sort((a, b) => b.performance.compareTo(a.performance));
+      return sorted.take(10).toList();
+    },
+    loading: () => [],
+    error: (_,__) => [],
+  );
+});
+
+// --- NEU: TOP 10 VERLIERER (Nach Rendite sortiert, schlechteste zuerst) ---
+final top10LosersProvider = Provider<List<InventoryItem>>((ref) {
+  final allItemsAsync = ref.watch(inventoryProvider);
+  return allItemsAsync.when(
+    data: (items) {
+      final Map<String, InventoryItem> mergedMap = {};
+      for (final item in items) {
+        final key = "${item.card.id}_${item.variant}";
+        if (mergedMap.containsKey(key)) {
+          final existing = mergedMap[key]!;
+          mergedMap[key] = InventoryItem(
+            card: existing.card, set: existing.set,
+            quantity: existing.quantity + item.quantity,
+            variant: existing.variant,
+            totalValue: existing.totalValue + item.totalValue,
+            binderName: null, userCard: existing.userCard,
+            performance: existing.performance + item.performance, // Rendite summieren!
+          );
+        } else {
+          mergedMap[key] = item;
+        }
+      }
+
+      // Nur Karten, die im Minus sind!
+      var sorted = mergedMap.values.where((item) => item.performance < 0).toList();
+      // Sortieren aufsteigend (die größten Minus-Beträge ganz nach vorne)
+      sorted.sort((a, b) => a.performance.compareTo(b.performance));
       return sorted.take(10).toList();
     },
     loading: () => [],

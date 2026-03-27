@@ -273,7 +273,8 @@ class _DashboardView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final historyAsync = ref.watch(portfolioHistoryProvider);
     final top10Cards = ref.watch(top10CardsProvider); 
-    final top10Gainers = ref.watch(top10GainersProvider); // <-- NEU
+    final top10Gainers = ref.watch(top10GainersProvider);
+    final top10Losers = ref.watch(top10LosersProvider); // <-- NEU
     final inventoryAsync = ref.watch(inventoryProvider);
     
     final double totalValue = inventoryAsync.valueOrNull?.fold(0.0, (sum, i) => sum! + i.totalValue) ?? 0.0;
@@ -297,7 +298,7 @@ class _DashboardView extends ConsumerWidget {
           ),
           const SizedBox(height: 32),
           
-          // 1. LISTE: Top 10 Gesamtwert
+          // --- 1. LISTE: Top 10 Gesamtwert ---
           const Text("Deine Top 10 (Gesamtwert)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           if (top10Cards.isEmpty)
@@ -311,7 +312,7 @@ class _DashboardView extends ConsumerWidget {
             
           const SizedBox(height: 32),
           
-          // --- NEUE LISTE: Top 10 Gewinner ---
+          // --- 2. LISTE: Top 10 Gewinner ---
           const Text("Top Gewinner (Seit Kauf)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
           const SizedBox(height: 12),
           if (top10Gainers.isEmpty)
@@ -323,13 +324,27 @@ class _DashboardView extends ConsumerWidget {
           else
             _buildTop10List(top10Gainers, context, showPerformance: true),
             
+          const SizedBox(height: 32),
+
+          // --- 3. LISTE: Top 10 Verlierer ---
+          Text("Größte Verluste (Seit Kauf)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red[700])),
+          const SizedBox(height: 12),
+          if (top10Losers.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20), width: double.infinity,
+              decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.red[200]!)),
+              child: Center(child: Text("Juhu! Keine Karten mit Wertverlust.", style: TextStyle(color: Colors.red[700]))),
+            )
+          else
+            _buildTop10List(top10Losers, context, showPerformance: true),
+
           const SizedBox(height: 40),
         ],
       ),
     );
   }
 
-  // Restlicher Header-Code bleibt gleich...
+  // ... (Hier bleibt _buildPortfolioHeader, _isSameDay, _buildChartFilterButtons gleich) ...
   Widget _buildPortfolioHeader(BuildContext context, double currentTotal, AsyncValue<List<db.PortfolioHistoryData>> historyAsync) {
     double change = 0.0;
     double percent = 0.0;
@@ -419,7 +434,7 @@ class _DashboardView extends ConsumerWidget {
     );
   }
 
-  // --- ANGEPASST: Zeigt entweder den Gesamtwert oder den Grünen Gewinn an! ---
+  // --- DIE LISTEN-BAU-FUNKTION (Mit dynamischer Farbe für Minusbeträge) ---
   Widget _buildTop10List(List<InventoryItem> items, BuildContext context, {required bool showPerformance}) {
     return SizedBox(
       height: 240, 
@@ -449,7 +464,7 @@ class _DashboardView extends ConsumerWidget {
                         fit: StackFit.expand,
                         children: [
                           Hero(
-                            tag: "top10_${showPerformance ? 'perf' : 'val'}_${item.card.id}",
+                            tag: "top10_${showPerformance ? 'perf' : 'val'}_${item.card.id}_$index",
                             child: CachedNetworkImage(
                               imageUrl: displayImage,
                               memCacheWidth: 300, 
@@ -482,11 +497,26 @@ class _DashboardView extends ConsumerWidget {
                         item.variant == 'Reverse Holo' ? 'Rev.' : item.variant,
                         style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                       ),
-                      Text(
-                        // --- NEU: Entweder Gesamtwert oder Performance zeigen ---
-                        showPerformance ? "+${item.performance.toStringAsFixed(2)}€" : "${item.totalValue.toStringAsFixed(2)}€",
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: showPerformance ? Colors.green[700] : Colors.green),
-                      ),
+                      // --- SCHLAUER TEXT-BUILDER FÜR + ODER - ---
+                      Builder(builder: (context) {
+                        String textToShow = "${item.totalValue.toStringAsFixed(2)}€";
+                        Color textColor = Colors.green;
+
+                        if (showPerformance) {
+                          if (item.performance > 0) {
+                            textToShow = "+${item.performance.toStringAsFixed(2)}€";
+                            textColor = Colors.green[700]!;
+                          } else {
+                            textToShow = "${item.performance.toStringAsFixed(2)}€"; // Minus steht schon durch die Zahl da
+                            textColor = Colors.red[700]!;
+                          }
+                        }
+
+                        return Text(
+                          textToShow,
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
+                        );
+                      }),
                     ],
                   ),
                 ],
