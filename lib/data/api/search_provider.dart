@@ -305,6 +305,7 @@ class InventoryItem {
   final double totalValue;
   final String? binderName; 
   final UserCard userCard;
+  final double performance; // --- NEU: Rendite / Gewinn in Euro ---
 
   InventoryItem({
     required this.card,
@@ -312,17 +313,19 @@ class InventoryItem {
     required this.quantity,
     required this.variant,
     required this.totalValue,
-    this.binderName, // NEU
+    this.binderName, 
     required this.userCard,
+    this.performance = 0.0, // Standardmäßig 0
   });
 }
-enum InventorySort { value, name, rarity, type }
+// --- NEU: "performance" (Rendite) als Sortierkriterium hinzugefügt ---
+enum InventorySort { value, name, rarity, type, performance }
 final inventorySortProvider = StateProvider<InventorySort>((ref) => InventorySort.value);
 
 final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
-  final db = ref.watch(databaseProvider); // Live-Updates aktivieren
+  final db = ref.watch(databaseProvider); 
 
-  // 1. Hole alle User-Karten (ohne die Binder in SQL zu joinen)
+  // 1. Hole alle User-Karten
   final query = db.select(db.userCards).join([
     innerJoin(db.cards, db.cards.id.equalsExp(db.userCards.cardId)),
     innerJoin(db.cardSets, db.cardSets.id.equalsExp(db.cards.setId)),
@@ -337,6 +340,7 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
     final allCmPrices = await (db.select(db.cardMarketPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
     final allTcgPrices = await (db.select(db.tcgPlayerPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
     final allCustomPrices = await (db.select(db.customCardPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
+    
     final cmPriceMap = _getLatestCmPrices(allCmPrices);
     final tcgPriceMap = _getLatestTcgPrices(allTcgPrices);
     final customPriceMap = _getLatestCustomPrices(allCustomPrices);
@@ -348,8 +352,7 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
     binderCardsQuery.where(db.binderCards.cardId.isIn(cardIds) & db.binderCards.isPlaceholder.equals(false));
     final binderRows = await binderCardsQuery.get();
 
-    // 4. Zählen: Welche Karte (ID + Variante) steckt wie oft in welchem Binder?
-    // Struktur: "cardId_variant" -> { "Kanto-Binder": 1, "Glurak-Binder": 1 }
+    // 4. Zählen
     final Map<String, Map<String, int>> binderCounts = {};
     for (final bRow in binderRows) {
       final bc = bRow.readTable(db.binderCards);
@@ -376,15 +379,12 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
         logoUrl: dbSet.logoUrl, logoUrlDe: dbSet.logoUrlDe, symbolUrl: dbSet.symbolUrl,
       );
 
-      // --- PREIS LOGIK (Respektiert die bevorzugte Quelle!) ---
-     double singlePrice = 0.0;
+      // --- PREIS LOGIK ---
+      double singlePrice = 0.0;
       
-      // 1. DER JOKER: Hat genau diese physische Karte einen spezifischen Wert?
       if (userCard.customPrice != null && userCard.customPrice! > 0) {
           singlePrice = userCard.customPrice!;
-      } 
-      // 2. Ansonsten: Fallback auf das globale System
-      else {
+      } else {
           bool baseIsHolo = !dbCard.hasNormal && dbCard.hasHolo;
           final variant = userCard.variant;
           
@@ -396,14 +396,12 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
 
           if (pref == 'custom' && apiCard.customPrice != null) {
               singlePrice = apiCard.customPrice!;
-          } 
-          else if (pref == 'tcgplayer') {
+          } else if (pref == 'tcgplayer') {
               if (isReverse) {
                 singlePrice = apiCard.tcgplayer?.prices?.reverseHolofoil?.market ?? 0.0;
               } else if (isHolo) singlePrice = apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
               else singlePrice = apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
-          } 
-          else {
+          } else {
               if (dbCard.hasFirstEdition) {
                  if (isHolo) {
                    singlePrice = isFirstEd ? (apiCard.cardmarket?.trendPrice ?? 0.0) : (apiCard.cardmarket?.trendHolo ?? 0.0);
@@ -418,26 +416,78 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
                  singlePrice = apiCard.cardmarket?.trendPrice ?? 0.0;
               }
           }
-
-          // Letzter Notnagel
           if (singlePrice == 0.0) {
              singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.normal?.market ?? apiCard.customPrice ?? 0.0;
           }
       }
-      // --------------------------------------------------------
 
-      // --- SPLITTING LOGIK ---
+      // --- NEUE LOGIK FÜR DIE RENDITE-BERECHNUNG ---
+      double purchasePrice = 0.0;
+      if (userCard.customPrice != null && userCard.customPrice! > 0) {
+         purchasePrice = singlePrice; 
+      } else {
+         final targetDate = userCard.createdAt;
+         final pref = dbCard.preferredPriceSource;
+         
+         bool baseIsHolo = !dbCard.hasNormal && dbCard.hasHolo;
+         final variant = userCard.variant;
+         final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
+         final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
+         final isReverse = variant == 'Reverse Holo';
+         
+         if (pref == 'custom' && allCustomPrices.isNotEmpty) {
+            var closest = allCustomPrices.where((e) => e.cardId == dbCard.id && (e.fetchedAt.isBefore(targetDate) || e.fetchedAt.isAtSameMomentAs(targetDate))).toList();
+            if (closest.isEmpty) closest = allCustomPrices.where((e) => e.cardId == dbCard.id).toList();
+            if (closest.isNotEmpty) { closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt)); purchasePrice = closest.first.price; }
+         } else if (pref == 'tcgplayer' && allTcgPrices.isNotEmpty) {
+            var closest = allTcgPrices.where((e) => e.cardId == dbCard.id && (e.fetchedAt.isBefore(targetDate) || e.fetchedAt.isAtSameMomentAs(targetDate))).toList();
+            if (closest.isEmpty) closest = allTcgPrices.where((e) => e.cardId == dbCard.id).toList();
+            if (closest.isNotEmpty) { 
+              closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt)); 
+              final p = closest.first;
+              if (isReverse) {
+                purchasePrice = p.reverseMarket ?? 0.0;
+              } else if (isHolo) purchasePrice = p.holoMarket ?? 0.0;
+              else purchasePrice = p.normalMarket ?? 0.0;
+            }
+         } else if (allCmPrices.isNotEmpty) {
+            var closest = allCmPrices.where((e) => e.cardId == dbCard.id && (e.fetchedAt.isBefore(targetDate) || e.fetchedAt.isAtSameMomentAs(targetDate))).toList();
+            if (closest.isEmpty) closest = allCmPrices.where((e) => e.cardId == dbCard.id).toList();
+            if (closest.isNotEmpty) { 
+              closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt)); 
+              final p = closest.first;
+              if (dbCard.hasFirstEdition) {
+                 if (isHolo) {
+                   purchasePrice = isFirstEd ? (p.trend ?? 0.0) : (p.trendHolo ?? 0.0);
+                 } else {
+                   purchasePrice = isFirstEd ? (p.trendHolo ?? 0.0) : (p.trend ?? 0.0);
+                 }
+              } else if (isReverse) {
+                 purchasePrice = p.trendReverse ?? p.trendHolo ?? 0.0;
+              } else if (isHolo && !baseIsHolo) {
+                 purchasePrice = p.trendHolo ?? 0.0;
+              } else {
+                 purchasePrice = p.trend ?? 0.0;
+              }
+            }
+         }
+      }
+      
+      if (purchasePrice == 0.0) purchasePrice = singlePrice;
+      
+      // Die Rendite (z.B. +15.50€ Gewinn)
+      final double itemPerformance = (singlePrice - purchasePrice);
+      // -----------------------------------------------------------
+
       final key = "${userCard.cardId}_${userCard.variant}";
       final bindersForThisCard = binderCounts[key] ?? {};
 
       int totalInBinders = 0;
 
-      // a) Ein Item für jeden Binder erstellen, in dem die Karte liegt
       for (final entry in bindersForThisCard.entries) {
         final binderName = entry.key;
         final qtyInBinder = entry.value;
         
-        // Verhindern, dass mehr Karten angezeigt werden, als du eigentlich besitzt
         int assignedQty = qtyInBinder;
         if (totalInBinders + assignedQty > userCard.quantity) {
            assignedQty = userCard.quantity - totalInBinders;
@@ -449,15 +499,16 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
         items.add(InventoryItem(
           card: apiCard, set: apiSet, quantity: assignedQty, variant: userCard.variant,
           totalValue: singlePrice * assignedQty, binderName: binderName, userCard: userCard,
+          performance: itemPerformance * assignedQty, // Rendite mal Anzahl
         ));
       }
 
-      // b) Falls noch Karten übrig sind (Lose im Inventar)
       final looseQty = userCard.quantity - totalInBinders;
       if (looseQty > 0) {
         items.add(InventoryItem(
           card: apiCard, set: apiSet, quantity: looseQty, variant: userCard.variant,
           totalValue: singlePrice * looseQty, binderName: null, userCard: userCard,
+          performance: itemPerformance * looseQty, // Rendite mal Anzahl
         ));
       }
     }
@@ -479,6 +530,39 @@ final top10CardsProvider = Provider<List<InventoryItem>>((ref) {
   );
 });
 
+// --- NEU: TOP 10 GEWINNER (Nach Rendite sortiert) ---
+final top10GainersProvider = Provider<List<InventoryItem>>((ref) {
+  final allItemsAsync = ref.watch(inventoryProvider);
+  return allItemsAsync.when(
+    data: (items) {
+      // Duplikate (gleiche Karte, aber auf mehrere Binder aufgeteilt) zusammenfassen
+      final Map<String, InventoryItem> mergedMap = {};
+      for (final item in items) {
+        final key = "${item.card.id}_${item.variant}";
+        if (mergedMap.containsKey(key)) {
+          final existing = mergedMap[key]!;
+          mergedMap[key] = InventoryItem(
+            card: existing.card, set: existing.set,
+            quantity: existing.quantity + item.quantity,
+            variant: existing.variant,
+            totalValue: existing.totalValue + item.totalValue,
+            binderName: null, userCard: existing.userCard,
+            performance: existing.performance + item.performance, // Rendite summieren!
+          );
+        } else {
+          mergedMap[key] = item;
+        }
+      }
+
+      var sorted = mergedMap.values.where((item) => item.performance > 0).toList();
+      sorted.sort((a, b) => b.performance.compareTo(a.performance));
+      return sorted.take(10).toList();
+    },
+    loading: () => [],
+    error: (_,__) => [],
+  );
+});
+
 final portfolioHistoryProvider = StreamProvider<List<PortfolioHistoryData>>((ref) {
   final db = ref.read(databaseProvider);
   return (db.select(db.portfolioHistory)..orderBy([(t) => OrderingTerm(expression: t.date)])).watch();
@@ -486,10 +570,7 @@ final portfolioHistoryProvider = StreamProvider<List<PortfolioHistoryData>>((ref
 
 Future<void> createPortfolioSnapshot(WidgetRef ref) async {
   try {
-    // 1. Erst checken, ob wir überhaupt noch da sind (verhindert Crash ganz am Anfang)
     final db = ref.read(databaseProvider);
-    
-    // WICHTIG: Wir nutzen refresh statt read, um sicherzustellen, dass wir FRISCHE Daten bekommen.
     final items = await ref.refresh(inventoryProvider.future);
     
     final double currentTotal = items.fold(0.0, (sum, item) => sum + item.totalValue);
@@ -497,7 +578,6 @@ Future<void> createPortfolioSnapshot(WidgetRef ref) async {
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
 
-    // Prüfen, ob für HEUTE schon ein Eintrag existiert
     final existingEntry = await (db.select(db.portfolioHistory)
       ..where((t) => t.date.equals(todayDate))
     ).getSingleOrNull();
@@ -515,17 +595,10 @@ Future<void> createPortfolioSnapshot(WidgetRef ref) async {
     }
     
     await BinderService(db).recalculateAllBinders();
-    
-    // 2. UI für den Graphen aktualisieren
-    // Das ist der Teil, der crasht, wenn der Screen schon weg ist.
     ref.invalidate(portfolioHistoryProvider);
 
   } on StateError catch (_) {
-    // MAGIE: Wenn der "Bad state: Cannot use 'ref' after widget was disposed" Fehler kommt,
-    // ignorieren wir ihn einfach lautlos! 
-    // Der User hat den Screen verlassen, aber die Berechnungen davor wurden trotzdem gespeichert.
   } catch (e) {
-    // Falls ein echter anderer Fehler auftritt (z.B. Datenbank kaputt)
     debugPrint("Fehler beim Portfolio Snapshot: $e");
   }
 }
@@ -544,25 +617,17 @@ final cardPriceHistoryProvider = FutureProvider.family<Map<String, List<dynamic>
   };
 });
 
-// -----------------------------------------------------------------------------
-// BINDER LOCATION PROVIDER
-// -----------------------------------------------------------------------------
-// Sucht extrem schnell und LIVE heraus, in welchen Bindern eine spezifische Karte aktuell steckt.
 final cardBinderLocationProvider = StreamProvider.autoDispose.family<List<String>, String>((ref, cardId) {
-  final db = ref.watch(databaseProvider); // WICHTIG: watch statt read!
+  final db = ref.watch(databaseProvider); 
   
-  // Wir suchen alle Slots, in denen die Karte steckt UND die keine Platzhalter sind
   final query = db.select(db.binderCards).join([
     innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
   ]);
   
   query.where(db.binderCards.cardId.equals(cardId) & db.binderCards.isPlaceholder.equals(false));
   
-  // .watch() statt .get() macht daraus einen Live-Stream
   return query.watch().map((rows) {
     if (rows.isEmpty) return [];
-    
-    // Namen der Binder sammeln (und Duplikate entfernen)
     return rows.map((r) => r.readTable(db.binders).name).toSet().toList();
   });
 });

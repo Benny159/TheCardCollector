@@ -273,6 +273,7 @@ class _DashboardView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final historyAsync = ref.watch(portfolioHistoryProvider);
     final top10Cards = ref.watch(top10CardsProvider); 
+    final top10Gainers = ref.watch(top10GainersProvider); // <-- NEU
     final inventoryAsync = ref.watch(inventoryProvider);
     
     final double totalValue = inventoryAsync.valueOrNull?.fold(0.0, (sum, i) => sum! + i.totalValue) ?? 0.0;
@@ -295,23 +296,40 @@ class _DashboardView extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 32),
-          const Text("Deine Top 10 Karten", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          
+          // 1. LISTE: Top 10 Gesamtwert
+          const Text("Deine Top 10 (Gesamtwert)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           if (top10Cards.isEmpty)
             Container(
-              padding: const EdgeInsets.all(20),
-              width: double.infinity,
+              padding: const EdgeInsets.all(20), width: double.infinity,
               decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12)),
               child: const Center(child: Text("Noch keine wertvollen Karten im Inventar.", style: TextStyle(color: Colors.grey))),
             )
           else
-            _buildTop10List(top10Cards, context),
+            _buildTop10List(top10Cards, context, showPerformance: false),
+            
+          const SizedBox(height: 32),
+          
+          // --- NEUE LISTE: Top 10 Gewinner ---
+          const Text("Top Gewinner (Seit Kauf)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+          const SizedBox(height: 12),
+          if (top10Gainers.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20), width: double.infinity,
+              decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.green[200]!)),
+              child: const Center(child: Text("Noch keine Karten mit Wertsteigerung.", style: TextStyle(color: Colors.green))),
+            )
+          else
+            _buildTop10List(top10Gainers, context, showPerformance: true),
+            
           const SizedBox(height: 40),
         ],
       ),
     );
   }
 
+  // Restlicher Header-Code bleibt gleich...
   Widget _buildPortfolioHeader(BuildContext context, double currentTotal, AsyncValue<List<db.PortfolioHistoryData>> historyAsync) {
     double change = 0.0;
     double percent = 0.0;
@@ -401,7 +419,8 @@ class _DashboardView extends ConsumerWidget {
     );
   }
 
-  Widget _buildTop10List(List<InventoryItem> items, BuildContext context) {
+  // --- ANGEPASST: Zeigt entweder den Gesamtwert oder den Grünen Gewinn an! ---
+  Widget _buildTop10List(List<InventoryItem> items, BuildContext context, {required bool showPerformance}) {
     return SizedBox(
       height: 240, 
       child: ListView.builder(
@@ -430,7 +449,7 @@ class _DashboardView extends ConsumerWidget {
                         fit: StackFit.expand,
                         children: [
                           Hero(
-                            tag: "top10_${item.card.id}",
+                            tag: "top10_${showPerformance ? 'perf' : 'val'}_${item.card.id}",
                             child: CachedNetworkImage(
                               imageUrl: displayImage,
                               memCacheWidth: 300, 
@@ -464,8 +483,9 @@ class _DashboardView extends ConsumerWidget {
                         style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                       ),
                       Text(
-                        "${item.totalValue.toStringAsFixed(2)}€",
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green),
+                        // --- NEU: Entweder Gesamtwert oder Performance zeigen ---
+                        showPerformance ? "+${item.performance.toStringAsFixed(2)}€" : "${item.totalValue.toStringAsFixed(2)}€",
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: showPerformance ? Colors.green[700] : Colors.green),
                       ),
                     ],
                   ),

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:drift/drift.dart' as drift; 
-import 'package:intl/intl.dart'; // NEU für Datums-Formatierung
+import 'package:intl/intl.dart'; 
 
 import '../../data/api/search_provider.dart';
 import '../../data/api/tcgdex_api_client.dart';
@@ -58,6 +58,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   late String _currentPreferredSource;
   late TextEditingController _customPriceController;
   double? _currentCustomPrice;
+  
+  // --- NEU: Die Blacklist! IDs, die in diesem Set stehen, werden im Graphen NICHT angezeigt. ---
+  final Set<int> _hiddenUserCardIds = {};
 
   @override
   void initState() {
@@ -159,14 +162,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 1. SET HEADER
             setAsync.when(
               data: (set) => _buildSetHeader(context, set),
               loading: () => const LinearProgressIndicator(minHeight: 2),
               error: (_, __) => const SizedBox.shrink(),
             ),
             
-            // 2. OBERER BEREICH: Karte & Tabellen (Side-by-Side)
             Padding(
               padding: const EdgeInsets.all(12.0),
               child: Row(
@@ -218,7 +219,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                             if (widget.card.number.isNotEmpty)
                               _buildTag(Icons.numbers, "${widget.card.number} / ${widget.card.setPrintedTotal}", color: Colors.purple),
                             
-                            // Shop Tags
                             _buildTag(
                               Icons.shopping_cart, 
                               "Cardmarket", 
@@ -249,7 +249,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
                   const SizedBox(width: 12),
 
-                  // --- RECHTE SPALTE (NUR NOCH PREIS-TABELLEN) ---
+                  // --- RECHTE SPALTE (PREIS-TABELLEN) ---
                   Expanded(
                     flex: 5, 
                     child: Column(
@@ -267,7 +267,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
               ),
             ),
             
-            // 3. CHART BEREICH (Ganz unten, Volle Breite)
+            // 3. CHART BEREICH
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0),
               child: _buildChartSection(historyAsync, inventoryAsync),
@@ -275,7 +275,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
             
             const SizedBox(height: 12),
 
-            // 4. BESITZ BOX (Ganz unten positioniert!)
+            // 4. BESITZ BOX
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0),
               child: inventoryAsync.when(
@@ -315,7 +315,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     return content;
   }
 
-  // --- NEU: ZUVERLÄSSIGE SHOP-LINKS (Such-Fallback) ---
   void _openCardmarket(ApiCard card) {
     String baseUrl = card.cardmarket?.url ?? "";
     if (baseUrl.isNotEmpty) {
@@ -344,7 +343,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     _launchURL(baseUrl);
   }
 
-  // Diagramm mit Daten verknüpfen
   Widget _buildChartSection(AsyncValue historyAsync, AsyncValue inventoryAsync) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -374,7 +372,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 cmHistory: (data['cm'] as List).cast<CardMarketPrice>(),
                 tcgHistory: (data['tcg'] as List).cast<TcgPlayerPrice>(),
                 customHistory: (data['custom'] as List).cast<CustomCardPrice>(),
-                userCards: userCards.cast<UserCard>(), // Inventar-Karten für die Linien!
+                userCards: userCards.cast<UserCard>(),
+                hiddenUserCardIds: _hiddenUserCardIds, // --- NEU: Blacklist übergeben! ---
               );
             },
             loading: () => const SizedBox(height: 250, child: Center(child: CircularProgressIndicator())),
@@ -389,7 +388,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   Widget _buildPriceSectionContainer(BuildContext context, {required String title, required Color color, required String sourceKey, String? lastUpdate, required List<Widget> children}) {
     if (children.isEmpty) return const SizedBox.shrink();
-    
     final bool isSelected = _currentPreferredSource == sourceKey;
 
     return Container(
@@ -598,13 +596,17 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     if (pref == 'custom' && _currentCustomPrice != null && _currentCustomPrice! > 0) {
       price = _currentCustomPrice!;
     } else if (pref == 'tcgplayer') {
-      if (isReverse) price = tcgPrice?.prices?.reverseHolofoil?.market ?? 0.0;
-      else if (isHolo) price = tcgPrice?.prices?.holofoil?.market ?? 0.0;
+      if (isReverse) {
+        price = tcgPrice?.prices?.reverseHolofoil?.market ?? 0.0;
+      } else if (isHolo) price = tcgPrice?.prices?.holofoil?.market ?? 0.0;
       else price = tcgPrice?.prices?.normal?.market ?? 0.0;
     } else {
       if (widget.card.hasFirstEdition) {
-         if (isHolo) price = isFirstEd ? (cmPrice?.trendPrice ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
-         else price = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trendPrice ?? 0.0);
+         if (isHolo) {
+           price = isFirstEd ? (cmPrice?.trendPrice ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
+         } else {
+           price = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trendPrice ?? 0.0);
+         }
       } else if (isReverse) {
          price = cmPrice?.reverseHoloTrend ?? cmPrice?.trendHolo ?? 0.0;
       } else if (isHolo && !baseIsHolo) {
@@ -618,7 +620,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     return price;
   }
 
-  // --- NEU: BERECHNET DEN HISTORISCHEN PREIS ZUM ZEITPUNKT DES ERWERBS ---
   double? _getHistoricalPrice(UserCard item, Map<String, dynamic>? historyData) {
     if (item.customPrice != null && item.customPrice! > 0) return item.customPrice; 
     if (historyData == null) return null;
@@ -660,8 +661,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt));
         final p = closest.first;
         if (widget.card.hasFirstEdition) {
-           if (isHolo) return isFirstEd ? (p.trend ?? 0.0) : (p.trendHolo ?? 0.0);
-           else return isFirstEd ? (p.trendHolo ?? 0.0) : (p.trend ?? 0.0);
+           if (isHolo) {
+             return isFirstEd ? (p.trend ?? 0.0) : (p.trendHolo ?? 0.0);
+           } else {
+             return isFirstEd ? (p.trendHolo ?? 0.0) : (p.trend ?? 0.0);
+           }
         } else if (isReverse) {
            return p.trendReverse ?? p.trendHolo ?? 0.0;
         } else if (isHolo && !baseIsHolo) {
@@ -674,7 +678,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     return null;
   }
 
-  // --- DIE NEUE SAMMLUNGS-TABELLE ---
+  // --- DIE NEUE SAMMLUNGS-TABELLE MIT CHECKBOXEN ---
   Widget _buildCollectionBox(BuildContext context, WidgetRef ref, List<UserCard> items, Map<String, dynamic>? historyData) {
     if (items.isEmpty) {
       return Container(
@@ -745,7 +749,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
           const Divider(color: Colors.black12, height: 16),
           
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 280), // Größer, da jetzt mehr Text (Datum & Rendite) drin steht
+            constraints: const BoxConstraints(maxHeight: 280), 
             child: RawScrollbar(
               thumbColor: Colors.green.withOpacity(0.4),
               radius: const Radius.circular(4),
@@ -772,13 +776,36 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
+                          
+                          // --- NEU: DIE CHECKBOX FÜR DEN GRAPHEN ---
+                          SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: Checkbox(
+                              visualDensity: VisualDensity.compact,
+                              value: !_hiddenUserCardIds.contains(item.id),
+                              activeColor: Colors.green,
+                              side: BorderSide(color: Colors.grey[400]!),
+                              onChanged: (val) {
+                                setState(() {
+                                  if (val == true) {
+                                    _hiddenUserCardIds.remove(item.id);
+                                  } else {
+                                    _hiddenUserCardIds.add(item.id);
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          // ------------------------------------------
+
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text("${item.quantity}x ${item.variant}", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11), overflow: TextOverflow.ellipsis),
                                 Text(details, style: TextStyle(fontSize: 9, color: item.gradingCompany != null ? Colors.orange[800] : Colors.black54, fontWeight: item.gradingCompany != null ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis),
-                                // --- NEU: ERWORBEN AM ---
                                 const SizedBox(height: 2),
                                 Text("Erworben: ${DateFormat('dd.MM.yyyy').format(item.createdAt)}", style: const TextStyle(fontSize: 8, color: Colors.grey)),
                               ],
@@ -799,10 +826,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                               if (item.quantity > 1) 
                                 Text("Gesamt: ${(itemPrice * item.quantity).toStringAsFixed(2)} €", style: const TextStyle(fontSize: 8, color: Colors.grey)),
                                 
-                              // --- NEU: PERFORMANCE / RENDITE ---
                               Builder(builder: (context) {
                                 final purchasePrice = _getHistoricalPrice(item, historyData);
-                                // Wenn ein fester Joker-Preis existiert, ändert er sich historisch nicht, daher Performance ausblenden.
                                 if (purchasePrice == null || purchasePrice == 0 || hasSpecificPrice) return const SizedBox.shrink(); 
                                 
                                 final change = itemPrice - purchasePrice;
@@ -856,7 +881,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     );
   }
 
-  // --- NEU: ALLES BEARBEITEN DIALOG (inkl. Kaufdatum) ---
   Future<void> _editUserCard(BuildContext context, WidgetRef ref, UserCard item) async {
     final priceController = TextEditingController(text: item.customPrice?.toString() ?? '');
     final scoreController = TextEditingController(text: item.gradingScore ?? '');
@@ -866,7 +890,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     String selectedLang = item.language;
     String selectedVariant = item.variant;
     
-    // --- NEU: Variable für das Kaufdatum ---
     DateTime selectedDate = item.createdAt;
 
     List<String> companies = ['Kein Grading', 'PSA', 'Beckett (BGS)', 'CGC', 'AP', 'PCA', 'GSG', 'EGS'];
@@ -901,7 +924,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                   const Text("Kartendetails", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue)),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    value: selectedVariant,
+                    initialValue: selectedVariant,
                     decoration: InputDecoration(labelText: "Variante", border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
                     items: validVariants.map((v) => DropdownMenuItem(value: v, child: Text(v, style: const TextStyle(fontSize: 13)))).toList(),
                     onChanged: (val) => setStateDialog(() => selectedVariant = val!),
@@ -911,7 +934,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: selectedLang,
+                          initialValue: selectedLang,
                           decoration: InputDecoration(labelText: "Sprache", border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
                           items: languages.map((l) => DropdownMenuItem(value: l, child: Text(l, style: const TextStyle(fontSize: 12)))).toList(),
                           onChanged: (val) => setStateDialog(() => selectedLang = val!),
@@ -920,7 +943,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: selectedCond,
+                          initialValue: selectedCond,
                           decoration: InputDecoration(labelText: "Zustand", border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
                           items: conditions.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12)))).toList(),
                           onChanged: (val) => setStateDialog(() => selectedCond = val!),
@@ -930,18 +953,15 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                   ),
                   const SizedBox(height: 10),
                   
-                  // --- NEU: DATUM AUSWÄHLEN ---
                   InkWell(
                     onTap: () async {
                       final picked = await showDatePicker(
                         context: context,
                         initialDate: selectedDate,
-                        firstDate: DateTime(1996), // Niemand hat Pokemon-Karten vor 1996 gekauft ;)
+                        firstDate: DateTime(1996), 
                         lastDate: DateTime.now(),
                       );
                       if (picked != null) {
-                        // Da die Uhrzeit beim reinen Datum auf 00:00 gesetzt wird, 
-                        // behalten wir die aktuelle Uhrzeit bei, um Datenbank-Konflikte zu vermeiden
                         final newDateTime = DateTime(
                           picked.year, picked.month, picked.day, 
                           selectedDate.hour, selectedDate.minute, selectedDate.second
@@ -971,7 +991,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                       ),
                     ),
                   ),
-                  // ----------------------------
 
                   const SizedBox(height: 16),
                   const Divider(),
@@ -980,7 +999,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                   const Text("Grading (Optional)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange)),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    value: selectedCompany,
+                    initialValue: selectedCompany,
                     decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
                     items: companies.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13)))).toList(),
                     onChanged: (val) => setStateDialog(() => selectedCompany = val!),
@@ -1034,7 +1053,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                       customPrice: drift.Value(newPrice),
                       gradingCompany: drift.Value(comp),
                       gradingScore: drift.Value(score),
-                      createdAt: drift.Value(selectedDate), // <-- Speichert das neue Datum!
+                      createdAt: drift.Value(selectedDate),
                     )
                   );
 

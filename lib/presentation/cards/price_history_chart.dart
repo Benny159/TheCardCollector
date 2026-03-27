@@ -13,8 +13,10 @@ class PriceHistoryChart extends StatefulWidget {
   final List<CardMarketPrice> cmHistory;
   final List<TcgPlayerPrice> tcgHistory;
   final List<CustomCardPrice> customHistory;
-  // --- NEU: Wir übergeben die Inventar-Karten an den Graphen! ---
   final List<UserCard> userCards; 
+  
+  // --- NEU: Die Blacklist vom Detail-Screen ---
+  final Set<int> hiddenUserCardIds;
 
   const PriceHistoryChart({
     super.key, 
@@ -22,6 +24,7 @@ class PriceHistoryChart extends StatefulWidget {
     required this.tcgHistory,
     required this.customHistory,
     this.userCards = const [], 
+    this.hiddenUserCardIds = const {}, // Standardmäßig ist nichts versteckt
   });
 
   @override
@@ -31,16 +34,11 @@ class PriceHistoryChart extends StatefulWidget {
 class _PriceHistoryChartState extends State<PriceHistoryChart> {
   late PriceType _selectedType;
   int _monthsFilter = 3; 
-  
-  // --- NEU: Checkbox State für die Kauf-Markierungen ---
-  Set<int> _selectedUserCardIds = {};
 
   @override
   void initState() {
     super.initState();
     _determineBestInitialType();
-    // Standardmäßig zeigen wir die Kaufpunkte aller Karten an!
-    _selectedUserCardIds = widget.userCards.map((c) => c.id).toSet();
   }
 
   @override
@@ -50,13 +48,6 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
       if (widget.customHistory.isNotEmpty) {
         setState(() => _selectedType = PriceType.customPrice);
       }
-    }
-    // Wenn neue Karten hinzukommen, Boxen updaten
-    if (widget.userCards.length != oldWidget.userCards.length) {
-      final newIds = widget.userCards.map((c) => c.id).toSet();
-      _selectedUserCardIds.retainAll(newIds); 
-      final addedIds = newIds.difference(oldWidget.userCards.map((c) => c.id).toSet());
-      _selectedUserCardIds.addAll(addedIds);
     }
   }
 
@@ -89,7 +80,6 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
   Widget build(BuildContext context) {
     final spots = _getSpots();
 
-    // Wir brauchen minX und maxX, damit die neuen Kauf-Linien den Graphen nicht sprengen!
     double minX = spots.isNotEmpty ? spots.first.x : 0;
     double maxX = spots.isNotEmpty ? spots.last.x : 0;
     if (minX == maxX) {
@@ -139,13 +129,12 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                 ),
                 borderData: FlBorderData(show: false),
                 
-                // --- NEU: KAUF-MARKIERUNGEN (Gestrichelte Linie) ---
                 extraLinesData: ExtraLinesData(
+                  // --- NEU: Wir prüfen anhand der Blacklist (hiddenUserCardIds) ---
                   verticalLines: widget.userCards
-                      .where((uc) => _selectedUserCardIds.contains(uc.id))
+                      .where((uc) => !widget.hiddenUserCardIds.contains(uc.id))
                       .map((uc) {
                         final xVal = uc.createdAt.millisecondsSinceEpoch.toDouble();
-                        // Nur einzeichnen, wenn sie im Zeitfilter liegt!
                         if (xVal < minX || xVal > maxX) return null;
                         return VerticalLine(
                           x: xVal,
@@ -162,7 +151,6 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                         );
                   }).whereType<VerticalLine>().toList(),
                 ),
-                // --------------------------------------------------
 
                 lineBarsData: [
                   LineChartBarData(
@@ -204,44 +192,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
         
         const SizedBox(height: 8),
 
-        // --- NEU: FILTER-CHECKBOXEN FÜR DIE INVENTAR-KARTEN ---
-        if (widget.userCards.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: widget.userCards.map((uc) {
-                  final isSelected = _selectedUserCardIds.contains(uc.id);
-                  String label = "${uc.variant} (${uc.condition})";
-                  if (uc.gradingCompany != null && uc.gradingCompany != 'Kein Grading') {
-                    label += " ${uc.gradingScore ?? ''}".trim();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 6.0),
-                    child: FilterChip(
-                      label: Text(label, style: TextStyle(fontSize: 9, color: isSelected ? Colors.white : Colors.black87)),
-                      selected: isSelected,
-                      selectedColor: Colors.green[600],
-                      checkmarkColor: Colors.white,
-                      backgroundColor: Colors.grey[100],
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                      onSelected: (val) {
-                        setState(() {
-                          if (val) _selectedUserCardIds.add(uc.id);
-                          else _selectedUserCardIds.remove(uc.id);
-                        });
-                      },
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-        // ------------------------------------------------------
-
-        // FILTER CHIPS (Datenquellen)
+        // FILTER CHIPS (Nur noch die reinen Preisquellen!)
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
