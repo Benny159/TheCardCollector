@@ -43,11 +43,12 @@ class PtcgImporter {
       current++;
       final tcgdexId = mapping.tcgdexId;
       final ptcgId = mapping.ptcgId!;
+      final cmCode = mapping.cardmarketCode; // <--- NEU: Wir holen den Code!
 
       onProgress?.call('Lückenfüller Set $current/${mappings.length}: $tcgdexId...');
 
       try {
-        await _importPtcgSet(tcgdexId, ptcgId, latestCmPrices, latestTcgPrices);
+        await _importPtcgSet(tcgdexId, ptcgId, cmCode, latestCmPrices, latestTcgPrices);
       } catch (e) {
         print('⚠️ Fehler bei PTCG Set $ptcgId: $e');
       }
@@ -57,7 +58,7 @@ class PtcgImporter {
     await BinderService(db).recalculateAllBinders();
   }
 
-  Future<void> _importPtcgSet(String tcgdexId, String ptcgId, Map<String, Map<String, dynamic>> latestCmPrices, Map<String, Map<String, dynamic>> latestTcgPrices) async {
+  Future<void> _importPtcgSet(String tcgdexId, String ptcgId, String? cmCode, Map<String, Map<String, dynamic>> latestCmPrices, Map<String, Map<String, dynamic>> latestTcgPrices) async {
     
     final existingSet = await (db.select(db.cardSets)..where((t) => t.id.equals(tcgdexId))).getSingleOrNull();
     if (existingSet == null) {
@@ -121,7 +122,7 @@ class PtcgImporter {
 
       Card? existingCard;
 
-      // 1. Lokale Suche im aktuell zugewiesenen Set
+      // 1. Lokale Suche im zugewiesenen Set
       try {
         existingCard = existingCardsList.firstWhere((c) {
           final dbNumClean = c.number.replaceAll(RegExp(r'^0+'), '').toLowerCase();
@@ -130,30 +131,34 @@ class PtcgImporter {
         });
       } catch (_) {}
 
-      // --- NEU: 2. Globale Suche in der gesamten Datenbank! ---
-      // Verhindert zu 100% Duplikate bei TG/GG Karten aus Hauptsets
-      if (existingCard == null) {
-         final fallbackCards = await (db.select(db.cards)
-            ..where((t) => t.name.equals(ptcgName))
-         ).get();
+      // --- DER SUPER-FILTER: Globale Suche, aber NUR innerhalb der gleichen Set-Familie! ---
+      if (existingCard == null && cmCode != null && cmCode.isNotEmpty) {
+         // Wir finden alle Set-IDs (z.B. swsh12.5), die ebenfalls den Code 'CRZ' haben
+         final relatedMappings = await (db.select(db.setMappings)..where((t) => t.cardmarketCode.equals(cmCode))).get();
+         final relatedSetIds = relatedMappings.map((m) => m.tcgdexId).toList();
+         
+         if (relatedSetIds.isNotEmpty) {
+             final fallbackCards = await (db.select(db.cards)
+                // Die Karte MUSS denselben Namen haben UND das Set muss in der Familie sein
+                ..where((t) => t.name.equals(ptcgName) & t.setId.isIn(relatedSetIds))
+             ).get();
 
-         try {
-            existingCard = fallbackCards.firstWhere((c) {
-               final dbNumClean = c.number.replaceAll(RegExp(r'^0+'), '').toLowerCase();
-               final ptClean = ptcgNumClean.toLowerCase();
-               return dbNumClean == ptClean || c.number.toLowerCase() == ptcgNumberRaw.toLowerCase();
-            });
-         } catch (_) {}
+             try {
+                existingCard = fallbackCards.firstWhere((c) {
+                   final dbNumClean = c.number.replaceAll(RegExp(r'^0+'), '').toLowerCase();
+                   final ptClean = ptcgNumClean.toLowerCase();
+                   return dbNumClean == ptClean || c.number.toLowerCase() == ptcgNumberRaw.toLowerCase();
+                });
+             } catch (_) {}
+         }
       }
-      // ---------------------------------------------------------
+      // --------------------------------------------------------------------------------------
 
-      // Wenn wir die Karte global gefunden haben, nutzen wir IHRE ID.
-      // Wenn nicht, wird sie als komplett neue Karte angelegt.
       final String finalCardId = existingCard?.id ?? "$tcgdexId-$ptcgNumberRaw";
       String img = ptcgCard['images']?['large'] ?? ptcgCard['images']?['small'] ?? '';
 
       if (existingCard != null) {
-        // FALL 1: KARTE EXISTIERT BEREITS (Auch in anderen Sets gefunden!)
+        // FALL 1: KARTE WURDE GEFUNDEN (Lokal oder im Schwester-Set)
         if (!existingCard.hasManualImages && existingCard.imageUrl.isEmpty && img.isNotEmpty) {
            try {
              await db.customUpdate(
@@ -163,7 +168,7 @@ class PtcgImporter {
            } catch (_) {} 
         }
       } else {
-        // FALL 2: KARTE EXISTIERT NOCH NICHT (Z.B. Perfect Order oder reine Promos)
+        // FALL 2: KARTE EXISTIERT NIRGENDWO -> WIRD NEU ANGELEGT
         int sortNum = int.tryParse(ptcgNumberRaw) ?? 0;
         int? hp = ptcgCard['hp'] != null ? int.tryParse(ptcgCard['hp'].toString()) : null;
         String? cType = (ptcgCard['types'] as List?)?.first?.toString();
@@ -192,7 +197,7 @@ class PtcgImporter {
         ));
       }
 
-      // --- PREISE IMMER AN DIE RICHTIGE KARTE HÄNGEN ---
+      // --- PREISE ---
       if (ptcgCard['cardmarket'] != null) {
         final cm = ptcgCard['cardmarket']['prices'];
         if (cm != null) {
