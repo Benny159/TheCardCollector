@@ -2,25 +2,28 @@ import 'package:drift/drift.dart';
 
 // --- TABELLE 1: SETS ---
 class CardSets extends Table {
-  TextColumn get id => text()(); // Wir nutzen jetzt TCGdex IDs (z.B. "me02.5")
+  TextColumn get id => text()(); 
   TextColumn get name => text()(); 
   TextColumn get series => text()(); 
   IntColumn get printedTotal => integer().nullable()();
   IntColumn get total => integer().nullable()();
-  TextColumn get releaseDate => text().nullable()(); // Kommt von der ALTEN API
+  TextColumn get releaseDate => text().nullable()(); 
   TextColumn get updatedAt => text()();
   
-  // BILDER: Auch für Sets speichern wir beide!
-  TextColumn get logoUrl => text().nullable()();   // Englisch
+  TextColumn get logoUrl => text().nullable()();   
   TextColumn get symbolUrl => text().nullable()();
-  TextColumn get logoUrlDe => text().nullable()(); // <--- NEU: Deutsch
+  TextColumn get logoUrlDe => text().nullable()(); 
   TextColumn get nameDe => text().nullable()();
+
+  BoolColumn get hasManualTranslations => boolean().withDefault(const Constant(false))();
+  BoolColumn get hasManualImages => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
 }
 
 // --- TABELLE 2: KARTEN ---
+@TableIndex(name: 'idx_cards_setid', columns: {#setId})
 class Cards extends Table {
   TextColumn get id => text()(); 
   TextColumn get setId => text().references(CardSets, #id)(); 
@@ -29,32 +32,44 @@ class Cards extends Table {
   TextColumn get number => text()(); 
   TextColumn get cardType => text().nullable()();
 
+  IntColumn get hp => integer().nullable()(); 
+
   TextColumn get preferredPriceSource => text().withDefault(const Constant('cardmarket'))();
   
-  // BILDER: Beide Sprachen
-  TextColumn get imageUrl => text()();    // Englisch
-  TextColumn get imageUrlDe => text().nullable()(); // <--- NEU: Deutsch
+  TextColumn get imageUrl => text()();    
+  TextColumn get imageUrlDe => text().nullable()(); 
   
   TextColumn get artist => text().nullable()();
   TextColumn get rarity => text().nullable()();
   TextColumn get flavorText => text().nullable()();
   TextColumn get flavorTextDe => text().nullable()();
 
-  // VARIANTEN FLAGS
   BoolColumn get hasFirstEdition => boolean().withDefault(const Constant(false))();
   BoolColumn get hasNormal => boolean().withDefault(const Constant(true))();
   BoolColumn get hasHolo => boolean().withDefault(const Constant(false))();
   BoolColumn get hasReverse => boolean().withDefault(const Constant(false))();
   BoolColumn get hasWPromo => boolean().withDefault(const Constant(false))();
 
-  // Sortier-Hilfe
+  BoolColumn get hasManualVariants => boolean().withDefault(const Constant(false))();
+  BoolColumn get hasManualImages => boolean().withDefault(const Constant(false))();
+  BoolColumn get hasManualTranslations => boolean().withDefault(const Constant(false))();
+  BoolColumn get hasManualStats => boolean().withDefault(const Constant(false))();
+
   IntColumn get sortNumber => integer().withDefault(const Constant(0))(); 
 
   @override
   Set<Column> get primaryKey => {id};
 }
 
-// --- NEU: Tabelle für eigene Preise ---
+class SetMappings extends Table {
+  TextColumn get tcgdexId => text()(); 
+  TextColumn get ptcgId => text().nullable()(); 
+  TextColumn get cardmarketCode => text().nullable()(); 
+  
+  @override
+  Set<Column> get primaryKey => {tcgdexId};
+}
+
 class CustomCardPrices extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get cardId => text().references(Cards, #id)();
@@ -62,13 +77,13 @@ class CustomCardPrices extends Table {
   RealColumn get price => real()();
 }
 
-// --- TABELLE 3: CARDMARKET PREISE (EUR) ---
+// --- TABELLE 3: CARDMARKET PREISE ---
+@TableIndex(name: 'idx_cmprices_cardid', columns: {#cardId})
 class CardMarketPrices extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get cardId => text().references(Cards, #id)(); 
   DateTimeColumn get fetchedAt => dateTime()(); 
   
-  // Normal
   RealColumn get average => real().nullable()();
   RealColumn get low => real().nullable()();
   RealColumn get trend => real().nullable()();
@@ -76,7 +91,6 @@ class CardMarketPrices extends Table {
   RealColumn get avg7 => real().nullable()();
   RealColumn get avg30 => real().nullable()();
   
-  // Holo
   RealColumn get avgHolo => real().nullable()();
   RealColumn get lowHolo => real().nullable()();
   RealColumn get trendHolo => real().nullable()();
@@ -84,31 +98,28 @@ class CardMarketPrices extends Table {
   RealColumn get avg7Holo => real().nullable()();
   RealColumn get avg30Holo => real().nullable()();
   
-  // Reverse Holo
   RealColumn get trendReverse => real().nullable()();
 
   TextColumn get url => text().nullable()();
 }
 
-// --- TABELLE 4: TCGPLAYER PREISE (USD) ---
+// --- TABELLE 4: TCGPLAYER PREISE ---
+@TableIndex(name: 'idx_tcgprices_cardid', columns: {#cardId})
 class TcgPlayerPrices extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get cardId => text().references(Cards, #id)(); 
   DateTimeColumn get fetchedAt => dateTime()(); 
   
-  // --- Normal ---
   RealColumn get normalMarket => real().nullable()();
   RealColumn get normalLow => real().nullable()();
   RealColumn get normalMid => real().nullable()();
   RealColumn get normalDirectLow => real().nullable()();
   
-  // --- Holo ---
   RealColumn get holoMarket => real().nullable()();
   RealColumn get holoLow => real().nullable()();
   RealColumn get holoMid => real().nullable()();
   RealColumn get holoDirectLow => real().nullable()();
   
-  // --- Reverse Holo ---
   RealColumn get reverseMarket => real().nullable()();
   RealColumn get reverseLow => real().nullable()();
   RealColumn get reverseMid => real().nullable()();
@@ -118,6 +129,7 @@ class TcgPlayerPrices extends Table {
 }
 
 // --- TABELLE 5: USER CARDS ---
+@TableIndex(name: 'idx_usercards_cardid', columns: {#cardId})
 class UserCards extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get cardId => text().references(Cards, #id)();
@@ -132,30 +144,23 @@ class UserCards extends Table {
   TextColumn get gradingScore => text().nullable()();
 }
 
-// --- TABELLE 6: PORTFOLIO HISTORIE ---
 class PortfolioHistory extends Table {
   IntColumn get id => integer().autoIncrement()();
   DateTimeColumn get date => dateTime()();
   RealColumn get totalValue => real()();
 }
 
-// --- NEUE TABELLE: BINDER (Mappen) ---
 class Binders extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();
   
-  // Design
-  IntColumn get color => integer()(); // Speichert Color.value (ARGB)
-  TextColumn get icon => text().nullable()(); // z.B. Icon Name oder Pfad
+  IntColumn get color => integer()(); 
+  TextColumn get icon => text().nullable()(); 
   
-  // Layout Konfiguration
-  IntColumn get rowsPerPage => integer().withDefault(const Constant(3))(); // Standard 3x3
+  IntColumn get rowsPerPage => integer().withDefault(const Constant(3))(); 
   IntColumn get columnsPerPage => integer().withDefault(const Constant(3))();
   
-  // Typ / Thema
-  // 'custom', 'nationalDex', 'set:sv1', 'pokemon:pikachu'
   TextColumn get type => text().withDefault(const Constant('custom'))(); 
-  // Wir speichern es als Text ('leftToRight' oder 'topToBottom')
   TextColumn get sortOrder => text().withDefault(const Constant('leftToRight'))();
   
   RealColumn get totalValue => real().withDefault(const Constant(0.0))();
@@ -164,7 +169,6 @@ class Binders extends Table {
 
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
 
-  // Metadaten
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().nullable()();
 }
@@ -176,7 +180,6 @@ class BinderHistory extends Table {
   RealColumn get value => real()();
 }
 
-// --- NEUE TABELLE: KARTEN IM BINDER ---
 @DataClassName('BinderCard')
 class BinderCards extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -185,15 +188,14 @@ class BinderCards extends Table {
   IntColumn get slotIndex => integer()();
   TextColumn get cardId => text().nullable().references(Cards, #id)();
   BoolColumn get isPlaceholder => boolean().withDefault(const Constant(false))();
-  TextColumn get placeholderLabel => text().nullable()(); // z.B. "Glurak #006"
+  TextColumn get placeholderLabel => text().nullable()(); 
   TextColumn get variant => text().nullable()();
   IntColumn get userCardId => integer().nullable()(); 
 }
 
 class Pokedex extends Table {
-  // Wir nutzen keine auto-increment ID, sondern die echte Pokedex Nummer als ID
   IntColumn get id => integer()(); 
-  TextColumn get name => text()(); // "Bulbasaur" (oder Deutsch, wenn wir ne Quelle finden)
+  TextColumn get name => text()(); 
   
   @override
   Set<Column> get primaryKey => {id};

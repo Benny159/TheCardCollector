@@ -404,8 +404,41 @@ class _SetTile extends ConsumerWidget {
     );
 
     try {
+      // --- NEU: WIR BAUEN DEN PREIS-CACHE FÜR DEN EINZEL-DOWNLOAD ---
+      // Hole alle aktuellen Karten dieses Sets
+      final setCardsQuery = await (db.select(db.cards)..where((t) => t.setId.equals(set.id))).get();
+      final cardIds = setCardsQuery.map((c) => c.id).toList();
+      
+      Map<String, Map<String, dynamic>> latestCmPrices = {};
+      Map<String, Map<String, dynamic>> latestTcgPrices = {};
+      
+      if (cardIds.isNotEmpty) {
+         final allLatestCmQuery = await db.customSelect(
+            'SELECT card_id, trend, trend_holo, trend_reverse FROM card_market_prices WHERE card_id IN (${cardIds.map((e) => "'$e'").join(',')}) GROUP BY card_id HAVING MAX(fetched_at)'
+         ).get();
+         latestCmPrices = {
+            for (var row in allLatestCmQuery) row.read<String>('card_id'): {
+               'trend': row.read<double?>('trend'),
+               'trendHolo': row.read<double?>('trend_holo'),
+               'trendReverse': row.read<double?>('trend_reverse'),
+            }
+         };
+
+         final allLatestTcgQuery = await db.customSelect(
+            'SELECT card_id, normal_market, holo_market, reverse_market FROM tcg_player_prices WHERE card_id IN (${cardIds.map((e) => "'$e'").join(',')}) GROUP BY card_id HAVING MAX(fetched_at)'
+         ).get();
+         latestTcgPrices = {
+            for (var row in allLatestTcgQuery) row.read<String>('card_id'): {
+               'normalMarket': row.read<double?>('normal_market'),
+               'holoMarket': row.read<double?>('holo_market'),
+               'reverseMarket': row.read<double?>('reverse_market'),
+            }
+         };
+      }
+      // -------------------------------------------------------------
+
       // Lädt alle Karten-Details und Preise von TCGdex herunter
-      await importer.importCardsForSet(set.id);
+      await importer.importCardsForSet(set.id, latestCmPrices, latestTcgPrices);
       
       // Cache der Provider zurücksetzen, damit die UI die neuen Karten zeigt
       ref.invalidate(cardsForSetProvider(set.id));

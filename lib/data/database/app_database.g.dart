@@ -69,6 +69,26 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
   late final GeneratedColumn<String> nameDe = GeneratedColumn<String>(
       'name_de', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _hasManualTranslationsMeta =
+      const VerificationMeta('hasManualTranslations');
+  @override
+  late final GeneratedColumn<bool> hasManualTranslations =
+      GeneratedColumn<bool>('has_manual_translations', aliasedName, false,
+          type: DriftSqlType.bool,
+          requiredDuringInsert: false,
+          defaultConstraints: GeneratedColumn.constraintIsAlways(
+              'CHECK ("has_manual_translations" IN (0, 1))'),
+          defaultValue: const Constant(false));
+  static const VerificationMeta _hasManualImagesMeta =
+      const VerificationMeta('hasManualImages');
+  @override
+  late final GeneratedColumn<bool> hasManualImages = GeneratedColumn<bool>(
+      'has_manual_images', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("has_manual_images" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -81,7 +101,9 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
         logoUrl,
         symbolUrl,
         logoUrlDe,
-        nameDe
+        nameDe,
+        hasManualTranslations,
+        hasManualImages
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -150,6 +172,18 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
       context.handle(_nameDeMeta,
           nameDe.isAcceptableOrUnknown(data['name_de']!, _nameDeMeta));
     }
+    if (data.containsKey('has_manual_translations')) {
+      context.handle(
+          _hasManualTranslationsMeta,
+          hasManualTranslations.isAcceptableOrUnknown(
+              data['has_manual_translations']!, _hasManualTranslationsMeta));
+    }
+    if (data.containsKey('has_manual_images')) {
+      context.handle(
+          _hasManualImagesMeta,
+          hasManualImages.isAcceptableOrUnknown(
+              data['has_manual_images']!, _hasManualImagesMeta));
+    }
     return context;
   }
 
@@ -181,6 +215,11 @@ class $CardSetsTable extends CardSets with TableInfo<$CardSetsTable, CardSet> {
           .read(DriftSqlType.string, data['${effectivePrefix}logo_url_de']),
       nameDe: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}name_de']),
+      hasManualTranslations: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool,
+          data['${effectivePrefix}has_manual_translations'])!,
+      hasManualImages: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}has_manual_images'])!,
     );
   }
 
@@ -202,6 +241,8 @@ class CardSet extends DataClass implements Insertable<CardSet> {
   final String? symbolUrl;
   final String? logoUrlDe;
   final String? nameDe;
+  final bool hasManualTranslations;
+  final bool hasManualImages;
   const CardSet(
       {required this.id,
       required this.name,
@@ -213,7 +254,9 @@ class CardSet extends DataClass implements Insertable<CardSet> {
       this.logoUrl,
       this.symbolUrl,
       this.logoUrlDe,
-      this.nameDe});
+      this.nameDe,
+      required this.hasManualTranslations,
+      required this.hasManualImages});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -242,6 +285,8 @@ class CardSet extends DataClass implements Insertable<CardSet> {
     if (!nullToAbsent || nameDe != null) {
       map['name_de'] = Variable<String>(nameDe);
     }
+    map['has_manual_translations'] = Variable<bool>(hasManualTranslations);
+    map['has_manual_images'] = Variable<bool>(hasManualImages);
     return map;
   }
 
@@ -270,6 +315,8 @@ class CardSet extends DataClass implements Insertable<CardSet> {
           : Value(logoUrlDe),
       nameDe:
           nameDe == null && nullToAbsent ? const Value.absent() : Value(nameDe),
+      hasManualTranslations: Value(hasManualTranslations),
+      hasManualImages: Value(hasManualImages),
     );
   }
 
@@ -288,6 +335,9 @@ class CardSet extends DataClass implements Insertable<CardSet> {
       symbolUrl: serializer.fromJson<String?>(json['symbolUrl']),
       logoUrlDe: serializer.fromJson<String?>(json['logoUrlDe']),
       nameDe: serializer.fromJson<String?>(json['nameDe']),
+      hasManualTranslations:
+          serializer.fromJson<bool>(json['hasManualTranslations']),
+      hasManualImages: serializer.fromJson<bool>(json['hasManualImages']),
     );
   }
   @override
@@ -305,6 +355,8 @@ class CardSet extends DataClass implements Insertable<CardSet> {
       'symbolUrl': serializer.toJson<String?>(symbolUrl),
       'logoUrlDe': serializer.toJson<String?>(logoUrlDe),
       'nameDe': serializer.toJson<String?>(nameDe),
+      'hasManualTranslations': serializer.toJson<bool>(hasManualTranslations),
+      'hasManualImages': serializer.toJson<bool>(hasManualImages),
     };
   }
 
@@ -319,7 +371,9 @@ class CardSet extends DataClass implements Insertable<CardSet> {
           Value<String?> logoUrl = const Value.absent(),
           Value<String?> symbolUrl = const Value.absent(),
           Value<String?> logoUrlDe = const Value.absent(),
-          Value<String?> nameDe = const Value.absent()}) =>
+          Value<String?> nameDe = const Value.absent(),
+          bool? hasManualTranslations,
+          bool? hasManualImages}) =>
       CardSet(
         id: id ?? this.id,
         name: name ?? this.name,
@@ -333,6 +387,9 @@ class CardSet extends DataClass implements Insertable<CardSet> {
         symbolUrl: symbolUrl.present ? symbolUrl.value : this.symbolUrl,
         logoUrlDe: logoUrlDe.present ? logoUrlDe.value : this.logoUrlDe,
         nameDe: nameDe.present ? nameDe.value : this.nameDe,
+        hasManualTranslations:
+            hasManualTranslations ?? this.hasManualTranslations,
+        hasManualImages: hasManualImages ?? this.hasManualImages,
       );
   CardSet copyWithCompanion(CardSetsCompanion data) {
     return CardSet(
@@ -350,6 +407,12 @@ class CardSet extends DataClass implements Insertable<CardSet> {
       symbolUrl: data.symbolUrl.present ? data.symbolUrl.value : this.symbolUrl,
       logoUrlDe: data.logoUrlDe.present ? data.logoUrlDe.value : this.logoUrlDe,
       nameDe: data.nameDe.present ? data.nameDe.value : this.nameDe,
+      hasManualTranslations: data.hasManualTranslations.present
+          ? data.hasManualTranslations.value
+          : this.hasManualTranslations,
+      hasManualImages: data.hasManualImages.present
+          ? data.hasManualImages.value
+          : this.hasManualImages,
     );
   }
 
@@ -366,14 +429,28 @@ class CardSet extends DataClass implements Insertable<CardSet> {
           ..write('logoUrl: $logoUrl, ')
           ..write('symbolUrl: $symbolUrl, ')
           ..write('logoUrlDe: $logoUrlDe, ')
-          ..write('nameDe: $nameDe')
+          ..write('nameDe: $nameDe, ')
+          ..write('hasManualTranslations: $hasManualTranslations, ')
+          ..write('hasManualImages: $hasManualImages')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, series, printedTotal, total,
-      releaseDate, updatedAt, logoUrl, symbolUrl, logoUrlDe, nameDe);
+  int get hashCode => Object.hash(
+      id,
+      name,
+      series,
+      printedTotal,
+      total,
+      releaseDate,
+      updatedAt,
+      logoUrl,
+      symbolUrl,
+      logoUrlDe,
+      nameDe,
+      hasManualTranslations,
+      hasManualImages);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -388,7 +465,9 @@ class CardSet extends DataClass implements Insertable<CardSet> {
           other.logoUrl == this.logoUrl &&
           other.symbolUrl == this.symbolUrl &&
           other.logoUrlDe == this.logoUrlDe &&
-          other.nameDe == this.nameDe);
+          other.nameDe == this.nameDe &&
+          other.hasManualTranslations == this.hasManualTranslations &&
+          other.hasManualImages == this.hasManualImages);
 }
 
 class CardSetsCompanion extends UpdateCompanion<CardSet> {
@@ -403,6 +482,8 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
   final Value<String?> symbolUrl;
   final Value<String?> logoUrlDe;
   final Value<String?> nameDe;
+  final Value<bool> hasManualTranslations;
+  final Value<bool> hasManualImages;
   final Value<int> rowid;
   const CardSetsCompanion({
     this.id = const Value.absent(),
@@ -416,6 +497,8 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
     this.symbolUrl = const Value.absent(),
     this.logoUrlDe = const Value.absent(),
     this.nameDe = const Value.absent(),
+    this.hasManualTranslations = const Value.absent(),
+    this.hasManualImages = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CardSetsCompanion.insert({
@@ -430,6 +513,8 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
     this.symbolUrl = const Value.absent(),
     this.logoUrlDe = const Value.absent(),
     this.nameDe = const Value.absent(),
+    this.hasManualTranslations = const Value.absent(),
+    this.hasManualImages = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         name = Value(name),
@@ -447,6 +532,8 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
     Expression<String>? symbolUrl,
     Expression<String>? logoUrlDe,
     Expression<String>? nameDe,
+    Expression<bool>? hasManualTranslations,
+    Expression<bool>? hasManualImages,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -461,6 +548,9 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
       if (symbolUrl != null) 'symbol_url': symbolUrl,
       if (logoUrlDe != null) 'logo_url_de': logoUrlDe,
       if (nameDe != null) 'name_de': nameDe,
+      if (hasManualTranslations != null)
+        'has_manual_translations': hasManualTranslations,
+      if (hasManualImages != null) 'has_manual_images': hasManualImages,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -477,6 +567,8 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
       Value<String?>? symbolUrl,
       Value<String?>? logoUrlDe,
       Value<String?>? nameDe,
+      Value<bool>? hasManualTranslations,
+      Value<bool>? hasManualImages,
       Value<int>? rowid}) {
     return CardSetsCompanion(
       id: id ?? this.id,
@@ -490,6 +582,9 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
       symbolUrl: symbolUrl ?? this.symbolUrl,
       logoUrlDe: logoUrlDe ?? this.logoUrlDe,
       nameDe: nameDe ?? this.nameDe,
+      hasManualTranslations:
+          hasManualTranslations ?? this.hasManualTranslations,
+      hasManualImages: hasManualImages ?? this.hasManualImages,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -530,6 +625,13 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
     if (nameDe.present) {
       map['name_de'] = Variable<String>(nameDe.value);
     }
+    if (hasManualTranslations.present) {
+      map['has_manual_translations'] =
+          Variable<bool>(hasManualTranslations.value);
+    }
+    if (hasManualImages.present) {
+      map['has_manual_images'] = Variable<bool>(hasManualImages.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -550,6 +652,8 @@ class CardSetsCompanion extends UpdateCompanion<CardSet> {
           ..write('symbolUrl: $symbolUrl, ')
           ..write('logoUrlDe: $logoUrlDe, ')
           ..write('nameDe: $nameDe, ')
+          ..write('hasManualTranslations: $hasManualTranslations, ')
+          ..write('hasManualImages: $hasManualImages, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -595,6 +699,11 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
   late final GeneratedColumn<String> cardType = GeneratedColumn<String>(
       'card_type', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _hpMeta = const VerificationMeta('hp');
+  @override
+  late final GeneratedColumn<int> hp = GeneratedColumn<int>(
+      'hp', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _preferredPriceSourceMeta =
       const VerificationMeta('preferredPriceSource');
   @override
@@ -687,6 +796,46 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('CHECK ("has_w_promo" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _hasManualVariantsMeta =
+      const VerificationMeta('hasManualVariants');
+  @override
+  late final GeneratedColumn<bool> hasManualVariants = GeneratedColumn<bool>(
+      'has_manual_variants', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("has_manual_variants" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _hasManualImagesMeta =
+      const VerificationMeta('hasManualImages');
+  @override
+  late final GeneratedColumn<bool> hasManualImages = GeneratedColumn<bool>(
+      'has_manual_images', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("has_manual_images" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _hasManualTranslationsMeta =
+      const VerificationMeta('hasManualTranslations');
+  @override
+  late final GeneratedColumn<bool> hasManualTranslations =
+      GeneratedColumn<bool>('has_manual_translations', aliasedName, false,
+          type: DriftSqlType.bool,
+          requiredDuringInsert: false,
+          defaultConstraints: GeneratedColumn.constraintIsAlways(
+              'CHECK ("has_manual_translations" IN (0, 1))'),
+          defaultValue: const Constant(false));
+  static const VerificationMeta _hasManualStatsMeta =
+      const VerificationMeta('hasManualStats');
+  @override
+  late final GeneratedColumn<bool> hasManualStats = GeneratedColumn<bool>(
+      'has_manual_stats', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("has_manual_stats" IN (0, 1))'),
+      defaultValue: const Constant(false));
   static const VerificationMeta _sortNumberMeta =
       const VerificationMeta('sortNumber');
   @override
@@ -703,6 +852,7 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
         nameDe,
         number,
         cardType,
+        hp,
         preferredPriceSource,
         imageUrl,
         imageUrlDe,
@@ -715,6 +865,10 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
         hasHolo,
         hasReverse,
         hasWPromo,
+        hasManualVariants,
+        hasManualImages,
+        hasManualTranslations,
+        hasManualStats,
         sortNumber
       ];
   @override
@@ -757,6 +911,9 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
     if (data.containsKey('card_type')) {
       context.handle(_cardTypeMeta,
           cardType.isAcceptableOrUnknown(data['card_type']!, _cardTypeMeta));
+    }
+    if (data.containsKey('hp')) {
+      context.handle(_hpMeta, hp.isAcceptableOrUnknown(data['hp']!, _hpMeta));
     }
     if (data.containsKey('preferred_price_source')) {
       context.handle(
@@ -822,6 +979,30 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
           hasWPromo.isAcceptableOrUnknown(
               data['has_w_promo']!, _hasWPromoMeta));
     }
+    if (data.containsKey('has_manual_variants')) {
+      context.handle(
+          _hasManualVariantsMeta,
+          hasManualVariants.isAcceptableOrUnknown(
+              data['has_manual_variants']!, _hasManualVariantsMeta));
+    }
+    if (data.containsKey('has_manual_images')) {
+      context.handle(
+          _hasManualImagesMeta,
+          hasManualImages.isAcceptableOrUnknown(
+              data['has_manual_images']!, _hasManualImagesMeta));
+    }
+    if (data.containsKey('has_manual_translations')) {
+      context.handle(
+          _hasManualTranslationsMeta,
+          hasManualTranslations.isAcceptableOrUnknown(
+              data['has_manual_translations']!, _hasManualTranslationsMeta));
+    }
+    if (data.containsKey('has_manual_stats')) {
+      context.handle(
+          _hasManualStatsMeta,
+          hasManualStats.isAcceptableOrUnknown(
+              data['has_manual_stats']!, _hasManualStatsMeta));
+    }
     if (data.containsKey('sort_number')) {
       context.handle(
           _sortNumberMeta,
@@ -849,6 +1030,8 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
           .read(DriftSqlType.string, data['${effectivePrefix}number'])!,
       cardType: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}card_type']),
+      hp: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}hp']),
       preferredPriceSource: attachedDatabase.typeMapping.read(
           DriftSqlType.string,
           data['${effectivePrefix}preferred_price_source'])!,
@@ -874,6 +1057,15 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
           .read(DriftSqlType.bool, data['${effectivePrefix}has_reverse'])!,
       hasWPromo: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}has_w_promo'])!,
+      hasManualVariants: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}has_manual_variants'])!,
+      hasManualImages: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}has_manual_images'])!,
+      hasManualTranslations: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool,
+          data['${effectivePrefix}has_manual_translations'])!,
+      hasManualStats: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}has_manual_stats'])!,
       sortNumber: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}sort_number'])!,
     );
@@ -892,6 +1084,7 @@ class Card extends DataClass implements Insertable<Card> {
   final String? nameDe;
   final String number;
   final String? cardType;
+  final int? hp;
   final String preferredPriceSource;
   final String imageUrl;
   final String? imageUrlDe;
@@ -904,6 +1097,10 @@ class Card extends DataClass implements Insertable<Card> {
   final bool hasHolo;
   final bool hasReverse;
   final bool hasWPromo;
+  final bool hasManualVariants;
+  final bool hasManualImages;
+  final bool hasManualTranslations;
+  final bool hasManualStats;
   final int sortNumber;
   const Card(
       {required this.id,
@@ -912,6 +1109,7 @@ class Card extends DataClass implements Insertable<Card> {
       this.nameDe,
       required this.number,
       this.cardType,
+      this.hp,
       required this.preferredPriceSource,
       required this.imageUrl,
       this.imageUrlDe,
@@ -924,6 +1122,10 @@ class Card extends DataClass implements Insertable<Card> {
       required this.hasHolo,
       required this.hasReverse,
       required this.hasWPromo,
+      required this.hasManualVariants,
+      required this.hasManualImages,
+      required this.hasManualTranslations,
+      required this.hasManualStats,
       required this.sortNumber});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -937,6 +1139,9 @@ class Card extends DataClass implements Insertable<Card> {
     map['number'] = Variable<String>(number);
     if (!nullToAbsent || cardType != null) {
       map['card_type'] = Variable<String>(cardType);
+    }
+    if (!nullToAbsent || hp != null) {
+      map['hp'] = Variable<int>(hp);
     }
     map['preferred_price_source'] = Variable<String>(preferredPriceSource);
     map['image_url'] = Variable<String>(imageUrl);
@@ -960,6 +1165,10 @@ class Card extends DataClass implements Insertable<Card> {
     map['has_holo'] = Variable<bool>(hasHolo);
     map['has_reverse'] = Variable<bool>(hasReverse);
     map['has_w_promo'] = Variable<bool>(hasWPromo);
+    map['has_manual_variants'] = Variable<bool>(hasManualVariants);
+    map['has_manual_images'] = Variable<bool>(hasManualImages);
+    map['has_manual_translations'] = Variable<bool>(hasManualTranslations);
+    map['has_manual_stats'] = Variable<bool>(hasManualStats);
     map['sort_number'] = Variable<int>(sortNumber);
     return map;
   }
@@ -975,6 +1184,7 @@ class Card extends DataClass implements Insertable<Card> {
       cardType: cardType == null && nullToAbsent
           ? const Value.absent()
           : Value(cardType),
+      hp: hp == null && nullToAbsent ? const Value.absent() : Value(hp),
       preferredPriceSource: Value(preferredPriceSource),
       imageUrl: Value(imageUrl),
       imageUrlDe: imageUrlDe == null && nullToAbsent
@@ -995,6 +1205,10 @@ class Card extends DataClass implements Insertable<Card> {
       hasHolo: Value(hasHolo),
       hasReverse: Value(hasReverse),
       hasWPromo: Value(hasWPromo),
+      hasManualVariants: Value(hasManualVariants),
+      hasManualImages: Value(hasManualImages),
+      hasManualTranslations: Value(hasManualTranslations),
+      hasManualStats: Value(hasManualStats),
       sortNumber: Value(sortNumber),
     );
   }
@@ -1009,6 +1223,7 @@ class Card extends DataClass implements Insertable<Card> {
       nameDe: serializer.fromJson<String?>(json['nameDe']),
       number: serializer.fromJson<String>(json['number']),
       cardType: serializer.fromJson<String?>(json['cardType']),
+      hp: serializer.fromJson<int?>(json['hp']),
       preferredPriceSource:
           serializer.fromJson<String>(json['preferredPriceSource']),
       imageUrl: serializer.fromJson<String>(json['imageUrl']),
@@ -1022,6 +1237,11 @@ class Card extends DataClass implements Insertable<Card> {
       hasHolo: serializer.fromJson<bool>(json['hasHolo']),
       hasReverse: serializer.fromJson<bool>(json['hasReverse']),
       hasWPromo: serializer.fromJson<bool>(json['hasWPromo']),
+      hasManualVariants: serializer.fromJson<bool>(json['hasManualVariants']),
+      hasManualImages: serializer.fromJson<bool>(json['hasManualImages']),
+      hasManualTranslations:
+          serializer.fromJson<bool>(json['hasManualTranslations']),
+      hasManualStats: serializer.fromJson<bool>(json['hasManualStats']),
       sortNumber: serializer.fromJson<int>(json['sortNumber']),
     );
   }
@@ -1035,6 +1255,7 @@ class Card extends DataClass implements Insertable<Card> {
       'nameDe': serializer.toJson<String?>(nameDe),
       'number': serializer.toJson<String>(number),
       'cardType': serializer.toJson<String?>(cardType),
+      'hp': serializer.toJson<int?>(hp),
       'preferredPriceSource': serializer.toJson<String>(preferredPriceSource),
       'imageUrl': serializer.toJson<String>(imageUrl),
       'imageUrlDe': serializer.toJson<String?>(imageUrlDe),
@@ -1047,6 +1268,10 @@ class Card extends DataClass implements Insertable<Card> {
       'hasHolo': serializer.toJson<bool>(hasHolo),
       'hasReverse': serializer.toJson<bool>(hasReverse),
       'hasWPromo': serializer.toJson<bool>(hasWPromo),
+      'hasManualVariants': serializer.toJson<bool>(hasManualVariants),
+      'hasManualImages': serializer.toJson<bool>(hasManualImages),
+      'hasManualTranslations': serializer.toJson<bool>(hasManualTranslations),
+      'hasManualStats': serializer.toJson<bool>(hasManualStats),
       'sortNumber': serializer.toJson<int>(sortNumber),
     };
   }
@@ -1058,6 +1283,7 @@ class Card extends DataClass implements Insertable<Card> {
           Value<String?> nameDe = const Value.absent(),
           String? number,
           Value<String?> cardType = const Value.absent(),
+          Value<int?> hp = const Value.absent(),
           String? preferredPriceSource,
           String? imageUrl,
           Value<String?> imageUrlDe = const Value.absent(),
@@ -1070,6 +1296,10 @@ class Card extends DataClass implements Insertable<Card> {
           bool? hasHolo,
           bool? hasReverse,
           bool? hasWPromo,
+          bool? hasManualVariants,
+          bool? hasManualImages,
+          bool? hasManualTranslations,
+          bool? hasManualStats,
           int? sortNumber}) =>
       Card(
         id: id ?? this.id,
@@ -1078,6 +1308,7 @@ class Card extends DataClass implements Insertable<Card> {
         nameDe: nameDe.present ? nameDe.value : this.nameDe,
         number: number ?? this.number,
         cardType: cardType.present ? cardType.value : this.cardType,
+        hp: hp.present ? hp.value : this.hp,
         preferredPriceSource: preferredPriceSource ?? this.preferredPriceSource,
         imageUrl: imageUrl ?? this.imageUrl,
         imageUrlDe: imageUrlDe.present ? imageUrlDe.value : this.imageUrlDe,
@@ -1091,6 +1322,11 @@ class Card extends DataClass implements Insertable<Card> {
         hasHolo: hasHolo ?? this.hasHolo,
         hasReverse: hasReverse ?? this.hasReverse,
         hasWPromo: hasWPromo ?? this.hasWPromo,
+        hasManualVariants: hasManualVariants ?? this.hasManualVariants,
+        hasManualImages: hasManualImages ?? this.hasManualImages,
+        hasManualTranslations:
+            hasManualTranslations ?? this.hasManualTranslations,
+        hasManualStats: hasManualStats ?? this.hasManualStats,
         sortNumber: sortNumber ?? this.sortNumber,
       );
   Card copyWithCompanion(CardsCompanion data) {
@@ -1101,6 +1337,7 @@ class Card extends DataClass implements Insertable<Card> {
       nameDe: data.nameDe.present ? data.nameDe.value : this.nameDe,
       number: data.number.present ? data.number.value : this.number,
       cardType: data.cardType.present ? data.cardType.value : this.cardType,
+      hp: data.hp.present ? data.hp.value : this.hp,
       preferredPriceSource: data.preferredPriceSource.present
           ? data.preferredPriceSource.value
           : this.preferredPriceSource,
@@ -1122,6 +1359,18 @@ class Card extends DataClass implements Insertable<Card> {
       hasReverse:
           data.hasReverse.present ? data.hasReverse.value : this.hasReverse,
       hasWPromo: data.hasWPromo.present ? data.hasWPromo.value : this.hasWPromo,
+      hasManualVariants: data.hasManualVariants.present
+          ? data.hasManualVariants.value
+          : this.hasManualVariants,
+      hasManualImages: data.hasManualImages.present
+          ? data.hasManualImages.value
+          : this.hasManualImages,
+      hasManualTranslations: data.hasManualTranslations.present
+          ? data.hasManualTranslations.value
+          : this.hasManualTranslations,
+      hasManualStats: data.hasManualStats.present
+          ? data.hasManualStats.value
+          : this.hasManualStats,
       sortNumber:
           data.sortNumber.present ? data.sortNumber.value : this.sortNumber,
     );
@@ -1136,6 +1385,7 @@ class Card extends DataClass implements Insertable<Card> {
           ..write('nameDe: $nameDe, ')
           ..write('number: $number, ')
           ..write('cardType: $cardType, ')
+          ..write('hp: $hp, ')
           ..write('preferredPriceSource: $preferredPriceSource, ')
           ..write('imageUrl: $imageUrl, ')
           ..write('imageUrlDe: $imageUrlDe, ')
@@ -1148,32 +1398,42 @@ class Card extends DataClass implements Insertable<Card> {
           ..write('hasHolo: $hasHolo, ')
           ..write('hasReverse: $hasReverse, ')
           ..write('hasWPromo: $hasWPromo, ')
+          ..write('hasManualVariants: $hasManualVariants, ')
+          ..write('hasManualImages: $hasManualImages, ')
+          ..write('hasManualTranslations: $hasManualTranslations, ')
+          ..write('hasManualStats: $hasManualStats, ')
           ..write('sortNumber: $sortNumber')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      id,
-      setId,
-      name,
-      nameDe,
-      number,
-      cardType,
-      preferredPriceSource,
-      imageUrl,
-      imageUrlDe,
-      artist,
-      rarity,
-      flavorText,
-      flavorTextDe,
-      hasFirstEdition,
-      hasNormal,
-      hasHolo,
-      hasReverse,
-      hasWPromo,
-      sortNumber);
+  int get hashCode => Object.hashAll([
+        id,
+        setId,
+        name,
+        nameDe,
+        number,
+        cardType,
+        hp,
+        preferredPriceSource,
+        imageUrl,
+        imageUrlDe,
+        artist,
+        rarity,
+        flavorText,
+        flavorTextDe,
+        hasFirstEdition,
+        hasNormal,
+        hasHolo,
+        hasReverse,
+        hasWPromo,
+        hasManualVariants,
+        hasManualImages,
+        hasManualTranslations,
+        hasManualStats,
+        sortNumber
+      ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1184,6 +1444,7 @@ class Card extends DataClass implements Insertable<Card> {
           other.nameDe == this.nameDe &&
           other.number == this.number &&
           other.cardType == this.cardType &&
+          other.hp == this.hp &&
           other.preferredPriceSource == this.preferredPriceSource &&
           other.imageUrl == this.imageUrl &&
           other.imageUrlDe == this.imageUrlDe &&
@@ -1196,6 +1457,10 @@ class Card extends DataClass implements Insertable<Card> {
           other.hasHolo == this.hasHolo &&
           other.hasReverse == this.hasReverse &&
           other.hasWPromo == this.hasWPromo &&
+          other.hasManualVariants == this.hasManualVariants &&
+          other.hasManualImages == this.hasManualImages &&
+          other.hasManualTranslations == this.hasManualTranslations &&
+          other.hasManualStats == this.hasManualStats &&
           other.sortNumber == this.sortNumber);
 }
 
@@ -1206,6 +1471,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
   final Value<String?> nameDe;
   final Value<String> number;
   final Value<String?> cardType;
+  final Value<int?> hp;
   final Value<String> preferredPriceSource;
   final Value<String> imageUrl;
   final Value<String?> imageUrlDe;
@@ -1218,6 +1484,10 @@ class CardsCompanion extends UpdateCompanion<Card> {
   final Value<bool> hasHolo;
   final Value<bool> hasReverse;
   final Value<bool> hasWPromo;
+  final Value<bool> hasManualVariants;
+  final Value<bool> hasManualImages;
+  final Value<bool> hasManualTranslations;
+  final Value<bool> hasManualStats;
   final Value<int> sortNumber;
   final Value<int> rowid;
   const CardsCompanion({
@@ -1227,6 +1497,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.nameDe = const Value.absent(),
     this.number = const Value.absent(),
     this.cardType = const Value.absent(),
+    this.hp = const Value.absent(),
     this.preferredPriceSource = const Value.absent(),
     this.imageUrl = const Value.absent(),
     this.imageUrlDe = const Value.absent(),
@@ -1239,6 +1510,10 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.hasHolo = const Value.absent(),
     this.hasReverse = const Value.absent(),
     this.hasWPromo = const Value.absent(),
+    this.hasManualVariants = const Value.absent(),
+    this.hasManualImages = const Value.absent(),
+    this.hasManualTranslations = const Value.absent(),
+    this.hasManualStats = const Value.absent(),
     this.sortNumber = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1249,6 +1524,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.nameDe = const Value.absent(),
     required String number,
     this.cardType = const Value.absent(),
+    this.hp = const Value.absent(),
     this.preferredPriceSource = const Value.absent(),
     required String imageUrl,
     this.imageUrlDe = const Value.absent(),
@@ -1261,6 +1537,10 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.hasHolo = const Value.absent(),
     this.hasReverse = const Value.absent(),
     this.hasWPromo = const Value.absent(),
+    this.hasManualVariants = const Value.absent(),
+    this.hasManualImages = const Value.absent(),
+    this.hasManualTranslations = const Value.absent(),
+    this.hasManualStats = const Value.absent(),
     this.sortNumber = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
@@ -1275,6 +1555,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
     Expression<String>? nameDe,
     Expression<String>? number,
     Expression<String>? cardType,
+    Expression<int>? hp,
     Expression<String>? preferredPriceSource,
     Expression<String>? imageUrl,
     Expression<String>? imageUrlDe,
@@ -1287,6 +1568,10 @@ class CardsCompanion extends UpdateCompanion<Card> {
     Expression<bool>? hasHolo,
     Expression<bool>? hasReverse,
     Expression<bool>? hasWPromo,
+    Expression<bool>? hasManualVariants,
+    Expression<bool>? hasManualImages,
+    Expression<bool>? hasManualTranslations,
+    Expression<bool>? hasManualStats,
     Expression<int>? sortNumber,
     Expression<int>? rowid,
   }) {
@@ -1297,6 +1582,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
       if (nameDe != null) 'name_de': nameDe,
       if (number != null) 'number': number,
       if (cardType != null) 'card_type': cardType,
+      if (hp != null) 'hp': hp,
       if (preferredPriceSource != null)
         'preferred_price_source': preferredPriceSource,
       if (imageUrl != null) 'image_url': imageUrl,
@@ -1310,6 +1596,11 @@ class CardsCompanion extends UpdateCompanion<Card> {
       if (hasHolo != null) 'has_holo': hasHolo,
       if (hasReverse != null) 'has_reverse': hasReverse,
       if (hasWPromo != null) 'has_w_promo': hasWPromo,
+      if (hasManualVariants != null) 'has_manual_variants': hasManualVariants,
+      if (hasManualImages != null) 'has_manual_images': hasManualImages,
+      if (hasManualTranslations != null)
+        'has_manual_translations': hasManualTranslations,
+      if (hasManualStats != null) 'has_manual_stats': hasManualStats,
       if (sortNumber != null) 'sort_number': sortNumber,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1322,6 +1613,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
       Value<String?>? nameDe,
       Value<String>? number,
       Value<String?>? cardType,
+      Value<int?>? hp,
       Value<String>? preferredPriceSource,
       Value<String>? imageUrl,
       Value<String?>? imageUrlDe,
@@ -1334,6 +1626,10 @@ class CardsCompanion extends UpdateCompanion<Card> {
       Value<bool>? hasHolo,
       Value<bool>? hasReverse,
       Value<bool>? hasWPromo,
+      Value<bool>? hasManualVariants,
+      Value<bool>? hasManualImages,
+      Value<bool>? hasManualTranslations,
+      Value<bool>? hasManualStats,
       Value<int>? sortNumber,
       Value<int>? rowid}) {
     return CardsCompanion(
@@ -1343,6 +1639,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
       nameDe: nameDe ?? this.nameDe,
       number: number ?? this.number,
       cardType: cardType ?? this.cardType,
+      hp: hp ?? this.hp,
       preferredPriceSource: preferredPriceSource ?? this.preferredPriceSource,
       imageUrl: imageUrl ?? this.imageUrl,
       imageUrlDe: imageUrlDe ?? this.imageUrlDe,
@@ -1355,6 +1652,11 @@ class CardsCompanion extends UpdateCompanion<Card> {
       hasHolo: hasHolo ?? this.hasHolo,
       hasReverse: hasReverse ?? this.hasReverse,
       hasWPromo: hasWPromo ?? this.hasWPromo,
+      hasManualVariants: hasManualVariants ?? this.hasManualVariants,
+      hasManualImages: hasManualImages ?? this.hasManualImages,
+      hasManualTranslations:
+          hasManualTranslations ?? this.hasManualTranslations,
+      hasManualStats: hasManualStats ?? this.hasManualStats,
       sortNumber: sortNumber ?? this.sortNumber,
       rowid: rowid ?? this.rowid,
     );
@@ -1380,6 +1682,9 @@ class CardsCompanion extends UpdateCompanion<Card> {
     }
     if (cardType.present) {
       map['card_type'] = Variable<String>(cardType.value);
+    }
+    if (hp.present) {
+      map['hp'] = Variable<int>(hp.value);
     }
     if (preferredPriceSource.present) {
       map['preferred_price_source'] =
@@ -1418,6 +1723,19 @@ class CardsCompanion extends UpdateCompanion<Card> {
     if (hasWPromo.present) {
       map['has_w_promo'] = Variable<bool>(hasWPromo.value);
     }
+    if (hasManualVariants.present) {
+      map['has_manual_variants'] = Variable<bool>(hasManualVariants.value);
+    }
+    if (hasManualImages.present) {
+      map['has_manual_images'] = Variable<bool>(hasManualImages.value);
+    }
+    if (hasManualTranslations.present) {
+      map['has_manual_translations'] =
+          Variable<bool>(hasManualTranslations.value);
+    }
+    if (hasManualStats.present) {
+      map['has_manual_stats'] = Variable<bool>(hasManualStats.value);
+    }
     if (sortNumber.present) {
       map['sort_number'] = Variable<int>(sortNumber.value);
     }
@@ -1436,6 +1754,7 @@ class CardsCompanion extends UpdateCompanion<Card> {
           ..write('nameDe: $nameDe, ')
           ..write('number: $number, ')
           ..write('cardType: $cardType, ')
+          ..write('hp: $hp, ')
           ..write('preferredPriceSource: $preferredPriceSource, ')
           ..write('imageUrl: $imageUrl, ')
           ..write('imageUrlDe: $imageUrlDe, ')
@@ -1448,6 +1767,10 @@ class CardsCompanion extends UpdateCompanion<Card> {
           ..write('hasHolo: $hasHolo, ')
           ..write('hasReverse: $hasReverse, ')
           ..write('hasWPromo: $hasWPromo, ')
+          ..write('hasManualVariants: $hasManualVariants, ')
+          ..write('hasManualImages: $hasManualImages, ')
+          ..write('hasManualTranslations: $hasManualTranslations, ')
+          ..write('hasManualStats: $hasManualStats, ')
           ..write('sortNumber: $sortNumber, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -5547,6 +5870,244 @@ class PokedexCompanion extends UpdateCompanion<PokedexData> {
   }
 }
 
+class $SetMappingsTable extends SetMappings
+    with TableInfo<$SetMappingsTable, SetMapping> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SetMappingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _tcgdexIdMeta =
+      const VerificationMeta('tcgdexId');
+  @override
+  late final GeneratedColumn<String> tcgdexId = GeneratedColumn<String>(
+      'tcgdex_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _ptcgIdMeta = const VerificationMeta('ptcgId');
+  @override
+  late final GeneratedColumn<String> ptcgId = GeneratedColumn<String>(
+      'ptcg_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _cardmarketCodeMeta =
+      const VerificationMeta('cardmarketCode');
+  @override
+  late final GeneratedColumn<String> cardmarketCode = GeneratedColumn<String>(
+      'cardmarket_code', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [tcgdexId, ptcgId, cardmarketCode];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'set_mappings';
+  @override
+  VerificationContext validateIntegrity(Insertable<SetMapping> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('tcgdex_id')) {
+      context.handle(_tcgdexIdMeta,
+          tcgdexId.isAcceptableOrUnknown(data['tcgdex_id']!, _tcgdexIdMeta));
+    } else if (isInserting) {
+      context.missing(_tcgdexIdMeta);
+    }
+    if (data.containsKey('ptcg_id')) {
+      context.handle(_ptcgIdMeta,
+          ptcgId.isAcceptableOrUnknown(data['ptcg_id']!, _ptcgIdMeta));
+    }
+    if (data.containsKey('cardmarket_code')) {
+      context.handle(
+          _cardmarketCodeMeta,
+          cardmarketCode.isAcceptableOrUnknown(
+              data['cardmarket_code']!, _cardmarketCodeMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {tcgdexId};
+  @override
+  SetMapping map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SetMapping(
+      tcgdexId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}tcgdex_id'])!,
+      ptcgId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}ptcg_id']),
+      cardmarketCode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}cardmarket_code']),
+    );
+  }
+
+  @override
+  $SetMappingsTable createAlias(String alias) {
+    return $SetMappingsTable(attachedDatabase, alias);
+  }
+}
+
+class SetMapping extends DataClass implements Insertable<SetMapping> {
+  final String tcgdexId;
+  final String? ptcgId;
+  final String? cardmarketCode;
+  const SetMapping({required this.tcgdexId, this.ptcgId, this.cardmarketCode});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['tcgdex_id'] = Variable<String>(tcgdexId);
+    if (!nullToAbsent || ptcgId != null) {
+      map['ptcg_id'] = Variable<String>(ptcgId);
+    }
+    if (!nullToAbsent || cardmarketCode != null) {
+      map['cardmarket_code'] = Variable<String>(cardmarketCode);
+    }
+    return map;
+  }
+
+  SetMappingsCompanion toCompanion(bool nullToAbsent) {
+    return SetMappingsCompanion(
+      tcgdexId: Value(tcgdexId),
+      ptcgId:
+          ptcgId == null && nullToAbsent ? const Value.absent() : Value(ptcgId),
+      cardmarketCode: cardmarketCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cardmarketCode),
+    );
+  }
+
+  factory SetMapping.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SetMapping(
+      tcgdexId: serializer.fromJson<String>(json['tcgdexId']),
+      ptcgId: serializer.fromJson<String?>(json['ptcgId']),
+      cardmarketCode: serializer.fromJson<String?>(json['cardmarketCode']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'tcgdexId': serializer.toJson<String>(tcgdexId),
+      'ptcgId': serializer.toJson<String?>(ptcgId),
+      'cardmarketCode': serializer.toJson<String?>(cardmarketCode),
+    };
+  }
+
+  SetMapping copyWith(
+          {String? tcgdexId,
+          Value<String?> ptcgId = const Value.absent(),
+          Value<String?> cardmarketCode = const Value.absent()}) =>
+      SetMapping(
+        tcgdexId: tcgdexId ?? this.tcgdexId,
+        ptcgId: ptcgId.present ? ptcgId.value : this.ptcgId,
+        cardmarketCode:
+            cardmarketCode.present ? cardmarketCode.value : this.cardmarketCode,
+      );
+  SetMapping copyWithCompanion(SetMappingsCompanion data) {
+    return SetMapping(
+      tcgdexId: data.tcgdexId.present ? data.tcgdexId.value : this.tcgdexId,
+      ptcgId: data.ptcgId.present ? data.ptcgId.value : this.ptcgId,
+      cardmarketCode: data.cardmarketCode.present
+          ? data.cardmarketCode.value
+          : this.cardmarketCode,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SetMapping(')
+          ..write('tcgdexId: $tcgdexId, ')
+          ..write('ptcgId: $ptcgId, ')
+          ..write('cardmarketCode: $cardmarketCode')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(tcgdexId, ptcgId, cardmarketCode);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SetMapping &&
+          other.tcgdexId == this.tcgdexId &&
+          other.ptcgId == this.ptcgId &&
+          other.cardmarketCode == this.cardmarketCode);
+}
+
+class SetMappingsCompanion extends UpdateCompanion<SetMapping> {
+  final Value<String> tcgdexId;
+  final Value<String?> ptcgId;
+  final Value<String?> cardmarketCode;
+  final Value<int> rowid;
+  const SetMappingsCompanion({
+    this.tcgdexId = const Value.absent(),
+    this.ptcgId = const Value.absent(),
+    this.cardmarketCode = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SetMappingsCompanion.insert({
+    required String tcgdexId,
+    this.ptcgId = const Value.absent(),
+    this.cardmarketCode = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : tcgdexId = Value(tcgdexId);
+  static Insertable<SetMapping> custom({
+    Expression<String>? tcgdexId,
+    Expression<String>? ptcgId,
+    Expression<String>? cardmarketCode,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (tcgdexId != null) 'tcgdex_id': tcgdexId,
+      if (ptcgId != null) 'ptcg_id': ptcgId,
+      if (cardmarketCode != null) 'cardmarket_code': cardmarketCode,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SetMappingsCompanion copyWith(
+      {Value<String>? tcgdexId,
+      Value<String?>? ptcgId,
+      Value<String?>? cardmarketCode,
+      Value<int>? rowid}) {
+    return SetMappingsCompanion(
+      tcgdexId: tcgdexId ?? this.tcgdexId,
+      ptcgId: ptcgId ?? this.ptcgId,
+      cardmarketCode: cardmarketCode ?? this.cardmarketCode,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (tcgdexId.present) {
+      map['tcgdex_id'] = Variable<String>(tcgdexId.value);
+    }
+    if (ptcgId.present) {
+      map['ptcg_id'] = Variable<String>(ptcgId.value);
+    }
+    if (cardmarketCode.present) {
+      map['cardmarket_code'] = Variable<String>(cardmarketCode.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SetMappingsCompanion(')
+          ..write('tcgdexId: $tcgdexId, ')
+          ..write('ptcgId: $ptcgId, ')
+          ..write('cardmarketCode: $cardmarketCode, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5565,6 +6126,15 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $BinderCardsTable binderCards = $BinderCardsTable(this);
   late final $BinderHistoryTable binderHistory = $BinderHistoryTable(this);
   late final $PokedexTable pokedex = $PokedexTable(this);
+  late final $SetMappingsTable setMappings = $SetMappingsTable(this);
+  late final Index idxCardsSetid = Index(
+      'idx_cards_setid', 'CREATE INDEX idx_cards_setid ON cards (set_id)');
+  late final Index idxUsercardsCardid = Index('idx_usercards_cardid',
+      'CREATE INDEX idx_usercards_cardid ON user_cards (card_id)');
+  late final Index idxCmpricesCardid = Index('idx_cmprices_cardid',
+      'CREATE INDEX idx_cmprices_cardid ON card_market_prices (card_id)');
+  late final Index idxTcgpricesCardid = Index('idx_tcgprices_cardid',
+      'CREATE INDEX idx_tcgprices_cardid ON tcg_player_prices (card_id)');
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5580,7 +6150,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         binders,
         binderCards,
         binderHistory,
-        pokedex
+        pokedex,
+        setMappings,
+        idxCardsSetid,
+        idxUsercardsCardid,
+        idxCmpricesCardid,
+        idxTcgpricesCardid
       ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules(
@@ -5615,6 +6190,8 @@ typedef $$CardSetsTableCreateCompanionBuilder = CardSetsCompanion Function({
   Value<String?> symbolUrl,
   Value<String?> logoUrlDe,
   Value<String?> nameDe,
+  Value<bool> hasManualTranslations,
+  Value<bool> hasManualImages,
   Value<int> rowid,
 });
 typedef $$CardSetsTableUpdateCompanionBuilder = CardSetsCompanion Function({
@@ -5629,6 +6206,8 @@ typedef $$CardSetsTableUpdateCompanionBuilder = CardSetsCompanion Function({
   Value<String?> symbolUrl,
   Value<String?> logoUrlDe,
   Value<String?> nameDe,
+  Value<bool> hasManualTranslations,
+  Value<bool> hasManualImages,
   Value<int> rowid,
 });
 
@@ -5660,6 +6239,8 @@ class $$CardSetsTableTableManager extends RootTableManager<
             Value<String?> symbolUrl = const Value.absent(),
             Value<String?> logoUrlDe = const Value.absent(),
             Value<String?> nameDe = const Value.absent(),
+            Value<bool> hasManualTranslations = const Value.absent(),
+            Value<bool> hasManualImages = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               CardSetsCompanion(
@@ -5674,6 +6255,8 @@ class $$CardSetsTableTableManager extends RootTableManager<
             symbolUrl: symbolUrl,
             logoUrlDe: logoUrlDe,
             nameDe: nameDe,
+            hasManualTranslations: hasManualTranslations,
+            hasManualImages: hasManualImages,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -5688,6 +6271,8 @@ class $$CardSetsTableTableManager extends RootTableManager<
             Value<String?> symbolUrl = const Value.absent(),
             Value<String?> logoUrlDe = const Value.absent(),
             Value<String?> nameDe = const Value.absent(),
+            Value<bool> hasManualTranslations = const Value.absent(),
+            Value<bool> hasManualImages = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               CardSetsCompanion.insert(
@@ -5702,6 +6287,8 @@ class $$CardSetsTableTableManager extends RootTableManager<
             symbolUrl: symbolUrl,
             logoUrlDe: logoUrlDe,
             nameDe: nameDe,
+            hasManualTranslations: hasManualTranslations,
+            hasManualImages: hasManualImages,
             rowid: rowid,
           ),
         ));
@@ -5762,6 +6349,16 @@ class $$CardSetsTableFilterComposer
 
   ColumnFilters<String> get nameDe => $state.composableBuilder(
       column: $state.table.nameDe,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get hasManualTranslations => $state.composableBuilder(
+      column: $state.table.hasManualTranslations,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get hasManualImages => $state.composableBuilder(
+      column: $state.table.hasManualImages,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -5836,6 +6433,16 @@ class $$CardSetsTableOrderingComposer
       column: $state.table.nameDe,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get hasManualTranslations => $state.composableBuilder(
+      column: $state.table.hasManualTranslations,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get hasManualImages => $state.composableBuilder(
+      column: $state.table.hasManualImages,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
 }
 
 typedef $$CardsTableCreateCompanionBuilder = CardsCompanion Function({
@@ -5845,6 +6452,7 @@ typedef $$CardsTableCreateCompanionBuilder = CardsCompanion Function({
   Value<String?> nameDe,
   required String number,
   Value<String?> cardType,
+  Value<int?> hp,
   Value<String> preferredPriceSource,
   required String imageUrl,
   Value<String?> imageUrlDe,
@@ -5857,6 +6465,10 @@ typedef $$CardsTableCreateCompanionBuilder = CardsCompanion Function({
   Value<bool> hasHolo,
   Value<bool> hasReverse,
   Value<bool> hasWPromo,
+  Value<bool> hasManualVariants,
+  Value<bool> hasManualImages,
+  Value<bool> hasManualTranslations,
+  Value<bool> hasManualStats,
   Value<int> sortNumber,
   Value<int> rowid,
 });
@@ -5867,6 +6479,7 @@ typedef $$CardsTableUpdateCompanionBuilder = CardsCompanion Function({
   Value<String?> nameDe,
   Value<String> number,
   Value<String?> cardType,
+  Value<int?> hp,
   Value<String> preferredPriceSource,
   Value<String> imageUrl,
   Value<String?> imageUrlDe,
@@ -5879,6 +6492,10 @@ typedef $$CardsTableUpdateCompanionBuilder = CardsCompanion Function({
   Value<bool> hasHolo,
   Value<bool> hasReverse,
   Value<bool> hasWPromo,
+  Value<bool> hasManualVariants,
+  Value<bool> hasManualImages,
+  Value<bool> hasManualTranslations,
+  Value<bool> hasManualStats,
   Value<int> sortNumber,
   Value<int> rowid,
 });
@@ -5906,6 +6523,7 @@ class $$CardsTableTableManager extends RootTableManager<
             Value<String?> nameDe = const Value.absent(),
             Value<String> number = const Value.absent(),
             Value<String?> cardType = const Value.absent(),
+            Value<int?> hp = const Value.absent(),
             Value<String> preferredPriceSource = const Value.absent(),
             Value<String> imageUrl = const Value.absent(),
             Value<String?> imageUrlDe = const Value.absent(),
@@ -5918,6 +6536,10 @@ class $$CardsTableTableManager extends RootTableManager<
             Value<bool> hasHolo = const Value.absent(),
             Value<bool> hasReverse = const Value.absent(),
             Value<bool> hasWPromo = const Value.absent(),
+            Value<bool> hasManualVariants = const Value.absent(),
+            Value<bool> hasManualImages = const Value.absent(),
+            Value<bool> hasManualTranslations = const Value.absent(),
+            Value<bool> hasManualStats = const Value.absent(),
             Value<int> sortNumber = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -5928,6 +6550,7 @@ class $$CardsTableTableManager extends RootTableManager<
             nameDe: nameDe,
             number: number,
             cardType: cardType,
+            hp: hp,
             preferredPriceSource: preferredPriceSource,
             imageUrl: imageUrl,
             imageUrlDe: imageUrlDe,
@@ -5940,6 +6563,10 @@ class $$CardsTableTableManager extends RootTableManager<
             hasHolo: hasHolo,
             hasReverse: hasReverse,
             hasWPromo: hasWPromo,
+            hasManualVariants: hasManualVariants,
+            hasManualImages: hasManualImages,
+            hasManualTranslations: hasManualTranslations,
+            hasManualStats: hasManualStats,
             sortNumber: sortNumber,
             rowid: rowid,
           ),
@@ -5950,6 +6577,7 @@ class $$CardsTableTableManager extends RootTableManager<
             Value<String?> nameDe = const Value.absent(),
             required String number,
             Value<String?> cardType = const Value.absent(),
+            Value<int?> hp = const Value.absent(),
             Value<String> preferredPriceSource = const Value.absent(),
             required String imageUrl,
             Value<String?> imageUrlDe = const Value.absent(),
@@ -5962,6 +6590,10 @@ class $$CardsTableTableManager extends RootTableManager<
             Value<bool> hasHolo = const Value.absent(),
             Value<bool> hasReverse = const Value.absent(),
             Value<bool> hasWPromo = const Value.absent(),
+            Value<bool> hasManualVariants = const Value.absent(),
+            Value<bool> hasManualImages = const Value.absent(),
+            Value<bool> hasManualTranslations = const Value.absent(),
+            Value<bool> hasManualStats = const Value.absent(),
             Value<int> sortNumber = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -5972,6 +6604,7 @@ class $$CardsTableTableManager extends RootTableManager<
             nameDe: nameDe,
             number: number,
             cardType: cardType,
+            hp: hp,
             preferredPriceSource: preferredPriceSource,
             imageUrl: imageUrl,
             imageUrlDe: imageUrlDe,
@@ -5984,6 +6617,10 @@ class $$CardsTableTableManager extends RootTableManager<
             hasHolo: hasHolo,
             hasReverse: hasReverse,
             hasWPromo: hasWPromo,
+            hasManualVariants: hasManualVariants,
+            hasManualImages: hasManualImages,
+            hasManualTranslations: hasManualTranslations,
+            hasManualStats: hasManualStats,
             sortNumber: sortNumber,
             rowid: rowid,
           ),
@@ -6015,6 +6652,11 @@ class $$CardsTableFilterComposer
 
   ColumnFilters<String> get cardType => $state.composableBuilder(
       column: $state.table.cardType,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<int> get hp => $state.composableBuilder(
+      column: $state.table.hp,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -6075,6 +6717,26 @@ class $$CardsTableFilterComposer
 
   ColumnFilters<bool> get hasWPromo => $state.composableBuilder(
       column: $state.table.hasWPromo,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get hasManualVariants => $state.composableBuilder(
+      column: $state.table.hasManualVariants,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get hasManualImages => $state.composableBuilder(
+      column: $state.table.hasManualImages,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get hasManualTranslations => $state.composableBuilder(
+      column: $state.table.hasManualTranslations,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get hasManualStats => $state.composableBuilder(
+      column: $state.table.hasManualStats,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -6192,6 +6854,11 @@ class $$CardsTableOrderingComposer
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
+  ColumnOrderings<int> get hp => $state.composableBuilder(
+      column: $state.table.hp,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
   ColumnOrderings<String> get preferredPriceSource => $state.composableBuilder(
       column: $state.table.preferredPriceSource,
       builder: (column, joinBuilders) =>
@@ -6249,6 +6916,26 @@ class $$CardsTableOrderingComposer
 
   ColumnOrderings<bool> get hasWPromo => $state.composableBuilder(
       column: $state.table.hasWPromo,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get hasManualVariants => $state.composableBuilder(
+      column: $state.table.hasManualVariants,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get hasManualImages => $state.composableBuilder(
+      column: $state.table.hasManualImages,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get hasManualTranslations => $state.composableBuilder(
+      column: $state.table.hasManualTranslations,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get hasManualStats => $state.composableBuilder(
+      column: $state.table.hasManualStats,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
@@ -8018,6 +8705,102 @@ class $$PokedexTableOrderingComposer
           ColumnOrderings(column, joinBuilders: joinBuilders));
 }
 
+typedef $$SetMappingsTableCreateCompanionBuilder = SetMappingsCompanion
+    Function({
+  required String tcgdexId,
+  Value<String?> ptcgId,
+  Value<String?> cardmarketCode,
+  Value<int> rowid,
+});
+typedef $$SetMappingsTableUpdateCompanionBuilder = SetMappingsCompanion
+    Function({
+  Value<String> tcgdexId,
+  Value<String?> ptcgId,
+  Value<String?> cardmarketCode,
+  Value<int> rowid,
+});
+
+class $$SetMappingsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $SetMappingsTable,
+    SetMapping,
+    $$SetMappingsTableFilterComposer,
+    $$SetMappingsTableOrderingComposer,
+    $$SetMappingsTableCreateCompanionBuilder,
+    $$SetMappingsTableUpdateCompanionBuilder> {
+  $$SetMappingsTableTableManager(_$AppDatabase db, $SetMappingsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          filteringComposer:
+              $$SetMappingsTableFilterComposer(ComposerState(db, table)),
+          orderingComposer:
+              $$SetMappingsTableOrderingComposer(ComposerState(db, table)),
+          updateCompanionCallback: ({
+            Value<String> tcgdexId = const Value.absent(),
+            Value<String?> ptcgId = const Value.absent(),
+            Value<String?> cardmarketCode = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              SetMappingsCompanion(
+            tcgdexId: tcgdexId,
+            ptcgId: ptcgId,
+            cardmarketCode: cardmarketCode,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String tcgdexId,
+            Value<String?> ptcgId = const Value.absent(),
+            Value<String?> cardmarketCode = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              SetMappingsCompanion.insert(
+            tcgdexId: tcgdexId,
+            ptcgId: ptcgId,
+            cardmarketCode: cardmarketCode,
+            rowid: rowid,
+          ),
+        ));
+}
+
+class $$SetMappingsTableFilterComposer
+    extends FilterComposer<_$AppDatabase, $SetMappingsTable> {
+  $$SetMappingsTableFilterComposer(super.$state);
+  ColumnFilters<String> get tcgdexId => $state.composableBuilder(
+      column: $state.table.tcgdexId,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get ptcgId => $state.composableBuilder(
+      column: $state.table.ptcgId,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get cardmarketCode => $state.composableBuilder(
+      column: $state.table.cardmarketCode,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+}
+
+class $$SetMappingsTableOrderingComposer
+    extends OrderingComposer<_$AppDatabase, $SetMappingsTable> {
+  $$SetMappingsTableOrderingComposer(super.$state);
+  ColumnOrderings<String> get tcgdexId => $state.composableBuilder(
+      column: $state.table.tcgdexId,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get ptcgId => $state.composableBuilder(
+      column: $state.table.ptcgId,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get cardmarketCode => $state.composableBuilder(
+      column: $state.table.cardmarketCode,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+}
+
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
@@ -8043,4 +8826,6 @@ class $AppDatabaseManager {
       $$BinderHistoryTableTableManager(_db, _db.binderHistory);
   $$PokedexTableTableManager get pokedex =>
       $$PokedexTableTableManager(_db, _db.pokedex);
+  $$SetMappingsTableTableManager get setMappings =>
+      $$SetMappingsTableTableManager(_db, _db.setMappings);
 }

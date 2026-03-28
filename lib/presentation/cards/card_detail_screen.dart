@@ -1176,14 +1176,59 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     final dbInst = ref.read(databaseProvider);
     final dexApi = ref.read(tcgDexApiClientProvider);
     final importer = SetImporter(dexApi, dbInst);
+    
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aktualisiere Daten...')));
+    
     try {
-      await importer.importCardsForSet(widget.card.setId);
+      // --- NEU: PREIS-CACHE FÜR DEN DETAIL-SCREEN-RELOAD ---
+      final setCardsQuery = await (dbInst.select(dbInst.cards)..where((t) => t.setId.equals(widget.card.setId))).get();
+      final cardIds = setCardsQuery.map((c) => c.id).toList();
+      
+      Map<String, Map<String, dynamic>> latestCmPrices = {};
+      Map<String, Map<String, dynamic>> latestTcgPrices = {};
+      
+      if (cardIds.isNotEmpty) {
+         final allLatestCmQuery = await dbInst.customSelect(
+            'SELECT cardId, trend, trendHolo, trendReverse FROM CardMarketPrices WHERE cardId IN (${cardIds.map((e) => "'$e'").join(',')}) GROUP BY cardId HAVING MAX(fetchedAt)'
+         ).get();
+         latestCmPrices = {
+            for (var row in allLatestCmQuery) row.read<String>('cardId'): {
+               'trend': row.read<double?>('trend'),
+               'trendHolo': row.read<double?>('trendHolo'),
+               'trendReverse': row.read<double?>('trendReverse'),
+            }
+         };
+
+         final allLatestTcgQuery = await dbInst.customSelect(
+            'SELECT cardId, normalMarket, holoMarket, reverseMarket FROM TcgPlayerPrices WHERE cardId IN (${cardIds.map((e) => "'$e'").join(',')}) GROUP BY cardId HAVING MAX(fetchedAt)'
+         ).get();
+         latestTcgPrices = {
+            for (var row in allLatestTcgQuery) row.read<String>('cardId'): {
+               'normalMarket': row.read<double?>('normalMarket'),
+               'holoMarket': row.read<double?>('holoMarket'),
+               'reverseMarket': row.read<double?>('reverseMarket'),
+            }
+         };
+      }
+      
+      // JETZT den neuen Aufruf mit 3 Parametern nutzen!
+      await importer.importCardsForSet(widget.card.setId, latestCmPrices, latestTcgPrices);
+      // -----------------------------------------------------
+
       _forceRefresh();
       ref.invalidate(cardPriceHistoryProvider(widget.card.id));
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Aktualisiert!'), backgroundColor: Colors.green));
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Aktualisiert!'), backgroundColor: Colors.green)
+        );
+      }
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red)
+        );
+      }
     }
   }
 
