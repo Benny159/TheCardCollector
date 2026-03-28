@@ -6,13 +6,10 @@ class DatabaseInitializer {
 
   DatabaseInitializer(this.db);
 
+  /// Synchronisiert die Mapping-Tabelle.
+  /// Neue Einträge werden hinzugefügt, bestehende werden aktualisiert.
   Future<void> seedInitialMappings() async {
-    final existingCount = await (db.select(db.setMappings)..limit(1)).get();
-    if (existingCount.isNotEmpty) {
-      return; 
-    }
-
-    print('🌱 Erstelle initiale Set-Mappings (inklusive manueller Korrekturen)...');
+    print('🌱 Überprüfe/Aktualisiere Set-Mappings...');
 
     final List<Map<String, String?>> initialMappings = [
       // --- DIE AUTOMATISCHEN MATCHES ---
@@ -165,7 +162,7 @@ class DatabaseInitializer {
       {"tcgdexId": "me02", "ptcgId": "me2", "cmCode": "PFL"}, // TCGdex: Phantasmal Flames | PTCG: Phantasmal Flames
       {"tcgdexId": "me02.5", "ptcgId": "me2pt5", "cmCode": "ASC"}, // TCGdex: Ascended Heroes | PTCG: Ascended Heroes
 
-      // --- MANUELLE MATCHES (Trainer Kits, McDonald's etc.) ---
+      // --- MANUELLE MATCHES ---
       {"tcgdexId": "2011bw", "ptcgId": "mcd11", "cmCode": ""}, // TCGdex: Macdonald's Collection 2011 | PTCG: McDonald's Collection 2011
       {"tcgdexId": "2012bw", "ptcgId": "mcd12", "cmCode": ""}, // TCGdex: Macdonald's Collection 2012 | PTCG: McDonald's Collection 2012
       {"tcgdexId": "2014xy", "ptcgId": "mcd14", "cmCode": ""}, // TCGdex: Macdonald's Collection 2014 | PTCG: McDonald's Collection 2014
@@ -181,31 +178,30 @@ class DatabaseInitializer {
       {"tcgdexId": "tk-ex-p", "ptcgId": "tk2a", "cmCode": ""}, // TCGdex: EX trainer Kit 2 (Plusle) | PTCG: EX Trainer Kit 2 Plusle
       {"tcgdexId": "tk-ex-m", "ptcgId": "tk2b", "cmCode": ""}, // TCGdex: EX trainer Kit 2 (Minun) | PTCG: EX Trainer Kit 2 Minun
 
-      // --- NUR BEI TCGDEX (Pocket, Promos, Unseen Forces) ---
-      {"tcgdexId": "wp", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: W Promotional
-      {"tcgdexId": "ex5.5", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: Poké Card Creator Pack
-      {"tcgdexId": "exu", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: Unseen Forces Unown Collection
-      {"tcgdexId": "tk-dp-l", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: DP trainer Kit (Lucario)
-      {"tcgdexId": "tk-dp-m", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: DP trainer Kit (Manaphy)
-      {"tcgdexId": "tk-hs-g", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: HS trainer Kit (Gyarados)
-      {"tcgdexId": "tk-hs-r", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: HS trainer Kit (Raichu)
-      {"tcgdexId": "tk-bw-z", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: BW trainer Kit (Zoroark)
-      {"tcgdexId": "tk-bw-e", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: BW trainer Kit (Excadrill)
-      {"tcgdexId": "rc", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: Radiant Collection
-      {"tcgdexId": "tk-xy-sy", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: XY trainer Kit (Sylveon)
-      {"tcgdexId": "tk-xy-n", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: XY trainer Kit (Noivern)
-      {"tcgdexId": "tk-xy-b", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: XY trainer Kit (Bisharp)
-      {"tcgdexId": "tk-xy-w", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: XY trainer Kit (Wigglytuff)
-      {"tcgdexId": "tk-xy-latia", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: XY trainer Kit (Latias)
-      {"tcgdexId": "tk-xy-latio", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: XY trainer Kit (Latios)
-      {"tcgdexId": "tk-xy-p", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: XY trainer Kit (Pikachu Libre)
-      {"tcgdexId": "tk-xy-su", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: XY trainer Kit (Suicune)
-      {"tcgdexId": "tk-sm-l", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: SM trainer Kit (Lycanroc)
-      {"tcgdexId": "tk-sm-r", "ptcgId": null, "cmCode": null}, // NUR BEI TCGDEX: SM trainer Kit (Alolan Raichu)
+      // --- NUR BEI TCGDEX ---
+      {"tcgdexId": "wp", "ptcgId": null, "cmCode": null}, // W Promotional
+      {"tcgdexId": "ex5.5", "ptcgId": null, "cmCode": null}, // Poké Card Creator Pack
+      {"tcgdexId": "exu", "ptcgId": null, "cmCode": null}, // Unseen Forces Unown Collection
+      {"tcgdexId": "tk-dp-l", "ptcgId": null, "cmCode": null}, // DP trainer Kit (Lucario)
+      {"tcgdexId": "tk-dp-m", "ptcgId": null, "cmCode": null}, // DP trainer Kit (Manaphy)
+      {"tcgdexId": "tk-hs-g", "ptcgId": null, "cmCode": null}, // HS trainer Kit (Gyarados)
+      {"tcgdexId": "tk-hs-r", "ptcgId": null, "cmCode": null}, // HS trainer Kit (Raichu)
+      {"tcgdexId": "tk-bw-z", "ptcgId": null, "cmCode": null}, // BW trainer Kit (Zoroark)
+      {"tcgdexId": "tk-bw-e", "ptcgId": null, "cmCode": null}, // BW trainer Kit (Excadrill)
+      {"tcgdexId": "rc", "ptcgId": null, "cmCode": null}, // Radiant Collection
+      {"tcgdexId": "tk-xy-sy", "ptcgId": null, "cmCode": null}, // XY trainer Kit (Sylveon)
+      {"tcgdexId": "tk-xy-n", "ptcgId": null, "cmCode": null}, // XY trainer Kit (Noivern)
+      {"tcgdexId": "tk-xy-b", "ptcgId": null, "cmCode": null}, // XY trainer Kit (Bisharp)
+      {"tcgdexId": "tk-xy-w", "ptcgId": null, "cmCode": null}, // XY trainer Kit (Wigglytuff)
+      {"tcgdexId": "tk-xy-latia", "ptcgId": null, "cmCode": null}, // XY trainer Kit (Latias)
+      {"tcgdexId": "tk-xy-latio", "ptcgId": null, "cmCode": null}, // XY trainer Kit (Latios)
+      {"tcgdexId": "tk-xy-p", "ptcgId": null, "cmCode": null}, // XY trainer Kit (Pikachu Libre)
+      {"tcgdexId": "tk-xy-su", "ptcgId": null, "cmCode": null}, // XY trainer Kit (Suicune)
+      {"tcgdexId": "tk-sm-l", "ptcgId": null, "cmCode": null}, // SM trainer Kit (Lycanroc)
+      {"tcgdexId": "tk-sm-r", "ptcgId": null, "cmCode": null}, // SM trainer Kit (Alolan Raichu)
+      {"tcgdexId": "mep", "ptcgId": null, "cmCode": null}, // MEP Black Star Promos
 
-      // --- NUR BEI PTCG (Shiny Vaults, Trainer Galleries, Perfect Order etc.) ---
-      // Wir belassen diese bewusst einzeln, da TCGdex sie oft fälschlicherweise in die Hauptsets mischt. 
-      // Dadurch hast du sie sauber getrennt für die Cardmarket-Preise!
+      // --- NUR BEI PTCG ---
       {"tcgdexId": "swsh45sv", "ptcgId": "swsh45sv", "cmCode": "SHF"}, // NUR BEI PTCG: Shining Fates Shiny Vault
       {"tcgdexId": "cel25c", "ptcgId": "cel25c", "cmCode": "CEL"}, // NUR BEI PTCG: Celebrations: Classic Collection
       {"tcgdexId": "swsh9tg", "ptcgId": "swsh9tg", "cmCode": "BRS"}, // NUR BEI PTCG: Brilliant Stars Trainer Gallery
@@ -218,8 +214,11 @@ class DatabaseInitializer {
       {"tcgdexId": "me03", "ptcgId": "me3", "cmCode": "POR"}, // NUR BEI PTCG: Perfect Order
     ];
 
+    // --- NEU: insertAllOnConflictUpdate anstelle von insertAll ---
+    // Dadurch werden die Einträge bei jedem App-Start überprüft 
+    // und (falls du die Liste änderst) sofort aktualisiert!
     await db.batch((batch) {
-      batch.insertAll(
+      batch.insertAllOnConflictUpdate(
         db.setMappings,
         initialMappings.map((m) => SetMappingsCompanion.insert(
           tcgdexId: m['tcgdexId'] as String,
@@ -229,6 +228,6 @@ class DatabaseInitializer {
       );
     });
 
-    print('✅ Mapping-Tabelle erfolgreich gefüllt!');
+    print('✅ Set-Mappings erfolgreich synchronisiert!');
   }
 }

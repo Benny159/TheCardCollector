@@ -1,26 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:device_preview/device_preview.dart'; // <--- HIER: Das Paket importieren
+import 'package:device_preview/device_preview.dart';
 
 // Deine Datenbank Imports
 import 'data/database/app_database.dart';
 import 'data/database/database_provider.dart';
+import 'data/database/database_initializer.dart'; // <--- NEU: Der Import für den Initializer
 
 // Dein Screen Import
-import 'presentation/main_screen.dart'; // <--- HIER: MainScreen Importieren
+import 'presentation/main_screen.dart'; 
 
-void main() {
+// --- NEU: Die main() Methode muss jetzt "async" sein ---
+void main() async {
+  // Das ist zwingend nötig, wenn man vor dem App-Start auf die Datenbank zugreifen will
+  WidgetsFlutterBinding.ensureInitialized(); 
+
   // 1. Datenbank initialisieren
   final database = AppDatabase();
+
+  // --- NEU: Mapping-Tabelle füllen, falls sie leer ist ---
+  // Das passiert unsichtbar im Hintergrund. Wenn die Tabelle schon voll ist,
+  // bricht die Funktion (dank unserer Prüfung) sofort ab und kostet keine Zeit.
+  final initializer = DatabaseInitializer(database);
+  await initializer.seedInitialMappings();
+  // -------------------------------------------------------
 
   runApp(
     // 2. Die ganze App wird in "DevicePreview" eingepackt
     DevicePreview(
-      enabled: true, // Auf 'false' setzen, wenn du es deaktivieren willst (z.B. für Release)
-      
-      // Hier drin bauen wir unsere App wie gewohnt
+      enabled: true, 
       builder: (context) => ProviderScope(
-        // Wir geben die Datenbank an Riverpod weiter
         overrides: [
           databaseProvider.overrideWithValue(database),
         ],
@@ -40,11 +49,8 @@ class TcgCollectorApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
 
       // --- WICHTIG FÜR DEVICE PREVIEW ---
-      // Das sagt der App: "Benutze nicht die Windows-Größe, sondern die Handy-Größe"
       useInheritedMediaQuery: true, 
-      // Das stellt die Sprache/Region des simulierten Handys ein
       locale: DevicePreview.locale(context), 
-      // Das baut den Rahmen (iPhone, Android) um die App herum
       builder: DevicePreview.appBuilder, 
       // ----------------------------------
 

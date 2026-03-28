@@ -6,6 +6,7 @@ import '../../data/api/search_provider.dart';
 import '../../data/api/tcgdex_api_client.dart';
 import '../../data/database/database_provider.dart';
 import '../../data/sync/set_importer.dart';
+import '../../data/sync/ptcg_importer.dart';
 import '../../domain/models/api_set.dart';
 import 'set_detail_screen.dart';
 
@@ -203,30 +204,33 @@ class _SetListScreenState extends ConsumerState<SetListScreen> {
 
   // Sync-Logik (Kompletter Daten-Sync)
   void _startSetSync(BuildContext context, WidgetRef ref) async {
-    final confirm = await showDialog<bool>(
+    // --- NEU: Dialog mit Auswahlmöglichkeiten ---
+    final syncType = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Vollständiges Update?"),
+        title: const Text("Update auswählen"),
         content: const Text(
-          "Das lädt ALLE Sets inklusive Release-Daten und Karten herunter.\n"
-          "Dieser Vorgang kann eine Weile dauern.",
+          "Standard Update:\nLädt neue Sets und Karten von TCGdex (Schnell).\n\n"
+          "Deep Sync:\nLädt zusätzlich exklusive Promo-Sets, fehlende Bilder und Preise von PokemonTCG.io (Dauert länger).",
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Abbrechen")),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Starten")),
+          TextButton(onPressed: () => Navigator.pop(ctx, 0), child: const Text("Abbrechen", style: TextStyle(color: Colors.grey))),
+          TextButton(onPressed: () => Navigator.pop(ctx, 1), child: const Text("Standard")),
+          FilledButton(onPressed: () => Navigator.pop(ctx, 2), child: const Text("Deep Sync")),
         ],
       ),
     );
 
-    if (confirm != true) return;
+    if (syncType == null || syncType == 0) return;
 
     final db = ref.read(databaseProvider);
     final dexApi = ref.read(tcgDexApiClientProvider);
-    final importer = SetImporter(dexApi, db);
+    final setImporter = SetImporter(dexApi, db);
+    // Den neuen Importer laden! (Vergiss nicht ihn oben zu importieren: import '../../data/sync/ptcg_importer.dart';)
+    final ptcgImporter = PtcgImporter(db);
 
     if (!context.mounted) return;
 
-    // Ladeanzeige öffnen
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -234,15 +238,23 @@ class _SetListScreenState extends ConsumerState<SetListScreen> {
     );
 
     try {
-      // Nutzt die neue Logik im Importer (inkl. Datum & Karten)
-      await importer.syncAllData(
-        onProgress: (status) => print('SYNC: $status'),
-      );
+      if (syncType == 1 || syncType == 2) {
+        // TCGdex Sync immer zuerst ausführen!
+        await setImporter.syncAllData(
+          onProgress: (status) => print('TCGDEX SYNC: $status'),
+        );
+      }
+
+      if (syncType == 2) {
+        // Danach den Lückenfüller drüberschicken!
+        await ptcgImporter.syncMissingData(
+          onProgress: (status) => print('PTCG SYNC: $status'),
+        );
+      }
 
       if (context.mounted) {
-        // Erfolgsmeldung
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Alles erfolgreich aktualisiert!')),
+          const SnackBar(content: Text('✅ Alles erfolgreich aktualisiert!'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
@@ -252,10 +264,9 @@ class _SetListScreenState extends ConsumerState<SetListScreen> {
         );
       }
     } finally {
-      // WICHTIG: Dialog IMMER schließen, auch bei Fehler!
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
-        ref.refresh(allSetsProvider); // Liste neu laden
+        ref.refresh(allSetsProvider);
       }
     }
   }
