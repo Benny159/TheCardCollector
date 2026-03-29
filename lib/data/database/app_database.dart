@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 
 import 'tables.dart'; 
@@ -82,11 +83,31 @@ class AppDatabase extends _$AppDatabase {
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
+    // Wo soll die Datenbank auf dem Handy gespeichert werden?
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'tcg_collector.sqlite'));
-    if (Platform.isAndroid) {
-      await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();
+
+    // --- DER WICHTIGE TEIL: PRE-FILLED DB KOPIEREN ---
+    if (!await file.exists()) {
+      print('📦 Keine lokale Datenbank gefunden. Kopiere Pre-filled DB aus Assets...');
+      try {
+        // Lade die Datei aus den Assets in den Zwischenspeicher
+        final blob = await rootBundle.load('assets/db/tcg_collector.sqlite');
+        final buffer = blob.buffer;
+        
+        // Schreibe die Datei auf den Handy-Speicher
+        await file.writeAsBytes(buffer.asUint8List(blob.offsetInBytes, blob.lengthInBytes));
+        print('✅ Pre-filled Datenbank erfolgreich auf das Gerät kopiert!');
+      } catch (e) {
+        print('❌ Fehler beim Kopieren der Asset-Datenbank: $e');
+        // Falls die Datei im Asset-Ordner fehlt, baut Drift einfach eine leere auf.
+      }
+    } else {
+      print('✅ Lokale Datenbank gefunden. Nutze bestehende Daten.');
     }
+    // -------------------------------------------------
+
+    // Öffne die Datenbank
     return NativeDatabase.createInBackground(file);
   });
 }
