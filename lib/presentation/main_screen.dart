@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'sets/set_list_screen.dart';        // Dein Set-Screen Import
-import 'search/card_search_screen.dart';   // Dein Such-Screen Import
-import 'inventory/inventory_screen.dart';  // Dein Inventar-Screen Import
-import 'binders/binder_list_screen.dart';  // <--- NEU: Dein Binder-Screen Import
+
+import 'sets/set_list_screen.dart';        
+import 'search/card_search_screen.dart';   
+import 'inventory/inventory_screen.dart';  
+import 'binders/binder_list_screen.dart';  
 import '../../data/sync/pokedex_importer.dart';
 import '../../data/database/database_provider.dart';
+
+// --- NEU: Import für den Scanner (Datei erstellen wir gleich) ---
+import 'scanner/scanner_screen.dart'; 
 
 // Wir brauchen Keys, um den Status der Navigatoren zu speichern
 final _searchNavigatorKey = GlobalKey<NavigatorState>();
 final _setsNavigatorKey = GlobalKey<NavigatorState>();
 final _inventoryNavigatorKey = GlobalKey<NavigatorState>();
-final _binderNavigatorKey = GlobalKey<NavigatorState>(); // <--- NEU: Key für Binder
+final _binderNavigatorKey = GlobalKey<NavigatorState>(); 
 
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
@@ -40,37 +44,35 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   // Hier definieren wir unsere vier Tabs
   late final List<Widget> _tabs = [
     // TAB 0: SUCHE
-    _buildTabNavigator(
-      _searchNavigatorKey, 
-      const CardSearchScreen(),
-    ),
-    
+    _buildTabNavigator(_searchNavigatorKey, const CardSearchScreen()),
     // TAB 1: SETS
-    _buildTabNavigator(
-      _setsNavigatorKey, 
-      const SetListScreen(),
-    ),
-
+    _buildTabNavigator(_setsNavigatorKey, const SetListScreen()),
     // TAB 2: INVENTAR
-    _buildTabNavigator(
-      _inventoryNavigatorKey, 
-      const InventoryScreen(),
-    ),
-
-    // TAB 3: BINDER (NEU)
-    _buildTabNavigator(
-      _binderNavigatorKey, 
-      const BinderListScreen(),
-    ),
+    _buildTabNavigator(_inventoryNavigatorKey, const InventoryScreen()),
+    // TAB 3: BINDER
+    _buildTabNavigator(_binderNavigatorKey, const BinderListScreen()),
   ];
+
+  // --- NEU: Scanner öffnen Methode ---
+  void _openScanner() {
+    // Öffnet den Scanner über die komplette App (inkl. Nav-Leiste)
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        builder: (ctx) => const ScannerScreen(),
+        fullscreenDialog: true, 
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     // PopScope sorgt dafür, dass der Zurück-Button (Android) 
     // erst im Tab zurückgeht, bevor er die App schließt.
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, result) async { // Korrekte Signatur für neues Flutter
+      onPopInvokedWithResult: (didPop, result) async { 
         if (didPop) return;
 
         // Welcher Navigator ist gerade aktiv?
@@ -82,7 +84,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         } else if (_currentIndex == 2) {
           currentNavigator = _inventoryNavigatorKey.currentState;
         } else {
-          // Index 3 ist Binder
           currentNavigator = _binderNavigatorKey.currentState;
         }
 
@@ -90,7 +91,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           // Wenn wir im Tab zurückgehen können, tun wir das
           currentNavigator.pop();
         } else {
-          // Wenn wir ganz am Anfang sind, schließen wir die App (oder minimieren)
+          // Wenn wir ganz am Anfang sind, schließen wir die App
           if (context.mounted) Navigator.of(context).pop(); 
         }
       },
@@ -98,49 +99,119 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         body: IndexedStack(
           index: _currentIndex,
           children: [
-            // NEU: Tabs werden erst gerendert, wenn sie in _activeTabs stehen
             _activeTabs.contains(0) ? _tabs[0] : const SizedBox.shrink(),
             _activeTabs.contains(1) ? _tabs[1] : const SizedBox.shrink(),
             _activeTabs.contains(2) ? _tabs[2] : const SizedBox.shrink(),
             _activeTabs.contains(3) ? _tabs[3] : const SizedBox.shrink(),
           ],
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _currentIndex,
-          onDestinationSelected: (index) {
-            if (_currentIndex == index) {
-              final nav = index == 0 ? _searchNavigatorKey.currentState 
-                        : index == 1 ? _setsNavigatorKey.currentState 
-                        : index == 2 ? _inventoryNavigatorKey.currentState
-                        : _binderNavigatorKey.currentState; // <--- NEU
-              nav?.popUntil((route) => route.isFirst);
-            } else {
-              setState(() {
-                _currentIndex = index;
-                // NEU: Wenn der Tab noch nie besucht wurde, fügen wir ihn hinzu
-                if (!_activeTabs.contains(index)) {
-                  _activeTabs.add(index);
-                }
-              });
+
+        // --- NEU: Der fette, hervorgehobene Scanner-Button ---
+        floatingActionButton: Container(
+          height: 65,
+          width: 65,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.primary.withOpacity(0.4),
+                spreadRadius: 2,
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: FloatingActionButton(
+            onPressed: _openScanner,
+            backgroundColor: theme.colorScheme.primary,
+            elevation: 0,
+            shape: const CircleBorder(),
+            child: const Icon(Icons.qr_code_scanner, size: 32, color: Colors.white),
+          ),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+
+        // --- NEU: BottomAppBar, die den FAB "umschließt" ---
+        bottomNavigationBar: BottomAppBar(
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 8.0,
+          color: theme.colorScheme.surface,
+          elevation: 8,
+          child: SizedBox(
+            height: 60,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Linke Seite
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildNavItem(0, Icons.search, 'Suche', theme),
+                      _buildNavItem(1, Icons.collections_bookmark, 'Sets', theme),
+                    ],
+                  ),
+                ),
+                // Platz für den Notch (Scanner-Button in der Mitte)
+                const SizedBox(width: 48), 
+                // Rechte Seite
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildNavItem(2, Icons.inventory_2, 'Inventar', theme),
+                      _buildNavItem(3, Icons.book, 'Binder', theme),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- HILFSFUNKTION FÜR DIE NEUEN TAB-BUTTONS ---
+  Widget _buildNavItem(int index, IconData icon, String label, ThemeData theme) {
+    final isSelected = _currentIndex == index;
+    final color = isSelected ? theme.colorScheme.primary : Colors.grey;
+
+    return InkWell(
+      onTap: () {
+        if (_currentIndex == index) {
+          // Tab wurde nochmal angetippt -> Zurück zum Start des Tabs scrollen/navigieren
+          final nav = index == 0 ? _searchNavigatorKey.currentState 
+                    : index == 1 ? _setsNavigatorKey.currentState 
+                    : index == 2 ? _inventoryNavigatorKey.currentState
+                    : _binderNavigatorKey.currentState; 
+          nav?.popUntil((route) => route.isFirst);
+        } else {
+          // Normaler Tab-Wechsel
+          setState(() {
+            _currentIndex = index;
+            if (!_activeTabs.contains(index)) {
+              _activeTabs.add(index);
             }
-          },
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.search),
-              label: 'Suche',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.collections_bookmark),
-              label: 'Sets',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.inventory_2), 
-              label: 'Inventar',
-            ),
-            // <--- NEU: Der vierte Tab
-            NavigationDestination(
-              icon: Icon(Icons.book), 
-              label: 'Binder',
+          });
+        }
+      },
+      borderRadius: BorderRadius.circular(50),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 26),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: color,
+              ),
             ),
           ],
         ),
