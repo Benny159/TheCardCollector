@@ -6,14 +6,14 @@ class BinderSlotWidget extends StatelessWidget {
   final BinderSlotData slotData;
   final VoidCallback onTap;
   final VoidCallback? onLongPress; 
-  final bool isHighlightedForSwap; // <--- NEU
+  final bool isHighlighted; // <--- NEU (ersetzt isHighlightedForSwap)
 
   const BinderSlotWidget({
     super.key, 
     required this.slotData, 
     required this.onTap, 
     this.onLongPress,
-    this.isHighlightedForSwap = false, // <--- NEU
+    this.isHighlighted = false, // <--- NEU
   });
 
   @override
@@ -31,10 +31,10 @@ class BinderSlotWidget extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.black12,
           borderRadius: BorderRadius.circular(4),
-          // --- HIGHLIGHT RAHMEN BEIM TAUSCHEN ---
+          // --- HIGHLIGHT RAHMEN BEIM TAUSCHEN ODER SUCHEN ---
           border: Border.all(
-            color: isHighlightedForSwap ? Colors.redAccent : Colors.grey.withOpacity(0.3),
-            width: isHighlightedForSwap ? 3 : 1,
+            color: isHighlighted ? Colors.redAccent : Colors.grey.withOpacity(0.3),
+            width: isHighlighted ? 3 : 1,
           ),
           boxShadow: [
              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, spreadRadius: 1, offset: const Offset(1, 1))

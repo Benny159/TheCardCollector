@@ -15,7 +15,13 @@ import 'package:intl/intl.dart';
 
 class BinderDetailScreen extends ConsumerStatefulWidget {
   final Binder binder;
-  const BinderDetailScreen({super.key, required this.binder});
+  final String? initialSearchQuery; // <--- NEU: Dieses Feld fehlte!
+
+  const BinderDetailScreen({
+    super.key, 
+    required this.binder, 
+    this.initialSearchQuery, // <--- NEU: Hier im Konstruktor hinzufügen!
+  });
 
   @override
   ConsumerState<BinderDetailScreen> createState() => _BinderDetailScreenState();
@@ -28,15 +34,31 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   
   int _currentIndex = 0;
   
-  // --- NEU: Tausch-Modus Variablen ---
+  // --- Tausch-Modus Variablen ---
   bool _isSwapMode = false;
   BinderSlotData? _slotToSwap;
+
+  // --- NEU: Highlight-Variable für die Suche ---
+  int? _highlightedSlotId;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _currentIndex);
     _focusNode = FocusNode();
+    // --- NEU: Automatische Suche beim Starten ausführen ---
+    if (widget.initialSearchQuery != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        // Kurz warten, bis der Binder aus der DB geladen ist
+        await Future.delayed(const Duration(milliseconds: 400));
+        if (!mounted) return;
+        
+        final asyncData = ref.read(binderDetailProvider(widget.binder.id));
+        if (asyncData.value != null) {
+           _performSearch(widget.initialSearchQuery!, asyncData.value!);
+        }
+      });
+    }
   }
 
   @override
@@ -69,7 +91,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
       ),
       body: Column(
         children: [
-          // --- NEU: Der Tausch-Modus Banner ---
+          // --- Der Tausch-Modus Banner ---
           if (_isSwapMode && _slotToSwap != null)
             Container(
               width: double.infinity,
@@ -129,9 +151,9 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                         totalPages: totalPages, 
                         onSlotTap: (slot) => _handleSlotTap(slot),
                         onSlotLongPress: (slot) => _handleSlotLongPress(slot), 
-                        // --- NEU: Wir übergeben den Swap-State ans Widget ---
                         isSwapMode: _isSwapMode,
-                        slotToSwapId: _slotToSwap?.binderCard.id,
+                        // --- NEU: TRICK! Wir nutzen das Swap-Feld, um die gefundene Karte rot zu markieren ---
+                        slotToSwapId: _highlightedSlotId ?? _slotToSwap?.binderCard.id,
                         onNextPage: () {
                           FocusScope.of(context).unfocus();
                           if (_currentIndex < totalPages - 1) {
@@ -252,7 +274,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                   if (slot.card != null) {
                     final db = ref.read(databaseProvider);
                     
-                    // --- PREISE KURZ AUS DER DB LADEN ---
                     final cmPrice = await (db.select(db.cardMarketPrices)
                       ..where((t) => t.cardId.equals(slot.card!.id))
                       ..orderBy([(t) => drift.OrderingTerm(expression: t.fetchedAt, mode: drift.OrderingMode.desc)])
@@ -286,7 +307,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                       hasWPromo: slot.card!.hasWPromo,
                       hasFirstEdition: slot.card!.hasFirstEdition,
                       isOwned: true,
-                      // --- PREISE ANHÄNGEN ---
                       cardmarket: cmPrice != null ? ApiCardMarket(
                         url: cmPrice.url ?? '',
                         updatedAt: cmPrice.fetchedAt.toIso8601String(),
@@ -322,8 +342,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                 },
               ),
               const Divider(),
-              // ----------------------------
-
               ListTile(
                 leading: const Icon(Icons.change_circle, color: Colors.orange),
                 title: const Text("Karte austauschen"),
@@ -367,7 +385,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
             ),
             const Divider(),
             
-            // --- NEU: TAUSCH MODUS STARTEN ---
             ListTile(
               leading: const Icon(Icons.find_replace, color: Colors.orange),
               title: const Text("Mit einem anderen Slot tauschen"),
@@ -482,7 +499,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         );
 
         if (onlyOwned) {
-           // --- NEU: WIR LADEN DIE KONKRETEN KARTEN AUS DEM INVENTAR ---
            final availableCards = await service.getAvailableUserCards(pickedCard.id);
 
            if (availableCards.isEmpty) {
@@ -504,7 +520,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                    child: Column(
                      mainAxisSize: MainAxisSize.min,
                      children: availableCards.map((uc) {
-                        // Tolles Label für den Dialog bauen (wie im AssignToBinderSheet)
                         String label = "${uc.variant} (${uc.condition} • ${uc.language})";
                         if (uc.gradingCompany != null && uc.gradingCompany != 'Kein Grading') {
                           label += "\n${uc.gradingCompany} ${uc.gradingScore ?? ''}";
@@ -621,7 +636,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
               
               final Set<String> results = {};
               for (var slotData in state.slots) {
-                 // Vorschläge für Karten-Namen
                  if (slotData.card != null) {
                     if (slotData.card!.nameDe != null && slotData.card!.nameDe!.toLowerCase().contains(query)) {
                        results.add(slotData.card!.nameDe!);
@@ -629,7 +643,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                        results.add(slotData.card!.name);
                     }
                  }
-                 // Vorschläge für Platzhalter/Divider
                  if (slotData.binderCard.placeholderLabel != null) {
                     String label = slotData.binderCard.placeholderLabel!;
                     if (label.startsWith("DIVIDER:")) label = label.replaceAll("DIVIDER:", "");
@@ -639,8 +652,8 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
               return results.take(6);
             },
             onSelected: (String selection) {
-               _performSearch(selection, state);
                Navigator.pop(ctx);
+               _performSearch(selection, state);
             },
             fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                return TextField(
@@ -652,8 +665,8 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                    helperText: "Tipp: Gib eine Zahl ein, um direkt zur Seite zu springen."
                  ),
                  onSubmitted: (query) {
-                   _performSearch(query, state);
                    Navigator.pop(ctx);
+                   _performSearch(query, state);
                  },
                );
             },
@@ -684,8 +697,8 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Abbrechen")),
           FilledButton(onPressed: () {
-            _performSearch(_searchController.text, state);
             Navigator.pop(ctx);
+            _performSearch(_searchController.text, state);
           }, child: const Text("Suchen")),
         ],
       ),
@@ -695,37 +708,33 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   void _performSearch(String query, BinderDetailState state) async {
     if (query.isEmpty) return;
     
-    // --- NEU: SEITEN-SPRUNG LOGIK ---
-    // Wir prüfen, ob die Eingabe NUR aus Zahlen besteht
     final isNumeric = RegExp(r'^[0-9]+$').hasMatch(query.trim());
     
     final int itemsPerPage = widget.binder.rowsPerPage * widget.binder.columnsPerPage;
     final int totalPages = (state.slots.length / (itemsPerPage > 0 ? itemsPerPage : 1)).ceil();
 
+    // Tastatur schließen und warten, bis das Layout sich beruhigt hat
+    FocusScope.of(context).unfocus();
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (!mounted) return;
+
+    // --- SEITEN-SPRUNG ---
     if (isNumeric) {
       final targetPageNumber = int.tryParse(query.trim());
       if (targetPageNumber != null && targetPageNumber > 0 && targetPageNumber <= totalPages) {
         
-        FocusScope.of(context).unfocus();
-        if (mounted) {
-          // Nativer PageView Slide! (Wir ziehen -1 ab, weil PageView bei 0 anfängt)
-          _pageController.animateToPage(
-            targetPageNumber - 1, 
-            duration: const Duration(milliseconds: 500), 
-            curve: Curves.easeInOut
-          );
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Zu Seite $targetPageNumber gesprungen!"), duration: const Duration(seconds: 1))
-          );
-        }
-        return; // Suche hier beenden, wir sind gesprungen!
+        // FIX: jumpToPage verhindert, dass Flutter sich bei langen Distanzen verrechnet!
+        _pageController.jumpToPage(targetPageNumber - 1);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Zu Seite $targetPageNumber gesprungen!"), duration: const Duration(seconds: 1))
+        );
+        return; 
       }
     }
-    // ---------------------------------
 
-    // --- NORMALE TEXT-SUCHE ---
+    // --- TEXT-SUCHE ---
     final qLower = query.toLowerCase();
-    
     final index = state.slots.indexWhere((s) {
       final label = s.binderCard.placeholderLabel?.toLowerCase() ?? "";
       final cardName = s.card?.name.toLowerCase() ?? "";
@@ -735,23 +744,30 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
 
     if (index != -1) {
       final int targetPage = (index / itemsPerPage).floor();
+      final foundSlot = state.slots[index];
 
-      FocusScope.of(context).unfocus();
+      // FIX: Sofortiger Sprung ohne Verrechnen
+      _pageController.jumpToPage(targetPage);
+      
+      setState(() {
+         _highlightedSlotId = foundSlot.binderCard.id;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Gefunden auf Seite ${targetPage + 1}!"), duration: const Duration(seconds: 1))
+      );
 
-      if (mounted) {
-        _pageController.animateToPage(
-          targetPage, 
-          duration: const Duration(milliseconds: 500), 
-          curve: Curves.easeInOut
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Gefunden auf Seite ${targetPage + 1}!"), duration: const Duration(seconds: 1))
-        );
-      }
+      // Leuchten nach 2 Sekunden wieder ausschalten
+      Future.delayed(const Duration(seconds: 2), () {
+         if (mounted && _highlightedSlotId == foundSlot.binderCard.id) {
+            setState(() {
+               _highlightedSlotId = null;
+            });
+         }
+      });
+
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nichts gefunden.")));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nichts gefunden.")));
     }
   }
 }

@@ -74,7 +74,7 @@ class BinderPageWidget extends StatelessWidget {
                       onTap: () => onSlotTap(slotData),
                       onLongPress: onSlotLongPress != null ? () => onSlotLongPress!(slotData) : null, 
                       // Wenn es der aktuell gewählte Tausch-Slot ist, highlighten wir ihn!
-                      isHighlightedForSwap: isSwapMode && slotData.binderCard.id == slotToSwapId,
+                      isHighlighted: slotToSwapId == slotData.binderCard.id,
                     );
                   },
                 );

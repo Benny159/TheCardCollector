@@ -17,7 +17,7 @@ import '../inventory/inventory_bottom_sheet.dart';
 import '../search/card_search_screen.dart';
 import '../sets/set_detail_screen.dart';
 import '../inventory/assign_to_binder_sheet.dart';
-import '../binders/binder_list_screen.dart';
+import '../binders/binder_detail_screen.dart'; // NEU: Für die Navigation
 import 'price_history_chart.dart'; 
 
 // --- PROVIDER ---
@@ -27,7 +27,8 @@ final cardInventoryProvider = StreamProvider.family<List<UserCard>, String>((ref
   return (db.select(db.userCards)..where((tbl) => tbl.cardId.equals(cardId))).watch();
 });
 
-final cardBindersProvider = StreamProvider.family<List<String>, String>((ref, cardId) {
+// FIX: Provider gibt jetzt echte 'Binder' Objekte zurück, statt nur Namen, damit wir dorthin navigieren können!
+final cardBindersProvider = StreamProvider.family<List<Binder>, String>((ref, cardId) {
   final db = ref.watch(databaseProvider);
   
   final query = db.select(db.binderCards).join([
@@ -37,8 +38,14 @@ final cardBindersProvider = StreamProvider.family<List<String>, String>((ref, ca
   query.where(db.binderCards.cardId.equals(cardId) & db.binderCards.isPlaceholder.equals(false));
   
   return query.watch().map((rows) {
-    if (rows.isEmpty) return [];
-    return rows.map((r) => r.readTable(db.binders).name).toSet().toList();
+    if (rows.isEmpty) return <Binder>[];
+    
+    final Map<int, Binder> uniqueBinders = {};
+    for (var r in rows) {
+       final b = r.readTable(db.binders);
+       uniqueBinders[b.id] = b;
+    }
+    return uniqueBinders.values.toList();
   });
 });
 
@@ -59,7 +66,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   late TextEditingController _customPriceController;
   double? _currentCustomPrice;
   
-  // --- NEU: Die Blacklist! IDs, die in diesem Set stehen, werden im Graphen NICHT angezeigt. ---
   final Set<int> _hiddenUserCardIds = {};
 
   @override
@@ -135,12 +141,13 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text(widget.card.nameDe ?? widget.card.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        // Größere Schrift im AppBar
+        title: Text(widget.card.nameDe ?? widget.card.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         scrolledUnderElevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.sync, color: Colors.blue),
+            icon: const Icon(Icons.sync, color: Colors.blue, size: 28),
             onPressed: () => _updateCardData(context, ref),
             tooltip: "Preisdaten aktualisieren",
           ),
@@ -154,8 +161,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
             builder: (context) => InventoryBottomSheet(card: widget.card),
           ).then((_) => _forceRefresh());
         },
-        icon: const Icon(Icons.add_card),
-        label: const Text("Hinzufügen", style: TextStyle(fontWeight: FontWeight.bold)),
+        icon: const Icon(Icons.add_card, size: 24),
+        label: const Text("Hinzufügen", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         backgroundColor: Colors.blue[800],
         foregroundColor: Colors.white,
       ),
@@ -201,34 +208,60 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 16),
 
+                        // --- NEU: Sortierte und gut lesbare Tags ---
+                        
+                        // 1. Block: Werte der Karte
                         Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
+                          spacing: 8,
+                          runSpacing: 8,
                           alignment: WrapAlignment.center,
                           children: [
-                            if (widget.card.artist.isNotEmpty)
-                              _buildTag(Icons.brush, widget.card.artist, color: Colors.blue, onTap: () {
-                                ref.read(searchModeProvider.notifier).state = SearchMode.artist;
-                                ref.read(searchQueryProvider.notifier).state = widget.card.artist;
-                                Navigator.push(context, MaterialPageRoute(builder: (context) => const CardSearchScreen()));
-                              }),
                             if (widget.card.rarity.isNotEmpty)
                               _buildTag(Icons.star, widget.card.rarity, color: Colors.orange[800]),
                             if (widget.card.number.isNotEmpty)
                               _buildTag(Icons.numbers, "${widget.card.number} / ${widget.card.setPrintedTotal}", color: Colors.purple),
-                            
+                          ],
+                        ),
+                        
+                        // 2. Block: Künstler (Mit Such-Lupe)
+                        if (widget.card.artist.isNotEmpty) ...[
+                          const Divider(height: 20, thickness: 0.5),
+                          Center(
+                            child: _buildTag(
+                              Icons.brush, 
+                              widget.card.artist, 
+                              color: Colors.blue, 
+                              suffixIcon: Icons.search, // Lupe am Ende!
+                              onTap: () {
+                                ref.read(searchModeProvider.notifier).state = SearchMode.artist;
+                                ref.read(searchQueryProvider.notifier).state = widget.card.artist;
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => const CardSearchScreen()));
+                              }
+                            ),
+                          ),
+                        ],
+
+                        // 3. Block: Externe Links (Mit Redirect-Symbol)
+                        const Divider(height: 20, thickness: 0.5),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.center,
+                          children: [
                             _buildTag(
                               Icons.shopping_cart, 
                               "Cardmarket", 
                               color: Colors.blue[800], 
+                              suffixIcon: Icons.open_in_new, // Redirect Icon
                               onTap: () => _openCardmarket(widget.card)
                             ),
                             _buildTag(
                               Icons.storefront, 
                               "TCGPlayer", 
                               color: Colors.teal[700], 
+                              suffixIcon: Icons.open_in_new, 
                               onTap: () => _openTcgPlayer(widget.card)
                             ),
                           ],
@@ -236,10 +269,10 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
                         if (widget.card.flavorTextDe != null) 
                           Padding(
-                            padding: const EdgeInsets.only(top: 10), 
+                            padding: const EdgeInsets.only(top: 16), 
                             child: Text(
                               '"${widget.card.flavorTextDe!}"', 
-                              style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 10),
+                              style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12),
                               textAlign: TextAlign.center,
                             )
                           ),
@@ -247,7 +280,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                     ),
                   ),
 
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 16),
 
                   // --- RECHTE SPALTE (PREIS-TABELLEN) ---
                   Expanded(
@@ -273,7 +306,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
               child: _buildChartSection(historyAsync, inventoryAsync),
             ),
             
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
             // 4. BESITZ BOX
             Padding(
@@ -281,7 +314,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
               child: inventoryAsync.when(
                 data: (items) => _buildCollectionBox(context, ref, items, historyAsync.valueOrNull as Map<String, dynamic>?),
                 loading: () => const SizedBox.shrink(),
-                error: (err, stack) => Text("Fehler: $err", style: const TextStyle(fontSize: 10)),
+                error: (err, stack) => Text("Fehler: $err", style: const TextStyle(fontSize: 12)),
               ),
             ),
 
@@ -294,20 +327,25 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   // --- WIDGETS FÜR DAS DASHBOARD ---
 
-  Widget _buildTag(IconData icon, String text, {Color? color, VoidCallback? onTap}) {
+  Widget _buildTag(IconData icon, String text, {Color? color, VoidCallback? onTap, IconData? suffixIcon}) {
     final content = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      // Padding vergrößert für leichteres Tippen
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: (color ?? Colors.grey).withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: (color ?? Colors.grey).withOpacity(0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: color ?? Colors.grey[700]),
-          const SizedBox(width: 4),
-          Text(text, style: TextStyle(fontSize: 9, color: color ?? Colors.grey[800], fontWeight: FontWeight.bold)),
+          Icon(icon, size: 16, color: color ?? Colors.grey[700]), // Icon vergrößert
+          const SizedBox(width: 6),
+          Text(text, style: TextStyle(fontSize: 12, color: color ?? Colors.grey[800], fontWeight: FontWeight.bold)), // Schrift vergrößert
+          if (suffixIcon != null) ...[
+             const SizedBox(width: 6),
+             Icon(suffixIcon, size: 14, color: color ?? Colors.grey[700]),
+          ]
         ],
       ),
     );
@@ -351,11 +389,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text("Preisverlauf", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            Text("Alle Quellen", style: TextStyle(color: Colors.grey, fontSize: 10)),
+            Text("Preisverlauf", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)), // Vergrößert
+            Text("Alle Quellen", style: TextStyle(color: Colors.grey, fontSize: 12)),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
@@ -373,11 +411,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 tcgHistory: (data['tcg'] as List).cast<TcgPlayerPrice>(),
                 customHistory: (data['custom'] as List).cast<CustomCardPrice>(),
                 userCards: userCards.cast<UserCard>(),
-                hiddenUserCardIds: _hiddenUserCardIds, // --- NEU: Blacklist übergeben! ---
+                hiddenUserCardIds: _hiddenUserCardIds, 
               );
             },
             loading: () => const SizedBox(height: 250, child: Center(child: CircularProgressIndicator())),
-            error: (e, s) => const SizedBox(height: 250, child: Center(child: Text("Verlauf nicht verfügbar", style: TextStyle(fontSize: 10)))),
+            error: (e, s) => const SizedBox(height: 250, child: Center(child: Text("Verlauf nicht verfügbar", style: TextStyle(fontSize: 12)))),
           ),
         ),
       ],
@@ -391,7 +429,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     final bool isSelected = _currentPreferredSource == sourceKey;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white, 
         borderRadius: BorderRadius.circular(10), 
@@ -404,21 +442,21 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
             onTap: () => _updatePreferredSource(sourceKey),
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
               decoration: BoxDecoration(color: color.withOpacity(isSelected ? 0.2 : 0.05), borderRadius: const BorderRadius.vertical(top: Radius.circular(8))),
               child: Row(
                 children: [
-                  Icon(isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked, color: color, size: 14),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11))),
+                  Icon(isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked, color: color, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13))),
                   if (lastUpdate != null && lastUpdate.isNotEmpty) 
-                    Text(lastUpdate.split('T')[0], style: TextStyle(color: color.withOpacity(0.6), fontSize: 9)),
+                    Text(lastUpdate.split('T')[0], style: TextStyle(color: color.withOpacity(0.8), fontSize: 11)),
                 ],
               ),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(vertical: 6),
             child: Column(children: children),
           )
         ],
@@ -428,12 +466,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   Widget _priceRow(String label, double price, {bool isLow = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Colors.black54, fontSize: 10)),
-          Text("${price.toStringAsFixed(2)} €", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isLow ? Colors.green[700] : Colors.black)),
+          Text(label, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+          Text("${price.toStringAsFixed(2)} €", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isLow ? Colors.green[700] : Colors.black)),
         ],
       ),
     );
@@ -450,20 +488,20 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
            _priceRow("Aktueller Wert", _currentCustomPrice!),
         
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
           child: Row(
             children: [
               Expanded(
                 child: SizedBox(
-                  height: 32,
+                  height: 38, // Vergrößert
                   child: TextField(
                     controller: _customPriceController, 
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: const TextStyle(fontSize: 11),
+                    style: const TextStyle(fontSize: 13),
                     decoration: InputDecoration(
                       hintText: "Neuer Preis (€)...",
-                      hintStyle: const TextStyle(fontSize: 10),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                      hintStyle: const TextStyle(fontSize: 12),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
                       filled: true,
                       fillColor: Colors.grey[100],
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
@@ -476,12 +514,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
               FilledButton(
                 style: FilledButton.styleFrom(
                   backgroundColor: Colors.amber[800],
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  minimumSize: const Size(0, 32),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  minimumSize: const Size(0, 38),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))
                 ),
                 onPressed: () => _saveCustomPrice(_customPriceController.text, ref),
-                child: const Text("Speichern", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                child: const Text("Speichern", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               )
             ],
           ),
@@ -497,7 +535,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         if (cm.trendPrice != null && cm.trendPrice! > 0) _priceRow("Trend (Normal)", cm.trendPrice!),
         if (cm.trendHolo != null && cm.trendHolo! > 0) _priceRow("Trend (Holo)", cm.trendHolo!),
         if (cm.reverseHoloTrend != null && cm.reverseHoloTrend! > 0) _priceRow("Trend (Reverse)", cm.reverseHoloTrend!),
-        const Divider(height: 8, thickness: 0.5),
+        const Divider(height: 12, thickness: 0.5),
         if (cm.avg30 != null && cm.avg30! > 0) _priceRow("Ø 30 Tage", cm.avg30!),
         if (cm.lowPrice != null && cm.lowPrice! > 0) _priceRow("Ab (Low)", cm.lowPrice!, isLow: true),
       ],
@@ -511,7 +549,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         if (tcg.prices?.normal?.market != null && tcg.prices!.normal!.market! > 0) _priceRow("Market (Normal)", tcg.prices!.normal!.market!),
         if (tcg.prices?.holofoil?.market != null && tcg.prices!.holofoil!.market! > 0) _priceRow("Market (Holo)", tcg.prices!.holofoil!.market!),
         if (tcg.prices?.reverseHolofoil?.market != null && tcg.prices!.reverseHolofoil!.market! > 0) _priceRow("Market (Reverse)", tcg.prices!.reverseHolofoil!.market!),
-        const Divider(height: 8, thickness: 0.5),
+        const Divider(height: 12, thickness: 0.5),
         if (tcg.prices?.normal?.directLow != null && tcg.prices!.normal!.directLow! > 0) _priceRow("Direct Low", tcg.prices!.normal!.directLow!, isLow: true),
       ],
     );
@@ -523,17 +561,17 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     return InkWell(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => SetDetailScreen(set: set))),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), // Vergrößert
         decoration: BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
         child: Row(
           children: [
-            if (logo != null) SizedBox(height: 35, width: 70, child: CachedNetworkImage(imageUrl: logo, fit: BoxFit.contain, errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 20))),
-            const SizedBox(width: 12),
+            if (logo != null) SizedBox(height: 40, width: 80, child: CachedNetworkImage(imageUrl: logo, fit: BoxFit.contain, errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 24))),
+            const SizedBox(width: 16),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(set.nameDe ?? set.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              Text("Set anzeigen (${set.printedTotal} Karten)", style: TextStyle(color: Colors.blue[700], fontSize: 11)),
+              Text(set.nameDe ?? set.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), // Vergrößert
+              Text("Set anzeigen (${set.printedTotal} Karten)", style: TextStyle(color: Colors.blue[700], fontSize: 13)),
             ])),
-            const Icon(Icons.chevron_right, color: Colors.grey)
+            const Icon(Icons.chevron_right, color: Colors.grey, size: 28)
           ],
         ),
       ),
@@ -678,13 +716,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     return null;
   }
 
-  // --- DIE NEUE SAMMLUNGS-TABELLE MIT CHECKBOXEN ---
   Widget _buildCollectionBox(BuildContext context, WidgetRef ref, List<UserCard> items, Map<String, dynamic>? historyData) {
     if (items.isEmpty) {
       return Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16), // Vergrößert
         decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey[300]!)),
-        child: const Center(child: Text("Nicht in Sammlung", style: TextStyle(color: Colors.grey, fontSize: 11), textAlign: TextAlign.center)),
+        child: const Center(child: Text("Nicht in Sammlung", style: TextStyle(color: Colors.grey, fontSize: 14), textAlign: TextAlign.center)),
       );
     }
     
@@ -695,11 +732,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     }
     
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white, 
         borderRadius: BorderRadius.circular(10), 
-        border: Border.all(color: Colors.green.withOpacity(0.4)),
+        border: Border.all(color: Colors.green.withOpacity(0.4), width: 2),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))],
       ),
       child: Column(
@@ -711,49 +748,49 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
               Expanded(
                 child: Row(
                   children: [
-                    const Icon(Icons.inventory_2_rounded, color: Colors.green, size: 14),
-                    const SizedBox(width: 6),
+                    const Icon(Icons.inventory_2_rounded, color: Colors.green, size: 20), // Vergrößert
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("Besitz: $totalCount", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green), overflow: TextOverflow.ellipsis),
-                          Text("Wert: ${inventoryTotalValue.toStringAsFixed(2)} €", style: TextStyle(fontSize: 10, color: Colors.green[800], fontWeight: FontWeight.w600)),
+                          Text("Besitz: $totalCount", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green), overflow: TextOverflow.ellipsis),
+                          Text("Wert: ${inventoryTotalValue.toStringAsFixed(2)} €", style: TextStyle(fontSize: 13, color: Colors.green[800], fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
+              
+              // --- NEU: Großer Auffälliger Button zum Einsortieren ---
               if (widget.card.isOwned)
-                Tooltip(
-                  message: "In Binder einsortieren",
-                  child: GestureDetector(
-                    onTap: () {
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (ctx) => AssignToBinderSheet(card: widget.card),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(color: Colors.blueGrey.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                      child: const Icon(Icons.move_to_inbox, size: 16, color: Colors.blueGrey),
-                    ),
+                FilledButton.icon(
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (ctx) => AssignToBinderSheet(card: widget.card),
+                    );
+                  },
+                  icon: const Icon(Icons.move_to_inbox, size: 16),
+                  label: const Text("In Binder sortieren"),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.blueGrey,
+                    visualDensity: VisualDensity.compact,
                   ),
                 ),
             ],
           ),
-          const Divider(color: Colors.black12, height: 16),
+          const Divider(color: Colors.black12, height: 20, thickness: 1),
           
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 280), 
             child: RawScrollbar(
               thumbColor: Colors.green.withOpacity(0.4),
               radius: const Radius.circular(4),
-              thickness: 3,
+              thickness: 4,
               child: SingleChildScrollView(
                 child: Column(
                   children: items.map((item) {
@@ -766,8 +803,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                     }
 
                     return Container(
-                      margin: const EdgeInsets.only(bottom: 6.0),
-                      padding: const EdgeInsets.all(6.0),
+                      margin: const EdgeInsets.only(bottom: 8.0),
+                      padding: const EdgeInsets.all(10.0), // Vergrößert
                       decoration: BoxDecoration(
                         color: Colors.grey[50],
                         border: Border.all(color: Colors.grey[200]!),
@@ -777,12 +814,10 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           
-                          // --- NEU: DIE CHECKBOX FÜR DEN GRAPHEN ---
                           SizedBox(
-                            width: 28,
-                            height: 28,
+                            width: 32,
+                            height: 32,
                             child: Checkbox(
-                              visualDensity: VisualDensity.compact,
                               value: !_hiddenUserCardIds.contains(item.id),
                               activeColor: Colors.green,
                               side: BorderSide(color: Colors.grey[400]!),
@@ -797,34 +832,33 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                               },
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          // ------------------------------------------
+                          const SizedBox(width: 6),
 
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text("${item.quantity}x ${item.variant}", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11), overflow: TextOverflow.ellipsis),
-                                Text(details, style: TextStyle(fontSize: 9, color: item.gradingCompany != null ? Colors.orange[800] : Colors.black54, fontWeight: item.gradingCompany != null ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis),
+                                Text("${item.quantity}x ${item.variant}", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13), overflow: TextOverflow.ellipsis),
                                 const SizedBox(height: 2),
-                                Text("Erworben: ${DateFormat('dd.MM.yyyy').format(item.createdAt)}", style: const TextStyle(fontSize: 8, color: Colors.grey)),
+                                Text(details, style: TextStyle(fontSize: 11, color: item.gradingCompany != null ? Colors.orange[800] : Colors.black54, fontWeight: item.gradingCompany != null ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis),
+                                const SizedBox(height: 4),
+                                Text("Erworben: ${DateFormat('dd.MM.yyyy').format(item.createdAt)}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
                               ],
                             ),
                           ),
                           
-                          // Preis-Anzeige
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Row(
                                 children: [
-                                  if (hasSpecificPrice) const Icon(Icons.star, color: Colors.amber, size: 10),
-                                  if (hasSpecificPrice) const SizedBox(width: 2),
-                                  Text("${itemPrice.toStringAsFixed(2)} €", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: hasSpecificPrice ? Colors.amber[800] : Colors.black87)),
+                                  if (hasSpecificPrice) const Icon(Icons.star, color: Colors.amber, size: 12),
+                                  if (hasSpecificPrice) const SizedBox(width: 4),
+                                  Text("${itemPrice.toStringAsFixed(2)} €", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: hasSpecificPrice ? Colors.amber[800] : Colors.black87)),
                                 ],
                               ),
                               if (item.quantity > 1) 
-                                Text("Gesamt: ${(itemPrice * item.quantity).toStringAsFixed(2)} €", style: const TextStyle(fontSize: 8, color: Colors.grey)),
+                                Text("Gesamt: ${(itemPrice * item.quantity).toStringAsFixed(2)} €", style: const TextStyle(fontSize: 10, color: Colors.grey)),
                                 
                               Builder(builder: (context) {
                                 final purchasePrice = _getHistoricalPrice(item, historyData);
@@ -837,33 +871,33 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                                 final sign = isPositive ? "+" : "";
 
                                 return Padding(
-                                  padding: const EdgeInsets.only(top: 2.0),
+                                  padding: const EdgeInsets.only(top: 4.0),
                                   child: Text(
                                     "$sign${change.toStringAsFixed(2)}€ ($sign${percent.toStringAsFixed(1)}%)", 
-                                    style: TextStyle(fontSize: 8, color: color, fontWeight: FontWeight.bold)
+                                    style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.bold)
                                   ),
                                 );
                               }),
                             ],
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 12),
 
                           GestureDetector(
                             onTap: () => _editUserCard(context, ref, item),
                             child: Container(
-                              padding: const EdgeInsets.all(4),
+                              padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                              child: const Icon(Icons.edit, color: Colors.blue, size: 14),
+                              child: const Icon(Icons.edit, color: Colors.blue, size: 18),
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 8),
                           
                           GestureDetector(
                             onTap: () => _decreaseOrDeleteItem(context, ref, item),
                             child: Container(
-                              padding: const EdgeInsets.all(4),
+                              padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                              child: const Icon(Icons.delete_outline, color: Colors.red, size: 14),
+                              child: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
                             ),
                           ),
                         ],
@@ -875,7 +909,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
             ),
           ),
           
-          BinderLocationWidget(cardId: widget.card.id),
+          // --- NEU: BinderLocation Widget mit anklickbaren Elementen ---
+          BinderLocationWidget(card: widget.card),
         ],
       ),
     );
@@ -981,12 +1016,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text("Erworben am", style: TextStyle(fontSize: 9, color: Colors.grey)),
+                              const Text("Erworben am", style: TextStyle(fontSize: 10, color: Colors.grey)),
                               const SizedBox(height: 2),
-                              Text(DateFormat('dd.MM.yyyy').format(selectedDate), style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                              Text(DateFormat('dd.MM.yyyy').format(selectedDate), style: const TextStyle(fontSize: 14, color: Colors.black87)),
                             ],
                           ),
-                          const Icon(Icons.calendar_today, size: 18, color: Colors.blue),
+                          const Icon(Icons.calendar_today, size: 20, color: Colors.blue),
                         ],
                       ),
                     ),
@@ -1018,7 +1053,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
                   const Text("Individueller Wert (Optional)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.amber)),
                   const SizedBox(height: 4),
-                  const Text("Überschreibt alle globalen Berechnungen für diese spezifische Karte.", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                  const Text("Überschreibt alle globalen Berechnungen für diese spezifische Karte.", style: TextStyle(fontSize: 11, color: Colors.grey)),
                   const SizedBox(height: 8),
                   TextField(
                     controller: priceController,
@@ -1026,7 +1061,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                     decoration: InputDecoration(
                       labelText: "Spezifischer Wert (€)",
                       hintText: "z.B. 15.50",
-                      prefixIcon: const Icon(Icons.euro, size: 16),
+                      prefixIcon: const Icon(Icons.euro, size: 18),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                       isDense: true,
                     ),
@@ -1180,7 +1215,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aktualisiere Daten...')));
     
     try {
-      // --- NEU: PREIS-CACHE FÜR DEN DETAIL-SCREEN-RELOAD ---
       final setCardsQuery = await (dbInst.select(dbInst.cards)..where((t) => t.setId.equals(widget.card.setId))).get();
       final cardIds = setCardsQuery.map((c) => c.id).toList();
       
@@ -1211,9 +1245,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
          };
       }
       
-      // JETZT den neuen Aufruf mit 3 Parametern nutzen!
       await importer.importCardsForSet(widget.card.setId, latestCmPrices, latestTcgPrices);
-      // -----------------------------------------------------
 
       _forceRefresh();
       ref.invalidate(cardPriceHistoryProvider(widget.card.id));
@@ -1242,42 +1274,109 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   }
 }
 
+// Füge oben bei den imports (falls nicht da) noch das hier hinzu:
+// import 'dart:math';
+
+class _BinderTagInfo {
+  final Binder binder;
+  final int page;
+  final int row;
+  final int col;
+  
+  _BinderTagInfo(this.binder, this.page, this.row, this.col);
+}
+
+// Der neue Provider lädt Binder + Slot-Informationen!
+final cardBinderDetailsProvider = FutureProvider.family<List<_BinderTagInfo>, String>((ref, cardId) async {
+  final db = ref.watch(databaseProvider);
+  
+  final query = db.select(db.binderCards).join([
+    drift.innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
+  ]);
+  
+  query.where(db.binderCards.cardId.equals(cardId) & db.binderCards.isPlaceholder.equals(false));
+  
+  final rows = await query.get();
+  
+  List<_BinderTagInfo> results = [];
+  for (var r in rows) {
+     final binder = r.readTable(db.binders);
+     final slot = r.readTable(db.binderCards);
+     
+     // Berechnung wie beim Einsortieren
+     final page = slot.pageIndex + 1;
+     int row = 1;
+     int col = 1;
+     
+     if (binder.sortOrder == 'topToBottom') {
+         row = (slot.slotIndex % binder.rowsPerPage) + 1;
+         col = (slot.slotIndex / binder.rowsPerPage).floor() + 1;
+     } else {
+         row = (slot.slotIndex / binder.columnsPerPage).floor() + 1;
+         col = (slot.slotIndex % binder.columnsPerPage) + 1;
+     }
+     results.add(_BinderTagInfo(binder, page, row, col));
+  }
+  
+  return results;
+});
+
+
 class BinderLocationWidget extends ConsumerWidget {
-  final String cardId;
-  const BinderLocationWidget({required this.cardId, super.key});
+  final ApiCard card;
+  const BinderLocationWidget({required this.card, super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bindersAsync = ref.watch(cardBindersProvider(cardId));
+    final bindersAsync = ref.watch(cardBinderDetailsProvider(card.id));
     
     return bindersAsync.when(
       data: (binders) {
         if (binders.isEmpty) return const SizedBox.shrink();
         
         return Padding(
-          padding: const EdgeInsets.only(top: 8.0),
+          padding: const EdgeInsets.only(top: 16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("In Bindern:", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
+              const Text("Einsortiert in:", style: TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: binders.map((name) => Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1), 
-                    borderRadius: BorderRadius.circular(4), 
-                    border: Border.all(color: Colors.orange.withOpacity(0.3))
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.book, size: 8, color: Colors.orange),
-                      const SizedBox(width: 4),
-                      Text(name, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange[900])),
-                    ],
+                spacing: 8,
+                runSpacing: 8,
+                children: binders.map((info) => InkWell(
+                  onTap: () {
+                     // Navigiere zum Binder und suche nach dieser Karte!
+                     Navigator.push(context, MaterialPageRoute(
+                       builder: (_) => BinderDetailScreen(
+                         binder: info.binder, 
+                         initialSearchQuery: card.nameDe ?? card.name
+                       )
+                     ));
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.08), 
+                      borderRadius: BorderRadius.circular(8), 
+                      border: Border.all(color: Colors.orange.withOpacity(0.3))
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.book, size: 16, color: Colors.orange),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                             Text(info.binder.name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.orange[900])),
+                             Text("S. ${info.page} • Z. ${info.row} • Sp. ${info.col}", style: TextStyle(fontSize: 10, color: Colors.orange[700])),
+                          ]
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.orange),
+                      ],
+                    ),
                   ),
                 )).toList(),
               ),
