@@ -192,13 +192,17 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
         
         if (targetBinder != null) {
           if (targetBinder.isFull) {
-             if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diese Box ist als "Voll" markiert!'), backgroundColor: Colors.orange));
+             if (mounted) {
+               ScaffoldMessenger.of(context).clearSnackBars();
+               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diese Box ist als "Voll" markiert!'), backgroundColor: Colors.orange, behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)));
+             }
              return; 
           } else if (targetBinder.rowsPerPage == 0) {
              await binderService.addCardToBulkBox(selectedBinderId, widget.card.id, _selectedUserCard!.id, _selectedUserCard!.variant);
              if (mounted) {
                Navigator.pop(context, true);
-               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('In die Bulk Box geworfen!'), backgroundColor: Colors.green));
+               ScaffoldMessenger.of(context).clearSnackBars();
+               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('In die Bulk Box geworfen!'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)));
              }
              return; 
           }
@@ -492,17 +496,22 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
       if (mounted) {
         Navigator.pop(context, true);
         final bannerColor = showOrangeBanner ? Colors.orange[800]! : Colors.green;
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${_selectedUserCard!.variant} verarbeitet!$binderMessage'), 
             backgroundColor: bannerColor,
-            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
           )
         );
       }
 
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red));
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 2)));
+      }
     }
   }
 }

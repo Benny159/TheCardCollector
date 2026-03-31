@@ -349,7 +349,10 @@ Future<void> _saveToInventory() async {
           
           if (targetBinder != null) {
             if (targetBinder.isFull) {
-               if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diese Box ist als "Voll" markiert! Karte wurde nur ins Inventar gelegt.'), backgroundColor: Colors.orange));
+               if (mounted) {
+                 ScaffoldMessenger.of(context).clearSnackBars();
+                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diese Box ist als "Voll" markiert! Karte wurde nur ins Inventar gelegt.'), backgroundColor: Colors.orange, behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)));
+               }
                _closeAndShowSuccess("", true);
                return; 
             } else if (targetBinder.rowsPerPage == 0) {
@@ -673,11 +676,13 @@ Future<void> _saveToInventory() async {
       if (mounted) {
         Navigator.pop(context, true);
         final bannerColor = showOrangeBanner ? Colors.orange[800]! : Colors.green;
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('$_quantity x $_variant hinzugefügt!$binderMessage'), 
             backgroundColor: bannerColor,
-            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
           )
         );
       }

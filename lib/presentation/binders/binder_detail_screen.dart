@@ -15,12 +15,12 @@ import 'package:intl/intl.dart';
 
 class BinderDetailScreen extends ConsumerStatefulWidget {
   final Binder binder;
-  final String? initialSearchQuery; // <--- NEU: Dieses Feld fehlte!
+  final String? initialSearchQuery;
 
   const BinderDetailScreen({
     super.key, 
     required this.binder, 
-    this.initialSearchQuery, // <--- NEU: Hier im Konstruktor hinzufügen!
+    this.initialSearchQuery,
   });
 
   @override
@@ -34,22 +34,21 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   
   int _currentIndex = 0;
   
-  // --- Tausch-Modus Variablen ---
   bool _isSwapMode = false;
   BinderSlotData? _slotToSwap;
-
-  // --- NEU: Highlight-Variable für die Suche ---
   int? _highlightedSlotId;
+
+  // --- NEU: Toggle für Overlays (Namen & Preise) ---
+  bool _showSlotOverlays = true;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _currentIndex);
     _focusNode = FocusNode();
-    // --- NEU: Automatische Suche beim Starten ausführen ---
+
     if (widget.initialSearchQuery != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
-        // Kurz warten, bis der Binder aus der DB geladen ist
         await Future.delayed(const Duration(milliseconds: 400));
         if (!mounted) return;
         
@@ -79,6 +78,16 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         title: Text(widget.binder.name),
         backgroundColor: Color(widget.binder.color),
         actions: [
+          // --- NEU: Overlay Toggle Button ---
+          IconButton(
+            icon: Icon(_showSlotOverlays ? Icons.visibility : Icons.visibility_off),
+            tooltip: _showSlotOverlays ? "Namen & Preise ausblenden" : "Namen & Preise einblenden",
+            onPressed: () {
+              setState(() {
+                _showSlotOverlays = !_showSlotOverlays;
+              });
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => _showSearchDialog(context, asyncData.asData?.value),
@@ -91,7 +100,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
       ),
       body: Column(
         children: [
-          // --- Der Tausch-Modus Banner ---
           if (_isSwapMode && _slotToSwap != null)
             Container(
               width: double.infinity,
@@ -118,7 +126,6 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
               ),
             ),
             
-          // --- Der eigentliche Binder ---
           Expanded(
             child: asyncData.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -152,8 +159,8 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                         onSlotTap: (slot) => _handleSlotTap(slot),
                         onSlotLongPress: (slot) => _handleSlotLongPress(slot), 
                         isSwapMode: _isSwapMode,
-                        // --- NEU: TRICK! Wir nutzen das Swap-Feld, um die gefundene Karte rot zu markieren ---
                         slotToSwapId: _highlightedSlotId ?? _slotToSwap?.binderCard.id,
+                        showOverlays: _showSlotOverlays, // <--- NEU: Übergeben an die Page
                         onNextPage: () {
                           FocusScope.of(context).unfocus();
                           if (_currentIndex < totalPages - 1) {
@@ -214,7 +221,8 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
            _slotToSwap = null;
          });
          ref.invalidate(binderDetailProvider(widget.binder.id));
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slots getauscht!")));
+         ScaffoldMessenger.of(context).clearSnackBars();
+         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slots getauscht!"), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)));
        }
        return;
     }
@@ -358,7 +366,8 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                   final db = ref.read(databaseProvider);
                   await BinderService(db).clearSlot(slot.binderCard.id);
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Karte entfernt.")));
+                    ScaffoldMessenger.of(context).clearSnackBars();
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Karte entfernt."), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)));
                     ref.invalidate(binderDetailProvider(widget.binder.id));
                   }
                 },
@@ -431,7 +440,8 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                 final db = ref.read(databaseProvider);
                 await BinderService(db).addSlotRight(widget.binder.id, slot.binderCard.id);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot erfolgreich hinzugefügt.")));
+                  ScaffoldMessenger.of(context).clearSnackBars();
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot erfolgreich hinzugefügt."), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)));
                   ref.invalidate(binderDetailProvider(widget.binder.id));
                 }
               },
@@ -445,7 +455,8 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                 final db = ref.read(databaseProvider);
                 await BinderService(db).deleteSlotAndShift(widget.binder.id, slot.binderCard.id);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot komplett gelöscht.")));
+                  ScaffoldMessenger.of(context).clearSnackBars();
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot komplett gelöscht."), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)));
                   ref.invalidate(binderDetailProvider(widget.binder.id));
                 }
               },
@@ -544,7 +555,10 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
            }
 
            await service.fillSlot(slot.binderCard.id, pickedCard.id, selectedCard.id, variant: selectedCard.variant);
-           if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${selectedCard.variant} Karte hinzugefügt!")));
+           if (mounted) {
+              ScaffoldMessenger.of(context).clearSnackBars();
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${selectedCard.variant} Karte hinzugefügt!"), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 1)));
+           }
         } else {
            String label = pickedCard.nameDe ?? pickedCard.name;
            await service.configureSlot(slot.binderCard.id, pickedCard.id, label);
@@ -553,7 +567,10 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
         
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e")));
+        if (mounted) {
+           ScaffoldMessenger.of(context).clearSnackBars();
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 2)));
+        }
       }
     }
   }
@@ -726,8 +743,9 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         // FIX: jumpToPage verhindert, dass Flutter sich bei langen Distanzen verrechnet!
         _pageController.jumpToPage(targetPageNumber - 1);
         
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Zu Seite $targetPageNumber gesprungen!"), duration: const Duration(seconds: 1))
+          SnackBar(content: Text("Zu Seite $targetPageNumber gesprungen!"), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 1))
         );
         return; 
       }
@@ -753,8 +771,9 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
          _highlightedSlotId = foundSlot.binderCard.id;
       });
       
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Gefunden auf Seite ${targetPage + 1}!"), duration: const Duration(seconds: 1))
+        SnackBar(content: Text("Gefunden auf Seite ${targetPage + 1}!"), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 1))
       );
 
       // Leuchten nach 2 Sekunden wieder ausschalten
@@ -767,7 +786,8 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
       });
 
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nichts gefunden.")));
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nichts gefunden."), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)));
     }
   }
 }

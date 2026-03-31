@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:device_preview/device_preview.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 // Deine Datenbank Imports
 import 'data/database/app_database.dart';
@@ -15,6 +17,8 @@ void main() async {
   // Das ist zwingend nötig, wenn man vor dem App-Start auf die Datenbank zugreifen will
   WidgetsFlutterBinding.ensureInitialized(); 
 
+  bool isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+
   // 1. Datenbank initialisieren
   final database = AppDatabase();
 
@@ -28,7 +32,7 @@ void main() async {
   runApp(
     // 2. Die ganze App wird in "DevicePreview" eingepackt
     DevicePreview(
-      enabled: true, 
+      enabled: isDesktop,
       builder: (context) => ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(database),

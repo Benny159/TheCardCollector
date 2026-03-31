@@ -13,9 +13,11 @@ class BinderPageWidget extends StatelessWidget {
   final VoidCallback onNextPage;
   final VoidCallback onPrevPage;
   
-  // --- NEU FÜR DEN TAUSCH-MODUS ---
   final bool isSwapMode;
   final int? slotToSwapId;
+  
+  // --- NEU: Toggle-Status durchreichen ---
+  final bool showOverlays;
 
   const BinderPageWidget({
     super.key,
@@ -30,6 +32,7 @@ class BinderPageWidget extends StatelessWidget {
     required this.onPrevPage,
     this.isSwapMode = false,
     this.slotToSwapId,
+    this.showOverlays = true, // <--- NEU
   });
 
   @override
@@ -73,8 +76,8 @@ class BinderPageWidget extends StatelessWidget {
                       slotData: slotData,
                       onTap: () => onSlotTap(slotData),
                       onLongPress: onSlotLongPress != null ? () => onSlotLongPress!(slotData) : null, 
-                      // Wenn es der aktuell gewählte Tausch-Slot ist, highlighten wir ihn!
                       isHighlighted: slotToSwapId == slotData.binderCard.id,
+                      showOverlay: showOverlays, // <--- NEU: Wird an den Slot gegeben!
                     );
                   },
                 );

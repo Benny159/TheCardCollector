@@ -253,14 +253,16 @@ class _SetListScreenState extends ConsumerState<SetListScreen> {
       }
 
       if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Alles erfolgreich aktualisiert!'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('✅ Alles erfolgreich aktualisiert!'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)),
         );
       }
     } catch (e) {
       if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 2)),
         );
       }
     } finally {
@@ -410,8 +412,9 @@ class _SetTile extends ConsumerWidget {
     final dexApi = ref.read(tcgDexApiClientProvider);
     final importer = SetImporter(dexApi, db);
 
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Lade Karten für ${set.nameDe ?? set.name}...')),
+      SnackBar(content: Text('Lade Karten für ${set.nameDe ?? set.name}...'), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 2)),
     );
 
     try {
@@ -456,14 +459,16 @@ class _SetTile extends ConsumerWidget {
       ref.invalidate(setStatsProvider(set.id));
       
       if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Karten erfolgreich geladen!'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('✅ Karten erfolgreich geladen!'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)),
         );
       }
     } catch (e) {
       if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler beim Download: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Fehler beim Download: $e'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 2)),
         );
       }
     }

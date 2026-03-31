@@ -7,8 +7,6 @@ import 'inventory/inventory_screen.dart';
 import 'binders/binder_list_screen.dart';  
 import '../../data/sync/pokedex_importer.dart';
 import '../../data/database/database_provider.dart';
-
-// --- NEU: Import für den Scanner (Datei erstellen wir gleich) ---
 import 'scanner/scanner_screen.dart'; 
 
 // Wir brauchen Keys, um den Status der Navigatoren zu speichern
@@ -31,7 +29,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   @override
   void initState() {
     super.initState();
-    // Startet den Import im Hintergrund (blockiert die UI nicht)
     _initPokedex();
   }
 
@@ -41,21 +38,14 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     await importer.syncPokedex();
   }
 
-  // Hier definieren wir unsere vier Tabs
   late final List<Widget> _tabs = [
-    // TAB 0: SUCHE
     _buildTabNavigator(_searchNavigatorKey, const CardSearchScreen()),
-    // TAB 1: SETS
     _buildTabNavigator(_setsNavigatorKey, const SetListScreen()),
-    // TAB 2: INVENTAR
     _buildTabNavigator(_inventoryNavigatorKey, const InventoryScreen()),
-    // TAB 3: BINDER
     _buildTabNavigator(_binderNavigatorKey, const BinderListScreen()),
   ];
 
-  // --- NEU: Scanner öffnen Methode ---
   void _openScanner() {
-    // Öffnet den Scanner über die komplette App (inkl. Nav-Leiste)
     Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (ctx) => const ScannerScreen(),
@@ -68,14 +58,11 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // PopScope sorgt dafür, dass der Zurück-Button (Android) 
-    // erst im Tab zurückgeht, bevor er die App schließt.
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async { 
         if (didPop) return;
 
-        // Welcher Navigator ist gerade aktiv?
         final NavigatorState? currentNavigator;
         if (_currentIndex == 0) {
           currentNavigator = _searchNavigatorKey.currentState;
@@ -88,14 +75,14 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         }
 
         if (currentNavigator != null && currentNavigator.canPop()) {
-          // Wenn wir im Tab zurückgehen können, tun wir das
           currentNavigator.pop();
         } else {
-          // Wenn wir ganz am Anfang sind, schließen wir die App
           if (context.mounted) Navigator.of(context).pop(); 
         }
       },
       child: Scaffold(
+        resizeToAvoidBottomInset: false, 
+        
         body: IndexedStack(
           index: _currentIndex,
           children: [
@@ -106,43 +93,33 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           ],
         ),
 
-        // --- NEU: Der fette, hervorgehobene Scanner-Button ---
-        floatingActionButton: Container(
-          height: 65,
-          width: 65,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.primary.withOpacity(0.4),
-                spreadRadius: 2,
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+        // --- DER SCANNER BUTTON ---
+        floatingActionButton: SizedBox(
+          height: 64, // Leicht vergrößert für die perfekte Kreisform
+          width: 64,
           child: FloatingActionButton(
             onPressed: _openScanner,
             backgroundColor: theme.colorScheme.primary,
-            elevation: 0,
+            elevation: 4, 
             shape: const CircleBorder(),
-            child: const Icon(Icons.qr_code_scanner, size: 32, color: Colors.white),
+            child: const Icon(Icons.qr_code_scanner, size: 28, color: Colors.white), 
           ),
         ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        // --- HIER NUTZEN WIR UNSEREN NEUEN, TIEFEREN ANKERPUNKT ---
+        floatingActionButtonLocation: const _LoweredCenterDockedFabLocation(),
 
-        // --- NEU: BottomAppBar, die den FAB "umschließt" ---
+        // --- DIE BOTTOM BAR (mit Notch) ---
         bottomNavigationBar: BottomAppBar(
           shape: const CircularNotchedRectangle(),
-          notchMargin: 8.0,
+          notchMargin: 8.0, // Die wunderschöne Lücke! (Erhöht für besseren Effekt)
+          clipBehavior: Clip.antiAlias, // WICHTIG: Schneidet die Ecken wirklich physisch ab!
           color: theme.colorScheme.surface,
-          elevation: 8,
+          elevation: 16,
           child: SizedBox(
-            height: 60,
+            height: 60, 
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Linke Seite
                 Expanded(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -152,9 +129,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                     ],
                   ),
                 ),
-                // Platz für den Notch (Scanner-Button in der Mitte)
-                const SizedBox(width: 48), 
-                // Rechte Seite
+                const SizedBox(width: 48), // Platz für den Button
                 Expanded(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -172,7 +147,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     );
   }
 
-  // --- HILFSFUNKTION FÜR DIE NEUEN TAB-BUTTONS ---
   Widget _buildNavItem(int index, IconData icon, String label, ThemeData theme) {
     final isSelected = _currentIndex == index;
     final color = isSelected ? theme.colorScheme.primary : Colors.grey;
@@ -180,14 +154,12 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     return InkWell(
       onTap: () {
         if (_currentIndex == index) {
-          // Tab wurde nochmal angetippt -> Zurück zum Start des Tabs scrollen/navigieren
           final nav = index == 0 ? _searchNavigatorKey.currentState 
                     : index == 1 ? _setsNavigatorKey.currentState 
                     : index == 2 ? _inventoryNavigatorKey.currentState
                     : _binderNavigatorKey.currentState; 
           nav?.popUntil((route) => route.isFirst);
         } else {
-          // Normaler Tab-Wechsel
           setState(() {
             _currentIndex = index;
             if (!_activeTabs.contains(index)) {
@@ -219,7 +191,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     );
   }
 
-  // HILFSFUNKTION: Baut einen Navigator für einen Tab
   static Widget _buildTabNavigator(GlobalKey<NavigatorState> key, Widget initialScreen) {
     return Navigator(
       key: key,
@@ -229,5 +200,26 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         );
       },
     );
+  }
+}
+
+// =========================================================================
+// EIGENE KLASSE UM DEN BUTTON TIEFER ZU SETZEN
+// =========================================================================
+class _LoweredCenterDockedFabLocation extends FloatingActionButtonLocation {
+  const _LoweredCenterDockedFabLocation();
+
+  @override
+  Offset getOffset(ScaffoldPrelayoutGeometry scaffoldGeometry) {
+    // 1. Die Mitte des Bildschirms berechnen
+    final double fabX = (scaffoldGeometry.scaffoldSize.width - scaffoldGeometry.floatingActionButtonSize.width) / 2.0;
+    
+    // 2. Standard-Docked-Höhe berechnen
+    final double standardY = scaffoldGeometry.contentBottom - (scaffoldGeometry.floatingActionButtonSize.height / 2.0);
+    
+    // 3. Den Button um 12 Pixel tiefer setzen! (Kannst du anpassen, wenn er noch tiefer soll)
+    final double fabY = standardY + 24.0; 
+    
+    return Offset(fabX, fabY);
   }
 }

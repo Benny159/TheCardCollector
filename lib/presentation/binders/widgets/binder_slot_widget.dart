@@ -6,14 +6,16 @@ class BinderSlotWidget extends StatelessWidget {
   final BinderSlotData slotData;
   final VoidCallback onTap;
   final VoidCallback? onLongPress; 
-  final bool isHighlighted; // <--- NEU (ersetzt isHighlightedForSwap)
+  final bool isHighlighted; 
+  final bool showOverlay; // <--- NEU: Steuert, ob Text/Preise angezeigt werden
 
   const BinderSlotWidget({
     super.key, 
     required this.slotData, 
     required this.onTap, 
     this.onLongPress,
-    this.isHighlighted = false, // <--- NEU
+    this.isHighlighted = false, 
+    this.showOverlay = true, // <--- NEU: Standardmäßig an
   });
 
   @override
@@ -31,7 +33,6 @@ class BinderSlotWidget extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.black12,
           borderRadius: BorderRadius.circular(4),
-          // --- HIGHLIGHT RAHMEN BEIM TAUSCHEN ODER SUCHEN ---
           border: Border.all(
             color: isHighlighted ? Colors.redAccent : Colors.grey.withOpacity(0.3),
             width: isHighlighted ? 3 : 1,
@@ -64,7 +65,8 @@ class BinderSlotWidget extends StatelessWidget {
             else
               const Center(child: Icon(Icons.add, color: Colors.grey)),
 
-            if (slotData.binderCard.placeholderLabel != null)
+            // --- HIER IST DER FILTER: if (showOverlay) ---
+            if (showOverlay && slotData.binderCard.placeholderLabel != null)
               Positioned(
                 bottom: 2, left: 2, right: 2,
                 child: Container(
@@ -80,7 +82,8 @@ class BinderSlotWidget extends StatelessWidget {
                 ),
               ),
 
-            if (!isPlaceholder)
+            // --- HIER IST DER FILTER: if (showOverlay) ---
+            if (showOverlay && !isPlaceholder)
             Positioned(
               top: 4, right: 4,
               child: Container(
