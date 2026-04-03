@@ -351,7 +351,7 @@ Future<void> _saveToInventory() async {
             if (targetBinder.isFull) {
                if (mounted) {
                  ScaffoldMessenger.of(context).clearSnackBars();
-                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diese Box ist als "Voll" markiert! Karte wurde nur ins Inventar gelegt.'), backgroundColor: Colors.orange, behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)));
+                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diese Box ist als "Voll" markiert! Karte wurde nur ins Inventar gelegt.'), backgroundColor: Colors.orange, behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
                }
                _closeAndShowSuccess("", true);
                return; 
@@ -662,7 +662,7 @@ Future<void> _saveToInventory() async {
       _closeAndShowSuccess(binderMessage, showOrangeBanner);
 
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
     }
   }
 
@@ -682,7 +682,7 @@ Future<void> _saveToInventory() async {
             content: Text('$_quantity x $_variant hinzugefügt!$binderMessage'), 
             backgroundColor: bannerColor,
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
+            duration: const Duration(milliseconds: 500),
           )
         );
       }

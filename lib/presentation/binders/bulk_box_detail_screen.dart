@@ -266,14 +266,14 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
      final db = ref.read(databaseProvider);
      await BinderService(db).sortBulkBox(widget.binder.id, mode);
      if(mounted){
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Box erfolgreich sortiert!")));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Box erfolgreich sortiert!"), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
         ref.invalidate(binderDetailProvider(widget.binder.id));
      }
   }
 
   void _showAddMenu(BuildContext context) {
     if (widget.binder.isFull) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Die Box ist voll!"), backgroundColor: Colors.red));
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Die Box ist voll!"), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
        return;
     }
 
@@ -336,7 +336,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
        if (mounted) {
          setState(() { _isSwapMode = false; _slotToSwap = null; });
          ref.invalidate(binderDetailProvider(widget.binder.id));
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Erfolgreich getauscht!")));
+         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Erfolgreich getauscht!"), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
        }
        return;
     }
@@ -522,7 +522,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
         final availableCards = await service.getAvailableUserCards(pickedCard.id);
 
         if (availableCards.isEmpty) {
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Keine freie Karte im Inventar.")));
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Keine freie Karte im Inventar."), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
           return; 
         }
 
@@ -567,7 +567,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
           if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
         }
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e")));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
       }
     }
   }
@@ -610,10 +610,10 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
           duration: const Duration(milliseconds: 500), 
           curve: Curves.easeInOut
         );
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gefunden!")));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gefunden!"), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
       }
     } else {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nichts gefunden.")));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nichts gefunden."), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
     }
   }
 

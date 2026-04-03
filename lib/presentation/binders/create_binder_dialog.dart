@@ -470,18 +470,18 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
   Future<void> _createBinder() async {
     if (_nameController.text.isEmpty) {
       ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bitte gib einen Namen ein."), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bitte gib einen Namen ein."), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
       return;
     }
 
     if (_selectedType == AdvancedBinderType.set && _selectedSetName.isEmpty) {
        ScaffoldMessenger.of(context).clearSnackBars();
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bitte wähle ein Set aus."), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)));
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bitte wähle ein Set aus."), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
        return;
     }
     if ((_selectedType == AdvancedBinderType.pokemon || _selectedType == AdvancedBinderType.artist) && _selectedTarget.isEmpty) {
        ScaffoldMessenger.of(context).clearSnackBars();
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bitte wähle ein Ziel aus."), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)));
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bitte wähle ein Ziel aus."), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
        return;
     }
 
@@ -515,7 +515,7 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 2)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
         setState(() => _isLoading = false);
       }
     }

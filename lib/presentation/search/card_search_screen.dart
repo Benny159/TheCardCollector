@@ -8,10 +8,10 @@ import '../../data/database/app_database.dart' as db;
 import '../../data/api/search_provider.dart'; 
 import '../../domain/models/api_card.dart';
 import '../cards/card_detail_screen.dart';
+import '../widgets/app_drawer.dart';
 import '../inventory/inventory_bottom_sheet.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'dart:async';
-
 
 enum ChartFilter { week, month, year, all }
 final chartFilterProvider = StateProvider<ChartFilter>((ref) => ChartFilter.week);
@@ -71,12 +71,24 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
     final isSearching = searchQuery.isNotEmpty;
     final currentMode = ref.watch(searchModeProvider);
 
-    // --- WICHTIG: Im Picker-Mode zeigen wir IMMER Ergebnisse, auch wenn Suche leer ist! ---
     final showResults = isSearching || widget.pickerMode;
 
     return Scaffold(
+      drawer: widget.pickerMode ? null : const AppDrawer(), // <--- NEU: HIER MUSS ER HIN!
       appBar: AppBar(
         title: Text(widget.pickerMode ? 'Karte auswählen' : (isSearching ? 'Suche' : 'Dashboard')),
+        
+        leading: widget.pickerMode ? null : Builder(
+          builder: (context) {
+            return IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () {
+                Scaffold.of(context).openDrawer(); // Funktioniert jetzt fehlerfrei!
+              },
+            );
+          },
+        ),
+
         actions: [
           if (isSearching && !widget.pickerMode)
             IconButton(
@@ -92,7 +104,6 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
       ),
       body: Column(
         children: [
-          // --- 1. SUCHLEISTE MIT AUTOCOMPLETE ---
           Container(
             padding: const EdgeInsets.all(12),
             color: Theme.of(context).colorScheme.surface,
@@ -106,7 +117,6 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                       final query = textEditingValue.text.trim();
                       if (query.length < 2) return const Iterable<String>.empty();
                       
-                      // Im Inventar-Picker brauchen wir kein Autocomplete von der ganzen DB
                       if (widget.onlyOwned) return const Iterable<String>.empty();
 
                       final dbInst = ref.read(databaseProvider);
@@ -232,7 +242,6 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
             ),
           ),
 
-          // --- 2. INHALT ---
           Expanded(
             child: showResults 
               ? _SearchResultsView(pickerMode: widget.pickerMode, onlyOwned: widget.onlyOwned)
@@ -274,7 +283,7 @@ class _DashboardView extends ConsumerWidget {
     final historyAsync = ref.watch(portfolioHistoryProvider);
     final top10Cards = ref.watch(top10CardsProvider); 
     final top10Gainers = ref.watch(top10GainersProvider);
-    final top10Losers = ref.watch(top10LosersProvider); // <-- NEU
+    final top10Losers = ref.watch(top10LosersProvider); 
     final inventoryAsync = ref.watch(inventoryProvider);
     
     final double totalValue = inventoryAsync.valueOrNull?.fold(0.0, (sum, i) => sum! + i.totalValue) ?? 0.0;
@@ -298,7 +307,6 @@ class _DashboardView extends ConsumerWidget {
           ),
           const SizedBox(height: 32),
           
-          // --- 1. LISTE: Top 10 Gesamtwert ---
           const Text("Deine Top 10 (Gesamtwert)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           if (top10Cards.isEmpty)
@@ -312,7 +320,6 @@ class _DashboardView extends ConsumerWidget {
             
           const SizedBox(height: 32),
           
-          // --- 2. LISTE: Top 10 Gewinner ---
           const Text("Top Gewinner (Seit Kauf)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
           const SizedBox(height: 12),
           if (top10Gainers.isEmpty)
@@ -326,7 +333,6 @@ class _DashboardView extends ConsumerWidget {
             
           const SizedBox(height: 32),
 
-          // --- 3. LISTE: Top 10 Verlierer ---
           Text("Größte Verluste (Seit Kauf)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red[700])),
           const SizedBox(height: 12),
           if (top10Losers.isEmpty)
@@ -344,7 +350,6 @@ class _DashboardView extends ConsumerWidget {
     );
   }
 
-  // ... (Hier bleibt _buildPortfolioHeader, _isSameDay, _buildChartFilterButtons gleich) ...
   Widget _buildPortfolioHeader(BuildContext context, double currentTotal, AsyncValue<List<db.PortfolioHistoryData>> historyAsync) {
     double change = 0.0;
     double percent = 0.0;
@@ -359,11 +364,17 @@ class _DashboardView extends ConsumerWidget {
       }
     }
 
-    change = currentTotal - previousValue;
-    if (previousValue > 0) {
-      percent = (change / previousValue) * 100;
-    } else if (currentTotal > 0) {
-      percent = 100.0; 
+    // Wenn das Portfolio gerade komplett leer geräumt wurde (z.B. durch den Delete Button)
+    if (currentTotal == 0.0) {
+      change = 0.0;
+      percent = 0.0;
+    } else {
+      change = currentTotal - previousValue;
+      if (previousValue > 0) {
+        percent = (change / previousValue) * 100;
+      } else if (currentTotal > 0) {
+        percent = 100.0; 
+      }
     }
 
     final isPositive = change >= -0.01; 
@@ -434,7 +445,6 @@ class _DashboardView extends ConsumerWidget {
     );
   }
 
-  // --- DIE LISTEN-BAU-FUNKTION (Mit dynamischer Farbe für Minusbeträge) ---
   Widget _buildTop10List(List<InventoryItem> items, BuildContext context, {required bool showPerformance}) {
     return SizedBox(
       height: 240, 
@@ -497,7 +507,6 @@ class _DashboardView extends ConsumerWidget {
                         item.variant == 'Reverse Holo' ? 'Rev.' : item.variant,
                         style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                       ),
-                      // --- SCHLAUER TEXT-BUILDER FÜR + ODER - ---
                       Builder(builder: (context) {
                         String textToShow = "${item.totalValue.toStringAsFixed(2)}€";
                         Color textColor = Colors.green;
@@ -507,7 +516,7 @@ class _DashboardView extends ConsumerWidget {
                             textToShow = "+${item.performance.toStringAsFixed(2)}€";
                             textColor = Colors.green[700]!;
                           } else {
-                            textToShow = "${item.performance.toStringAsFixed(2)}€"; // Minus steht schon durch die Zahl da
+                            textToShow = "${item.performance.toStringAsFixed(2)}€"; 
                             textColor = Colors.red[700]!;
                           }
                         }
@@ -543,15 +552,23 @@ class _PortfolioChart extends ConsumerWidget {
     final filter = ref.watch(chartFilterProvider);
     final now = DateTime.now();
     
-    List<db.PortfolioHistoryData> chartData = List.from(history);
-    chartData.sort((a, b) => a.date.compareTo(b.date)); 
+    // --- FIX: Wenn der Nutzer sein Portfolio löscht (currentTotal == 0), 
+    // ignorieren wir alle alten historischen Daten und zeichnen eine flache Linie! ---
+    List<db.PortfolioHistoryData> chartData = [];
+    
+    if (currentTotal > 0.0) {
+       chartData = List.from(history);
+       chartData.sort((a, b) => a.date.compareTo(b.date)); 
 
-    if (chartData.isNotEmpty && _isSameDay(chartData.last.date, now)) {
-      chartData.removeLast(); 
+       if (chartData.isNotEmpty && _isSameDay(chartData.last.date, now)) {
+         chartData.removeLast(); 
+       }
     }
+    
+    // Aktuellen Punkt IMMER anhängen
     chartData.add(db.PortfolioHistoryData(id: -1, date: now, totalValue: currentTotal));
 
-    if (chartData.isNotEmpty) {
+    if (chartData.isNotEmpty && currentTotal > 0.0) {
       final firstDate = chartData.first.date;
       final firstValue = chartData.first.totalValue;
 
@@ -575,7 +592,13 @@ class _PortfolioChart extends ConsumerWidget {
       chartData = chartData.where((d) => d.date.isAfter(start) || d.date.isAtSameMomentAs(start)).toList();
     }
 
-    if (chartData.isEmpty) return const Center(child: Text("Warte auf Daten..."));
+    // Wenn nach dem Filtern nur noch ein Punkt übrig ist (oder alles leer ist), zeichnen wir eine Nulllinie
+    if (chartData.isEmpty || chartData.length == 1) {
+       chartData = [
+         db.PortfolioHistoryData(id: -2, date: now.subtract(const Duration(days: 1)), totalValue: currentTotal),
+         db.PortfolioHistoryData(id: -1, date: now, totalValue: currentTotal)
+       ];
+    }
 
     final spots = chartData.map((e) {
       return FlSpot(e.date.millisecondsSinceEpoch.toDouble(), e.totalValue);
@@ -730,10 +753,6 @@ class _SearchResultsView extends ConsumerWidget {
         error: (e, s) => Center(child: Text("Fehler: $e")),
         data: (items) {
           
-          // 1. Duplikate entfernen und exakten Status berechnen
-          // Status 0 = Komplett lose (in keinem Binder)
-          // Status 1 = Teilweise lose (Du hast noch Reserve-Karten)
-          // Status 2 = Komplett verplant (Alle stecken im Binder)
           final Map<String, ApiCard> uniqueCards = {};
           final Map<String, int> looseStatusMap = {}; 
 
@@ -741,25 +760,22 @@ class _SearchResultsView extends ConsumerWidget {
              uniqueCards[item.card.id] = item.card;
              
              if (item.binderName == null) {
-               // Karte ist lose
                if (looseStatusMap[item.card.id] == 2) {
-                   looseStatusMap[item.card.id] = 1; // Hatten schon Binder -> jetzt Teilweise (1)
+                   looseStatusMap[item.card.id] = 1; 
                } else {
-                   looseStatusMap.putIfAbsent(item.card.id, () => 0); // Bisher nur lose gesehen -> (0)
+                   looseStatusMap.putIfAbsent(item.card.id, () => 0); 
                }
              } else {
-               // Karte steckt im Binder
                if (looseStatusMap[item.card.id] == 0) {
-                   looseStatusMap[item.card.id] = 1; // Hatten schon Lose -> jetzt Teilweise (1)
+                   looseStatusMap[item.card.id] = 1; 
                } else {
-                   looseStatusMap.putIfAbsent(item.card.id, () => 2); // Bisher nur Binder gesehen -> (2)
+                   looseStatusMap.putIfAbsent(item.card.id, () => 2); 
                }
              }
           }
           
           List<ApiCard> cards = uniqueCards.values.toList();
 
-          // 2. Suche lokal filtern
           if (queryText.isNotEmpty) {
             cards = cards.where((c) {
               if (mode == SearchMode.name) {
@@ -771,16 +787,13 @@ class _SearchResultsView extends ConsumerWidget {
             }).toList();
           }
 
-          // 3. 3-STUFEN-SORTIERUNG ANWENDEN
           cards.sort((a, b) {
             final statusA = looseStatusMap[a.id] ?? 2;
             final statusB = looseStatusMap[b.id] ?? 2;
 
-            // Zuerst nach Status sortieren (0 -> 1 -> 2)
             final statusCompare = statusA.compareTo(statusB);
             if (statusCompare != 0) return statusCompare;
             
-            // Wenn beide gleichen Status haben, alphabetisch sortieren
             return (a.nameDe ?? a.name).compareTo(b.nameDe ?? b.name);
           });
 
@@ -833,7 +846,6 @@ class _SearchResultsView extends ConsumerWidget {
     }
   }
 
-  // --- DAS GEMEINSAME GRID FÜR BEIDE FÄLLE ---
   Widget _buildGrid(List<ApiCard> cards, BuildContext context, WidgetRef ref, bool isPicker) {
     return GridView.builder(
       cacheExtent: 100, 
@@ -902,7 +914,6 @@ class _SearchResultsView extends ConsumerWidget {
                       fadeInDuration: const Duration(milliseconds: 150),
                     ),
                     
-                    // --- BINDER BADGE ---
                     binderLocationsAsync.when(
                       data: (binders) {
                         if (binders.isEmpty) return const SizedBox();
@@ -939,7 +950,6 @@ class _SearchResultsView extends ConsumerWidget {
                       error: (_,__) => const SizedBox(),
                     ),
 
-                    // --- PREIS LEISTE ---
                     Positioned(
                       bottom: 0, left: 0, right: 0,
                       child: Container(

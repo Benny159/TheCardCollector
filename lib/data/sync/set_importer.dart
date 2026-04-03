@@ -1,4 +1,4 @@
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' as drift;
 import '../api/tcgdex_api_client.dart';
 import '../../domain/logic/binder_service.dart';
 import '../database/app_database.dart';
@@ -107,35 +107,87 @@ class SetImporter {
 
     final existingSet = await (database.select(database.cardSets)..where((t) => t.id.equals(setId))).getSingleOrNull();
 
-    Value<String?> dbNameDe = de?['name'] != null ? Value(de!['name']) : const Value.absent();
-    Value<String?> dbLogoEn = logoEn != null ? Value(logoEn) : const Value.absent();
-    Value<String?> dbLogoDe = logoDe != null ? Value(logoDe) : const Value.absent();
-    Value<String?> dbSymbol = symbol != null ? Value(symbol) : const Value.absent();
+    drift.Value<String?> dbNameDe = de?['name'] != null ? drift.Value(de!['name']) : const drift.Value.absent();
+    drift.Value<String?> dbLogoEn = logoEn != null ? drift.Value(logoEn) : const drift.Value.absent();
+    drift.Value<String?> dbLogoDe = logoDe != null ? drift.Value(logoDe) : const drift.Value.absent();
+    drift.Value<String?> dbSymbol = symbol != null ? drift.Value(symbol) : const drift.Value.absent();
 
     if (existingSet != null) {
-      if (existingSet.hasManualTranslations) dbNameDe = const Value.absent(); 
+      if (existingSet.hasManualTranslations) dbNameDe = const drift.Value.absent(); 
       if (existingSet.hasManualImages) {
-         dbLogoEn = const Value.absent();
-         dbLogoDe = const Value.absent();
-         dbSymbol = const Value.absent();
+         dbLogoEn = const drift.Value.absent();
+         dbLogoDe = const drift.Value.absent();
+         dbSymbol = const drift.Value.absent();
       }
     }
 
     await database.into(database.cardSets).insertOnConflictUpdate(
       CardSetsCompanion(
-        id: Value(setId),
-        name: Value(en['name']),
+        id: drift.Value(setId),
+        name: drift.Value(en['name']),
         nameDe: dbNameDe,
-        series: Value(en['serie'] is Map ? en['serie']['name'] : 'Series'),
-        printedTotal: Value(en['cardCount']?['official'] ?? 0),
-        total: Value(en['cardCount']?['total'] ?? 0),
-        releaseDate: rDate != null ? Value(rDate) : const Value.absent(),
-        updatedAt: Value(DateTime.now().toIso8601String()),
+        series: drift.Value(en['serie'] is Map ? en['serie']['name'] : 'Series'),
+        printedTotal: drift.Value(en['cardCount']?['official'] ?? 0),
+        total: drift.Value(en['cardCount']?['total'] ?? 0),
+        releaseDate: rDate != null ? drift.Value(rDate) : const drift.Value.absent(),
+        updatedAt: drift.Value(DateTime.now().toIso8601String()),
         logoUrl: dbLogoEn,
         logoUrlDe: dbLogoDe,
         symbolUrl: dbSymbol,
       )
     );
+  }
+
+  // --- MERGE LOGIK FÜR LÜCKENFÜLLER ---
+  Future<void> mergeDuplicatePlaceholderCards(String setId) async {
+    // 1. Hole alle Karten für dieses Set aus der Datenbank
+    final cards = await (database.select(database.cards)..where((t) => t.setId.equals(setId))).get();
+
+    // 2. Gruppiere sie nach ihrer reinen Zahlen-Nummer
+    // z.B. "001", "1", "001/162" werden alle zur Zahl 1.
+    final Map<int, List<dynamic>> groupedCards = {};
+    
+    for (var card in cards) {
+      final match = RegExp(r'\d+').firstMatch(card.number);
+      if (match != null) {
+        final numberValue = int.parse(match.group(0)!);
+        groupedCards.putIfAbsent(numberValue, () => []).add(card);
+      }
+    }
+
+    // 3. Gehe alle Gruppen durch, die mehr als 1 Karte haben (unsere Duplikate!)
+    for (var entry in groupedCards.entries) {
+      final duplicates = entry.value;
+
+      if (duplicates.length > 1) {
+        // Wir suchen die "offizielle" Karte. 
+        // Die offizielle TCGdex-Karte hat meist führende Nullen in der ID ("sv5-001" vs "sv5-1")
+        // oder die Nummer selbst ist länger ("001" statt "1").
+        duplicates.sort((a, b) => b.id.length.compareTo(a.id.length));
+        
+        final officialCard = duplicates.first;
+        final fakeCards = duplicates.skip(1).toList();
+
+        for (var fake in fakeCards) {
+          print("Führe zusammen: ${fake.id} -> ${officialCard.id}");
+
+          // A: Inventar umschreiben (UserCards)
+          await (database.update(database.userCards)..where((t) => t.cardId.equals(fake.id)))
+              .write(UserCardsCompanion(cardId: drift.Value(officialCard.id)));
+
+          // B: Binder-Slots umschreiben (BinderCards)
+          await (database.update(database.binderCards)..where((t) => t.cardId.equals(fake.id)))
+              .write(BinderCardsCompanion(cardId: drift.Value(officialCard.id)));
+
+          // C: Benutzerdefinierte Preise umschreiben (falls vorhanden)
+          await (database.update(database.customCardPrices)..where((t) => t.cardId.equals(fake.id)))
+              .write(CustomCardPricesCompanion(cardId: drift.Value(officialCard.id)));
+
+          // D: Die alte Fake-Karte restlos aus der Datenbank löschen
+          await (database.delete(database.cards)..where((t) => t.id.equals(fake.id))).go();
+        }
+      }
+    }
   }
 
   // --- KARTEN IMPORT ---
@@ -175,6 +227,9 @@ class SetImporter {
         if (tcgList.isNotEmpty) batch.insertAll(database.tcgPlayerPrices, tcgList);
       });
     }
+
+    // --- NEU: Nach dem Import räumen wir mögliche Lückenfüller-Duplikate auf ---
+    await mergeDuplicatePlaceholderCards(setId);
   }
 
   Future<_CardImportData?> _prepareCardData(dynamic summaryEn, dynamic summaryDe, Card? existingCard, Map<String, Map<String, dynamic>> latestCmPrices, Map<String, Map<String, dynamic>> latestTcgPrices) async {
@@ -214,48 +269,48 @@ class SetImporter {
     int? cardHp;
     if (data['hp'] != null) cardHp = int.tryParse(data['hp'].toString()); 
 
-    Value<String?> dbNameDe = (nameDeApi != null && nameDeApi.isNotEmpty) ? Value(nameDeApi) : const Value.absent();
-    Value<String> dbImgEn = Value(finalImageEn);
-    Value<String?> dbImgDe = Value(finalImageDe);
-    Value<String?> dbArtist = (artistApi != null && artistApi.isNotEmpty) ? Value(artistApi) : const Value.absent();
-    Value<String?> dbRarity = Value(data['rarity']);
-    Value<int?> dbHp = cardHp != null ? Value(cardHp) : const Value.absent();
-    Value<String?> dbCardType = cardType != null ? Value(cardType) : const Value.absent();
-    Value<String> dbNumber = Value(number);
+    drift.Value<String?> dbNameDe = (nameDeApi != null && nameDeApi.isNotEmpty) ? drift.Value(nameDeApi) : const drift.Value.absent();
+    drift.Value<String> dbImgEn = drift.Value(finalImageEn);
+    drift.Value<String?> dbImgDe = drift.Value(finalImageDe);
+    drift.Value<String?> dbArtist = (artistApi != null && artistApi.isNotEmpty) ? drift.Value(artistApi) : const drift.Value.absent();
+    drift.Value<String?> dbRarity = drift.Value(data['rarity']);
+    drift.Value<int?> dbHp = cardHp != null ? drift.Value(cardHp) : const drift.Value.absent();
+    drift.Value<String?> dbCardType = cardType != null ? drift.Value(cardType) : const drift.Value.absent();
+    drift.Value<String> dbNumber = drift.Value(number);
 
-    Value<bool> dbHas1st = Value(v['firstEdition'] == true);
-    Value<bool> dbHasNormal = Value(v['normal'] == true);
-    Value<bool> dbHasHolo = Value(v['holo'] == true);
-    Value<bool> dbHasRev = Value(v['reverse'] == true);
-    Value<bool> dbHasPromo = Value(v['wPromo'] == true);
+    drift.Value<bool> dbHas1st = drift.Value(v['firstEdition'] == true);
+    drift.Value<bool> dbHasNormal = drift.Value(v['normal'] == true);
+    drift.Value<bool> dbHasHolo = drift.Value(v['holo'] == true);
+    drift.Value<bool> dbHasRev = drift.Value(v['reverse'] == true);
+    drift.Value<bool> dbHasPromo = drift.Value(v['wPromo'] == true);
 
     if (existingCard != null) {
-      if (existingCard.hasManualTranslations) dbNameDe = const Value.absent();
+      if (existingCard.hasManualTranslations) dbNameDe = const drift.Value.absent();
       if (existingCard.hasManualImages) {
-        dbImgEn = const Value.absent();
-        dbImgDe = const Value.absent();
+        dbImgEn = const drift.Value.absent();
+        dbImgDe = const drift.Value.absent();
       }
       if (existingCard.hasManualStats) {
-        dbArtist = const Value.absent();
-        dbRarity = const Value.absent();
-        dbHp = const Value.absent();
-        dbCardType = const Value.absent();
-        dbNumber = const Value.absent();
+        dbArtist = const drift.Value.absent();
+        dbRarity = const drift.Value.absent();
+        dbHp = const drift.Value.absent();
+        dbCardType = const drift.Value.absent();
+        dbNumber = const drift.Value.absent();
       }
       if (existingCard.hasManualVariants) {
-        dbHas1st = const Value.absent();
-        dbHasNormal = const Value.absent();
-        dbHasHolo = const Value.absent();
-        dbHasRev = const Value.absent();
-        dbHasPromo = const Value.absent();
+        dbHas1st = const drift.Value.absent();
+        dbHasNormal = const drift.Value.absent();
+        dbHasHolo = const drift.Value.absent();
+        dbHasRev = const drift.Value.absent();
+        dbHasPromo = const drift.Value.absent();
       }
     }
 
     final cardCompanion = CardsCompanion(
-        id: Value(cardId),
-        setId: Value(data['set']['id']),
-        name: Value(nameEn),
-        sortNumber: Value(sortNum),
+        id: drift.Value(cardId),
+        setId: drift.Value(data['set']['id']),
+        name: drift.Value(nameEn),
+        sortNumber: drift.Value(sortNum),
         nameDe: dbNameDe,
         number: dbNumber,
         cardType: dbCardType,
@@ -278,31 +333,29 @@ class SetImporter {
       final now = DateTime.now();
       final pricing = data['pricing'];
 
-      // --- DER SMARTE PREIS-CHECK: Nur speichern, wenn sich etwas geändert hat! ---
       if (pricing['cardmarket'] != null) {
         final cm = pricing['cardmarket'];
         final double? newTrend = (cm['trend'] as num?)?.toDouble();
         final double? newTrendHolo = (cm['trend-holo'] as num?)?.toDouble();
-        final double? newTrendRev = null; // TCGdex liefert aktuell keinen Rev Trend
+        final double? newTrendRev = null; 
 
         final oldCm = latestCmPrices[cardId];
-        // Schreibe einen neuen Preis, wenn es noch keinen gibt, ODER wenn einer der Trend-Preise abweicht
         if (oldCm == null || oldCm['trend'] != newTrend || oldCm['trendHolo'] != newTrendHolo) {
           cmCompanion = CardMarketPricesCompanion.insert(
             cardId: cardId,
             fetchedAt: now,
-            average: Value((cm['avg'] as num?)?.toDouble()),
-            low: Value((cm['low'] as num?)?.toDouble()),
-            trend: Value(newTrend),
-            avg1: Value((cm['avg1'] as num?)?.toDouble()),
-            avg7: Value((cm['avg7'] as num?)?.toDouble()),
-            avg30: Value((cm['avg30'] as num?)?.toDouble()),
-            avgHolo: Value((cm['avg-holo'] as num?)?.toDouble()),
-            lowHolo: Value((cm['low-holo'] as num?)?.toDouble()),
-            trendHolo: Value(newTrendHolo),
-            avg1Holo: Value((cm['avg1-holo'] as num?)?.toDouble()),
-            avg7Holo: Value((cm['avg7-holo'] as num?)?.toDouble()),
-            avg30Holo: Value((cm['avg30-holo'] as num?)?.toDouble()),
+            average: drift.Value((cm['avg'] as num?)?.toDouble()),
+            low: drift.Value((cm['low'] as num?)?.toDouble()),
+            trend: drift.Value(newTrend),
+            avg1: drift.Value((cm['avg1'] as num?)?.toDouble()),
+            avg7: drift.Value((cm['avg7'] as num?)?.toDouble()),
+            avg30: drift.Value((cm['avg30'] as num?)?.toDouble()),
+            avgHolo: drift.Value((cm['avg-holo'] as num?)?.toDouble()),
+            lowHolo: drift.Value((cm['low-holo'] as num?)?.toDouble()),
+            trendHolo: drift.Value(newTrendHolo),
+            avg1Holo: drift.Value((cm['avg1-holo'] as num?)?.toDouble()),
+            avg7Holo: drift.Value((cm['avg7-holo'] as num?)?.toDouble()),
+            avg30Holo: drift.Value((cm['avg30-holo'] as num?)?.toDouble()),
           );
         }
       }
@@ -323,18 +376,18 @@ class SetImporter {
           tcgCompanion = TcgPlayerPricesCompanion.insert(
             cardId: cardId,
             fetchedAt: now,
-            normalMarket: Value(newNormMarket),
-            normalLow: Value((norm?['lowPrice'] as num?)?.toDouble()),
-            normalMid: Value((norm?['midPrice'] as num?)?.toDouble()),
-            normalDirectLow: Value((norm?['directLowPrice'] as num?)?.toDouble()),
-            holoMarket: Value(newHoloMarket),
-            holoLow: Value((holo?['lowPrice'] as num?)?.toDouble()),
-            holoMid: Value((holo?['midPrice'] as num?)?.toDouble()),
-            holoDirectLow: Value((holo?['directLowPrice'] as num?)?.toDouble()),
-            reverseMarket: Value(newRevMarket),
-            reverseLow: Value((rev?['lowPrice'] as num?)?.toDouble()),
-            reverseMid: Value((rev?['midPrice'] as num?)?.toDouble()),
-            reverseDirectLow: Value((rev?['directLowPrice'] as num?)?.toDouble()),
+            normalMarket: drift.Value(newNormMarket),
+            normalLow: drift.Value((norm?['lowPrice'] as num?)?.toDouble()),
+            normalMid: drift.Value((norm?['midPrice'] as num?)?.toDouble()),
+            normalDirectLow: drift.Value((norm?['directLowPrice'] as num?)?.toDouble()),
+            holoMarket: drift.Value(newHoloMarket),
+            holoLow: drift.Value((holo?['lowPrice'] as num?)?.toDouble()),
+            holoMid: drift.Value((holo?['midPrice'] as num?)?.toDouble()),
+            holoDirectLow: drift.Value((holo?['directLowPrice'] as num?)?.toDouble()),
+            reverseMarket: drift.Value(newRevMarket),
+            reverseLow: drift.Value((rev?['lowPrice'] as num?)?.toDouble()),
+            reverseMid: drift.Value((rev?['midPrice'] as num?)?.toDouble()),
+            reverseDirectLow: drift.Value((rev?['directLowPrice'] as num?)?.toDouble()),
           );
         }
       }

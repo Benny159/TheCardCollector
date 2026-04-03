@@ -128,7 +128,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     ref.invalidate(searchResultsProvider);
     ref.invalidate(inventoryProvider);
     
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Preisquelle aktualisiert!"), duration: Duration(seconds: 1)));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Preisquelle aktualisiert!"), duration: Duration(milliseconds: 500)));
   }
 
   @override
@@ -609,7 +609,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
           ref.invalidate(searchResultsProvider);
           ref.invalidate(inventoryProvider);
           
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Eigener Preis gespeichert!")));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Eigener Preis gespeichert!"), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
       }
     }
   }
@@ -1147,7 +1147,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         int? slotToRemoveId;
         if (usedSlots.length == 1) {
           slotToRemoveId = usedSlots.first.id;
-          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Auch aus Binder '${usedSlots.first.binderName}' entfernt."), duration: const Duration(seconds: 2)));
+          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Auch aus Binder '${usedSlots.first.binderName}' entfernt."), behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
         } else if (usedSlots.length > 1) {
           if (context.mounted) {
             slotToRemoveId = await _showBinderSelectionDialog(context, usedSlots);
@@ -1161,11 +1161,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         await (db.delete(db.userCards)..where((t) => t.id.equals(item.id))).go();
       } else {
         await (db.update(db.userCards)..where((t) => t.id.equals(item.id))).write(UserCardsCompanion(quantity: drift.Value(item.quantity - 1)));
-        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("-1"), duration: Duration(milliseconds: 500)));
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("-1"), behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
       }
       await _forceRefresh();
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
     }
   }
 
@@ -1212,7 +1212,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     final dexApi = ref.read(tcgDexApiClientProvider);
     final importer = SetImporter(dexApi, dbInst);
     
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aktualisiere Daten...')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aktualisiere Daten...'), behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
     
     try {
       final setCardsQuery = await (dbInst.select(dbInst.cards)..where((t) => t.setId.equals(widget.card.setId))).get();
@@ -1252,13 +1252,13 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Aktualisiert!'), backgroundColor: Colors.green)
+          const SnackBar(content: Text('✅ Aktualisiert!'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500))
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red)
+          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500))
         );
       }
     }

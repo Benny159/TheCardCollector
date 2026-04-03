@@ -222,7 +222,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
          });
          ref.invalidate(binderDetailProvider(widget.binder.id));
          ScaffoldMessenger.of(context).clearSnackBars();
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slots getauscht!"), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)));
+         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slots getauscht!"), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
        }
        return;
     }
@@ -367,7 +367,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                   await BinderService(db).clearSlot(slot.binderCard.id);
                   if (mounted) {
                     ScaffoldMessenger.of(context).clearSnackBars();
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Karte entfernt."), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Karte entfernt."), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
                     ref.invalidate(binderDetailProvider(widget.binder.id));
                   }
                 },
@@ -441,7 +441,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                 await BinderService(db).addSlotRight(widget.binder.id, slot.binderCard.id);
                 if (mounted) {
                   ScaffoldMessenger.of(context).clearSnackBars();
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot erfolgreich hinzugefügt."), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot erfolgreich hinzugefügt."), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
                   ref.invalidate(binderDetailProvider(widget.binder.id));
                 }
               },
@@ -456,7 +456,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                 await BinderService(db).deleteSlotAndShift(widget.binder.id, slot.binderCard.id);
                 if (mounted) {
                   ScaffoldMessenger.of(context).clearSnackBars();
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot komplett gelöscht."), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Slot komplett gelöscht."), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
                   ref.invalidate(binderDetailProvider(widget.binder.id));
                 }
               },
@@ -557,7 +557,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
            await service.fillSlot(slot.binderCard.id, pickedCard.id, selectedCard.id, variant: selectedCard.variant);
            if (mounted) {
               ScaffoldMessenger.of(context).clearSnackBars();
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${selectedCard.variant} Karte hinzugefügt!"), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 1)));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${selectedCard.variant} Karte hinzugefügt!"), behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
            }
         } else {
            String label = pickedCard.nameDe ?? pickedCard.name;
@@ -569,7 +569,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
       } catch (e) {
         if (mounted) {
            ScaffoldMessenger.of(context).clearSnackBars();
-           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 2)));
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
         }
       }
     }
@@ -745,7 +745,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
         
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Zu Seite $targetPageNumber gesprungen!"), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 1))
+          SnackBar(content: Text("Zu Seite $targetPageNumber gesprungen!"), behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500))
         );
         return; 
       }
@@ -773,7 +773,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
       
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Gefunden auf Seite ${targetPage + 1}!"), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 1))
+        SnackBar(content: Text("Gefunden auf Seite ${targetPage + 1}!"), behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500))
       );
 
       // Leuchten nach 2 Sekunden wieder ausschalten
@@ -787,7 +787,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
 
     } else {
       ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nichts gefunden."), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nichts gefunden."), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
     }
   }
 }

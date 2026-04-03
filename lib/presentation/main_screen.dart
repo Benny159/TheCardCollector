@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'sets/set_list_screen.dart';        
 import 'search/card_search_screen.dart';   
 import 'inventory/inventory_screen.dart';  
-import 'binders/binder_list_screen.dart';  
+import 'binders/binder_list_screen.dart';
+import 'widgets/app_drawer.dart';  
 import '../../data/sync/pokedex_importer.dart';
 import '../../data/database/database_provider.dart';
 import 'scanner/scanner_screen.dart'; 
@@ -82,6 +83,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       },
       child: Scaffold(
         resizeToAvoidBottomInset: false, 
+        backgroundColor: Colors.white,
+
+        drawer: const AppDrawer(),
         
         body: IndexedStack(
           index: _currentIndex,
