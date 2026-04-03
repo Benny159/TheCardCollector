@@ -209,25 +209,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-
-                        // --- NEU: Sortierte und gut lesbare Tags ---
                         
-                        // 1. Block: Werte der Karte
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            if (widget.card.rarity.isNotEmpty)
-                              _buildTag(Icons.star, widget.card.rarity, color: Colors.orange[800]),
-                            if (widget.card.number.isNotEmpty)
-                              _buildTag(Icons.numbers, "${widget.card.number} / ${widget.card.setPrintedTotal}", color: Colors.purple),
-                          ],
-                        ),
-                        
-                        // 2. Block: Künstler (Mit Such-Lupe)
+                        // 1. Block: Künstler (Mit Such-Lupe)
                         if (widget.card.artist.isNotEmpty) ...[
-                          const Divider(height: 20, thickness: 0.5),
                           Center(
                             child: _buildTag(
                               Icons.brush, 
@@ -243,7 +227,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                           ),
                         ],
 
-                        // 3. Block: Externe Links (Mit Redirect-Symbol)
+                        //2. Block: Externe Links (Mit Redirect-Symbol)
                         const Divider(height: 20, thickness: 0.5),
                         Wrap(
                           spacing: 8,

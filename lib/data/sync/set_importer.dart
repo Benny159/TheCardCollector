@@ -138,38 +138,48 @@ class SetImporter {
     );
   }
 
-  // --- MERGE LOGIK FÜR LÜCKENFÜLLER ---
+ // --- MERGE LOGIK FÜR LÜCKENFÜLLER ---
   Future<void> mergeDuplicatePlaceholderCards(String setId) async {
     // 1. Hole alle Karten für dieses Set aus der Datenbank
     final cards = await (database.select(database.cards)..where((t) => t.setId.equals(setId))).get();
 
-    // 2. Gruppiere sie nach ihrer reinen Zahlen-Nummer
-    // z.B. "001", "1", "001/162" werden alle zur Zahl 1.
-    final Map<int, List<dynamic>> groupedCards = {};
+    // 2. Wir gruppieren präziser: Prefix + Nummer + Suffix
+    // "001" -> "", "1", ""
+    // "1"   -> "", "1", "" (WIRD GEMERGED)
+    // "GG01" -> "gg", "1", "" (WIRD IGNORIERT)
+    // "19a"  -> "", "19", "a" (WIRD IGNORIERT)
+    final Map<String, List<dynamic>> groupedCards = {};
     
     for (var card in cards) {
-      final match = RegExp(r'\d+').firstMatch(card.number);
+      // Falls die Nummer "001/165" ist, ignorieren wir den Teil nach dem Slash
+      String cleanNum = card.number.split('/').first.trim();
+      
+      // Regex: Sucht nach optionalen Buchstaben vorn, ignoriert führende Nullen, sucht nach Buchstaben hinten
+      final match = RegExp(r'^([A-Za-z_\-]*)\s*0*(\d+)\s*([A-Za-z_\-]*)$').firstMatch(cleanNum);
+      
       if (match != null) {
-        final numberValue = int.parse(match.group(0)!);
-        groupedCards.putIfAbsent(numberValue, () => []).add(card);
+        final prefix = match.group(1)?.toLowerCase() ?? "";
+        final numberValue = match.group(2) ?? "";
+        final suffix = match.group(3)?.toLowerCase() ?? "";
+        
+        final key = "${prefix}_${numberValue}_$suffix";
+        groupedCards.putIfAbsent(key, () => []).add(card);
       }
     }
 
-    // 3. Gehe alle Gruppen durch, die mehr als 1 Karte haben (unsere Duplikate!)
+    // 3. Zusammenführen
     for (var entry in groupedCards.entries) {
       final duplicates = entry.value;
 
       if (duplicates.length > 1) {
-        // Wir suchen die "offizielle" Karte. 
-        // Die offizielle TCGdex-Karte hat meist führende Nullen in der ID ("sv5-001" vs "sv5-1")
-        // oder die Nummer selbst ist länger ("001" statt "1").
+        // Offizielle Karten haben meist führende Nullen oder die längere ID (z.B. sv5-001 vs sv5-1)
         duplicates.sort((a, b) => b.id.length.compareTo(a.id.length));
         
         final officialCard = duplicates.first;
         final fakeCards = duplicates.skip(1).toList();
 
         for (var fake in fakeCards) {
-          print("Führe zusammen: ${fake.id} -> ${officialCard.id}");
+          print("Führe zusammen: ${fake.id} (${fake.number}) -> ${officialCard.id} (${officialCard.number})");
 
           // A: Inventar umschreiben (UserCards)
           await (database.update(database.userCards)..where((t) => t.cardId.equals(fake.id)))
@@ -179,11 +189,16 @@ class SetImporter {
           await (database.update(database.binderCards)..where((t) => t.cardId.equals(fake.id)))
               .write(BinderCardsCompanion(cardId: drift.Value(officialCard.id)));
 
-          // C: Benutzerdefinierte Preise umschreiben (falls vorhanden)
+          // C: Benutzerdefinierte Preise umschreiben
           await (database.update(database.customCardPrices)..where((t) => t.cardId.equals(fake.id)))
               .write(CustomCardPricesCompanion(cardId: drift.Value(officialCard.id)));
 
-          // D: Die alte Fake-Karte restlos aus der Datenbank löschen
+          // D: FIX FÜR DEN FOREIGN KEY ERROR!
+          // Wir müssen auch die alten Preis-Historien der Fake-Karte löschen, sonst weigert sich SQLite die Karte zu löschen.
+          await (database.delete(database.cardMarketPrices)..where((t) => t.cardId.equals(fake.id))).go();
+          await (database.delete(database.tcgPlayerPrices)..where((t) => t.cardId.equals(fake.id))).go();
+
+          // E: Alte Fake-Karte restlos aus der Datenbank löschen
           await (database.delete(database.cards)..where((t) => t.id.equals(fake.id))).go();
         }
       }
