@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:drift/drift.dart' hide Column; 
+import 'package:cached_network_image/cached_network_image.dart'; // --- NEU: Für das Set-Logo
 
 // Deine Datenbank Provider
 import '../../data/database/app_database.dart';
@@ -34,8 +35,17 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
   String _scanStatus = "Lade Datenbank...";
   Card? _scannedCard; 
 
-  // --- NEU: Der Datenbank-Cache für den Heuhaufen-Algorithmus ---
+  // --- NEU: Metadaten für die schicke Ergebnis-Anzeige ---
+  CardSet? _scannedSet;
+  int _scannedOwnedQuantity = 0;
+  double _scannedCardPrice = 0.0;
+  double _scannedSetProgress = 0.0;
+  int _scannedSetOwned = 0;
+  int _scannedSetTotal = 0;
+
+  // Der Datenbank-Cache für den Heuhaufen-Algorithmus
   List<Card>? _allCardsCache;
+  final Map<String, int> _setPrintedTotalMap = {}; 
 
   @override
   void initState() {
@@ -44,14 +54,18 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     _initializeCamera();
   }
 
-  // Lädt einmalig alle Karten in den RAM für blitzschnelle Checks
   Future<void> _loadDatabaseIntoMemory() async {
     final db = ref.read(databaseProvider);
     final cards = await db.select(db.cards).get();
     
-    // Sortieren nach Namenslänge (längste zuerst), 
-    // damit z.B. "Bisasam" gefunden wird, bevor "Bis" triggert.
     cards.sort((a, b) => b.name.length.compareTo(a.name.length));
+    
+    final sets = await db.select(db.cardSets).get();
+    for (var s in sets) {
+       if (s.printedTotal != null) {
+          _setPrintedTotalMap[s.id] = s.printedTotal!;
+       }
+    }
     
     setState(() {
        _allCardsCache = cards;
@@ -86,7 +100,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
       _cameraController!.startImageStream(_processCameraFrame);
 
     } catch (e) {
-      print("❌ Kamera Fehler: $e");
+      debugPrint("❌ Kamera Fehler: $e");
       if (mounted) setState(() => _scanStatus = "❌ Kamera Fehler.");
     }
   }
@@ -101,7 +115,6 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     final InputImageFormat? inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw);
     if (inputImageFormat == null) return null;
 
-    // Auf Android müssen wir die YUV_420_888 Planes manuell in ein flaches NV21 ByteArray umbauen
     if (Platform.isAndroid) {
         if (image.format.group != ImageFormatGroup.yuv420) return null;
 
@@ -116,7 +129,6 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
         
         final Uint8List nv21Bytes = Uint8List(nv21Size);
 
-        // Plane 0: Y (Luminance)
         final Uint8List yBuffer = image.planes[0].bytes;
         final int yRowStride = image.planes[0].bytesPerRow;
         
@@ -130,7 +142,6 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
             }
         }
 
-        // Plane 1 (U) & Plane 2 (V) zu NV21 (V, U interlaced)
         final Uint8List uBuffer = image.planes[1].bytes;
         final Uint8List vBuffer = image.planes[2].bytes;
         int nv21Index = ySize;
@@ -146,14 +157,12 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
         final inputImageData = InputImageMetadata(
           size: Size(width.toDouble(), height.toDouble()),
           rotation: imageRotation,
-          format: InputImageFormat.nv21, // Wir sagen ML Kit explizit, dass es jetzt NV21 ist!
-          bytesPerRow: width, // Bei NV21 ist bytesPerRow immer gleich width
+          format: InputImageFormat.nv21,
+          bytesPerRow: width,
         );
 
         return InputImage.fromBytes(bytes: nv21Bytes, metadata: inputImageData);
-    } 
-    // iOS Handling (BGRA8888 funktioniert direkt)
-    else {
+    } else {
         final WriteBuffer allBytes = WriteBuffer();
         for (final Plane plane in image.planes) {
           allBytes.putUint8List(plane.bytes);
@@ -186,6 +195,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
   Future<void> _resumeScanning() async {
     setState(() {
       _scannedCard = null;
+      _scannedSet = null;
       _scanStatus = "Halte die Karte in den Rahmen...";
     });
     if (_cameraController != null && !_cameraController!.value.isStreamingImages) {
@@ -209,62 +219,74 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
       }
 
       String rawText = recognizedText.text;
-      
-      // Bereinigter Heuhaufen: Alles außer Buchstaben und Zahlen fliegt raus, alles klein.
-      // So wird "AS Meditalis" zu "asmeditalis"
       String rawClean = rawText.toLowerCase().replaceAll(RegExp(r'[^a-z0-9äöüß]'), '');
 
-      // 1. HP & Nummer extrahieren (falls vorhanden)
+      // 1. WERTE EXTRAHIEREN
       int? recognizedHP;
-      String? recognizedNumber;
+      String? recognizedCardNum;
+      String? recognizedMaxNum;
       
-      RegExp hpRegEx = RegExp(r'\b(?:HP|KP)\s*(\d+)\b|\b(\d+)\s*(?:HP|KP)\b', caseSensitive: false);
-      Match? hpMatch = hpRegEx.firstMatch(rawText);
-      if (hpMatch != null) recognizedHP = int.tryParse(hpMatch.group(1) ?? hpMatch.group(2) ?? '');
+      RegExp hpRegEx = RegExp(r'\b(?:HP|KP)\s*(\d{2,3})\b|\b(\d{2,3})\s*(?:HP|KP)\b', caseSensitive: false);
+      for (final match in hpRegEx.allMatches(rawText)) {
+        int? hp = int.tryParse(match.group(1) ?? match.group(2) ?? '');
+        if (hp != null && hp >= 30 && hp <= 350 && hp % 10 == 0) {
+          recognizedHP = hp;
+          break; 
+        }
+      }
 
-      String noSpaceText = rawText.replaceAll(' ', '');
-      RegExp slashPattern = RegExp(r'([A-Za-z]*\d+)/[A-Za-z]*\d+');
-      Match? numMatch = slashPattern.firstMatch(noSpaceText);
-      if (numMatch != null) recognizedNumber = numMatch.group(1)!.replaceAll(RegExp(r'^0+'), '').toLowerCase();
+      RegExp slashPattern = RegExp(r'\b([A-Za-z]*\d+)\s*/\s*([A-Za-z]*\d+)\b');
+      Match? numMatch = slashPattern.firstMatch(rawText);
+      if (numMatch != null) {
+        recognizedCardNum = numMatch.group(1)!.replaceAll(RegExp(r'^0+'), '').toLowerCase();
+        recognizedMaxNum = numMatch.group(2)!.replaceAll(RegExp(r'^0+'), '').toLowerCase();
+      }
 
-      // ==============================================================
-      // 2. DER HEUHAUFEN-ALGORITHMUS (Name Search)
-      // ==============================================================
+      // 2. HEUHAUFEN
       List<Card> nameMatches = [];
-      
       for (final card in _allCardsCache!) {
           bool matchEn = _isNameInText(card.name, rawClean, rawText);
           bool matchDe = card.nameDe != null && _isNameInText(card.nameDe!, rawClean, rawText);
+          if (matchEn || matchDe) nameMatches.add(card);
+      }
 
-          if (matchEn || matchDe) {
-              nameMatches.add(card);
+      if (nameMatches.isEmpty && recognizedCardNum != null && recognizedMaxNum != null) {
+          int? ocrMax = int.tryParse(recognizedMaxNum);
+          if (ocrMax != null) {
+             for (final card in _allCardsCache!) {
+                 String dbNum = card.number.replaceAll(RegExp(r'^0+'), '').toLowerCase();
+                 int? dbMax = _setPrintedTotalMap[card.setId];
+                 bool isNumMatch = dbNum == recognizedCardNum || 
+                                  (int.tryParse(dbNum) != null && int.tryParse(recognizedCardNum) != null && int.parse(dbNum) == int.parse(recognizedCardNum));
+                 if (isNumMatch && dbMax == ocrMax) nameMatches.add(card);
+             }
           }
       }
 
       if (nameMatches.isEmpty) {
           _isProcessingImage = false;
-          return; // Nichts gefunden -> Nächster Frame
+          return; 
       }
 
-      // ==============================================================
-      // 3. DAS SCORING-SYSTEM (Welcher Name ist der Richtige?)
-      // ==============================================================
+      // 3. SCORING
       Card? bestCard;
       int bestScore = -1;
 
       for (final card in nameMatches) {
           int score = 0;
-          
-          // Bonus-Punkte, wenn HP übereinstimmen
-          if (recognizedHP != null && card.hp == recognizedHP) score += 10;
-          
-          // Bonus-Punkte, wenn die Kartennummer im Text gefunden wurde
-          if (recognizedNumber != null && card.number.isNotEmpty) {
+          if (recognizedHP != null && card.hp == recognizedHP) score += 20;
+          if (recognizedCardNum != null && card.number.isNotEmpty) {
               String dbNum = card.number.replaceAll(RegExp(r'^0+'), '').toLowerCase();
-              if (dbNum == recognizedNumber || dbNum.contains(recognizedNumber) || recognizedNumber.contains(dbNum)) {
-                  score += 15; // Nummer ist ein sehr starker Indikator
-              }
+              if (dbNum == recognizedCardNum) score += 50; 
+              else if (int.tryParse(dbNum) != null && int.tryParse(recognizedCardNum) != null && int.parse(dbNum) == int.parse(recognizedCardNum)) score += 50; 
           }
+          if (recognizedMaxNum != null) {
+              int? ocrMax = int.tryParse(recognizedMaxNum);
+              int? dbMax = _setPrintedTotalMap[card.setId];
+              if (ocrMax != null && dbMax != null && ocrMax == dbMax) score += 40;
+          }
+          String setIdLower = card.setId.toLowerCase(); 
+          if (rawText.toLowerCase().contains(setIdLower)) score += 30; 
 
           if (score > bestScore) {
               bestScore = score;
@@ -272,47 +294,75 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
           }
       }
 
-      // Zeige dem Nutzer, was wir gefunden haben, auch wenn der Score niedrig ist
       setState(() => _scanStatus = "Analysiere: ${bestCard?.name}...");
 
-      // ==============================================================
-      // 4. TREFFER BESTÄTIGEN
-      // ==============================================================
-      // Wir akzeptieren die Karte nur, wenn entweder HP/Nummer den Score erhöht haben,
-      // ODER wenn es die absolut einzige Karte mit diesem Namen in der ganzen Datenbank ist.
+      // 4. TREFFER BESTÄTIGEN & DATEN LADEN
       if (bestCard != null && (bestScore > 0 || nameMatches.length == 1)) {
           HapticFeedback.vibrate(); 
-          await _cameraController!.stopImageStream(); // Bild einfrieren
+          await _cameraController!.stopImageStream(); 
           
+          // --- NEU: WIR LADEN ALLE ZUSATZDATEN FÜR DIE ANZEIGE ---
+          final db = ref.read(databaseProvider);
+          
+          // 1. Set Info
+          final setObj = await (db.select(db.cardSets)..where((t) => t.id.equals(bestCard!.setId))).getSingleOrNull();
+          
+          // 2. Set Fortschritt
+          final setCardsQuery = await (db.select(db.cards)..where((t) => t.setId.equals(bestCard!.setId))).get();
+          final setCardIds = setCardsQuery.map((c) => c.id).toList();
+          int uniqueOwnedInSet = 0;
+          if (setCardIds.isNotEmpty) {
+             final ownedInSet = await (db.select(db.userCards)..where((t) => t.cardId.isIn(setCardIds))).get();
+             uniqueOwnedInSet = ownedInSet.map((u) => u.cardId).toSet().length;
+          }
+          
+          // 3. Eigener Besitz
+          final myCards = await (db.select(db.userCards)..where((t) => t.cardId.equals(bestCard!.id))).get();
+          final int myQuantity = myCards.fold(0, (sum, c) => sum + c.quantity);
+
+          // 4. Preis
+          final cmPrice = await (db.select(db.cardMarketPrices)..where((t) => t.cardId.equals(bestCard!.id))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
+          final tcgPrice = await (db.select(db.tcgPlayerPrices)..where((t) => t.cardId.equals(bestCard!.id))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
+          
+          double displayPrice = 0.0;
+          bool isHolo = bestCard!.hasHolo && !bestCard!.hasNormal; 
+          
+          if (bestCard!.preferredPriceSource == 'tcgplayer') {
+              displayPrice = isHolo ? (tcgPrice?.holoMarket ?? 0.0) : (tcgPrice?.normalMarket ?? 0.0);
+              if (displayPrice == 0.0) displayPrice = tcgPrice?.normalMarket ?? tcgPrice?.holoMarket ?? cmPrice?.trend ?? 0.0;
+          } else {
+              displayPrice = isHolo ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
+              if (displayPrice == 0.0) displayPrice = cmPrice?.trend ?? cmPrice?.trendHolo ?? tcgPrice?.normalMarket ?? 0.0;
+          }
+
           if (!mounted) return;
           setState(() {
             _scanStatus = "✅ Gefunden!";
             _scannedCard = bestCard; 
+            _scannedSet = setObj;
+            _scannedOwnedQuantity = myQuantity;
+            _scannedCardPrice = displayPrice;
+            _scannedSetProgress = setCardsQuery.isNotEmpty ? uniqueOwnedInSet / setCardsQuery.length : 0.0;
+            _scannedSetOwned = uniqueOwnedInSet;
+            _scannedSetTotal = setCardsQuery.length;
           });
       }
 
     } catch (e) {
-      print("OCR Fehler: $e");
+      debugPrint("OCR Fehler: $e");
     } finally {
       _isProcessingImage = false;
     }
   }
 
-  // Prüft, ob der Datenbank-Name im verschmolzenen OCR-Heuhaufen steckt
   bool _isNameInText(String dbName, String rawClean, String rawFullText) {
       if (dbName.isEmpty) return false;
-      
       String nameClean = dbName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9äöüß]'), '');
-      
-      // Ignoriere zu generische Kurz-Strings (z.B. "V", "EX"), die würden sonst überall matchen
       if (nameClean.length < 3) return false;
 
       if (nameClean.length <= 3) {
-          // Bei kurzen Namen wie "Mew" verlangen wir ein echtes, alleinstehendes Wort im Original-Text
           return RegExp(r'\b' + RegExp.escape(dbName) + r'\b', caseSensitive: false).hasMatch(rawFullText);
       } else {
-          // Bei langen Namen (Meditalis) prüfen wir den verschmolzenen Text. 
-          // So ist "ASMeditalis" ein legaler Treffer für "meditalis"!
           return rawClean.contains(nameClean);
       }
   }
@@ -427,43 +477,158 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     );
   }
 
+  // --- NEU: DIE SCHICKE ERGEBNIS-ANZEIGE ---
   Widget _buildResultArea(BuildContext context, ThemeData theme) {
     final card = _scannedCard!;
+    final bool isNewCard = _scannedOwnedQuantity == 0;
     
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Erkannte Karte:", style: theme.textTheme.titleSmall?.copyWith(color: Colors.grey)),
-          const SizedBox(height: 8),
-          
           Expanded(
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 1. Das Kartenbild
                 AspectRatio(
-                  aspectRatio: 0.73, 
+                  aspectRatio: 0.716, 
                   child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        card.imageUrlDe ?? card.imageUrl,
+                      child: CachedNetworkImage(
+                        imageUrl: card.imageUrlDe ?? card.imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => const Icon(Icons.broken_image, size: 50),
+                        placeholder: (_,__) => Container(color: Colors.grey[200]),
+                        errorWidget: (c, e, s) => const Icon(Icons.broken_image, size: 50, color: Colors.grey),
                       ),
                   ),
                 ),
                 const SizedBox(width: 16),
                 
+                // 2. Die Details daneben
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(card.nameDe ?? card.name, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 4),
-                      Text("Set ID: ${card.setId.toUpperCase()}", style: const TextStyle(fontSize: 14)),
-                      Text("Nummer: ${card.number}", style: const TextStyle(fontSize: 14)),
-                      if (card.hp != null) Text("HP: ${card.hp}", style: const TextStyle(fontSize: 14)),
+                      // Name & Nummer
+                      Text(card.nameDe ?? card.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      Text("${card.number} / ${_scannedSet?.printedTotal ?? '?'}", style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w600)),
+                      
+                      const SizedBox(height: 12),
+                      
+                      // Badges für Besitz & Preis
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          // Besitz-Badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isNewCard ? Colors.amber[600] : Colors.blue[100],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: isNewCard ? Colors.amber[800]! : Colors.blue[300]!)
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(isNewCard ? Icons.star : Icons.inventory_2, size: 14, color: isNewCard ? Colors.white : Colors.blue[900]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isNewCard ? "NEUE KARTE" : "In Sammlung: $_scannedOwnedQuantity x",
+                                  style: TextStyle(
+                                    color: isNewCard ? Colors.white : Colors.blue[900], 
+                                    fontWeight: FontWeight.bold, 
+                                    fontSize: 11
+                                  )
+                                ),
+                              ],
+                            ),
+                          ),
+                          
+                          // Preis-Badge
+                          if (_scannedCardPrice > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.green[100],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.green[400]!)
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.euro, size: 12, color: Colors.green[800]),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    _scannedCardPrice.toStringAsFixed(2),
+                                    style: TextStyle(color: Colors.green[900], fontWeight: FontWeight.bold, fontSize: 11)
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                      
+                      const Spacer(),
+                      
+                      // 3. Die hübsche Set-Box ganz unten
+                      if (_scannedSet != null)
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey[300]!)
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  if (_scannedSet!.logoUrl != null || _scannedSet!.logoUrlDe != null)
+                                    SizedBox(
+                                      height: 20, width: 40,
+                                      child: CachedNetworkImage(
+                                        imageUrl: _scannedSet!.logoUrlDe ?? _scannedSet!.logoUrl!,
+                                        fit: BoxFit.contain,
+                                        errorWidget: (_,__,___) => const SizedBox(),
+                                      )
+                                    ),
+                                  if (_scannedSet!.logoUrl != null || _scannedSet!.logoUrlDe != null)
+                                    const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _scannedSet!.nameDe ?? _scannedSet!.name, 
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    )
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: LinearProgressIndicator(
+                                        value: _scannedSetProgress,
+                                        backgroundColor: Colors.grey[300],
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[400]!),
+                                        minHeight: 6,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text("$_scannedSetOwned / $_scannedSetTotal", style: TextStyle(fontSize: 10, color: Colors.grey[700], fontWeight: FontWeight.bold)),
+                                ],
+                              )
+                            ],
+                          ),
+                        )
                     ],
                   ),
                 )
@@ -473,6 +638,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
           
           const SizedBox(height: 16),
           
+          // Die unteren Aktions-Buttons
           Row(
             children: [
               Expanded(
@@ -492,7 +658,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                     _openInventorySheet(context, card);
                   },
                   icon: const Icon(Icons.add_task),
-                  label: const Text("Bestätigen & Hinzufügen"),
+                  label: const Text("Bestätigen"),
                   style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
                 ),
               )
