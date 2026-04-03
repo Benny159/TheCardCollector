@@ -27,6 +27,19 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
   
   OwnershipFilter _ownershipFilter = OwnershipFilter.all;
 
+  // --- SUCH-VARIABLEN (Inklusive Aufklapp-Status) ---
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  String _searchQuery = "";
+  bool _isSearchExpanded = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     // Wir beobachten den Provider. Riverpod cacht das Ergebnis, also ist das okay.
@@ -43,12 +56,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         data: (rawCards) {
           if (rawCards.isEmpty) return const Center(child: Text("Keine Karten gefunden."));
 
-          // Wir berechnen die gefilterte Liste.
-          // HINWEIS: Bei sehr großen Sets (>1000 Items) könnte man das in einen 
-          // separaten Provider ("filteredCardsProvider") auslagern, 
-          // aber für <500 Karten ist das meist okay.
-          
-          final List<ApiCard> allCards = rawCards; // Sind schon sortiert vom Provider
+          final List<ApiCard> allCards = rawCards; 
 
           // 1. FILTERN
           List<ApiCard> visibleCards = allCards;
@@ -73,8 +81,18 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
             visibleCards = visibleCards.where((c) => !c.isOwned).toList();
           }
 
+          // --- TEXT-SUCHE ---
+          if (_searchQuery.isNotEmpty) {
+            final query = _searchQuery.toLowerCase();
+            visibleCards = visibleCards.where((c) {
+              final nameMatch = c.name.toLowerCase().contains(query);
+              final nameDeMatch = c.nameDe?.toLowerCase().contains(query) ?? false;
+              final numberMatch = c.number.toLowerCase().contains(query);
+              return nameMatch || nameDeMatch || numberMatch;
+            }).toList();
+          }
+
           // 2. WERTE BERECHNEN (Summen)
-          // Das ist O(N), bei 500 Karten vernachlässigbar schnell (<1ms)
           double totalSetVal = 0.0;
           double userOwnedVal = 0.0;
 
@@ -90,7 +108,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
           return Column(
             children: [
-              // Header ist fix, scrollt nicht mit (optional: in CustomScrollView packen)
+              // Header ist fix, scrollt nicht mit (Enthält jetzt die smarte Suchleiste!)
               _buildHeader(context, allCards, totalSetVal, userOwnedVal),
               const Divider(height: 1),
               
@@ -99,7 +117,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                   ? const Center(child: Text("Keine Karten für diesen Filter."))
                   : GridView.builder(
                     padding: const EdgeInsets.all(8),
-                    // Optimierung: cacheExtent erhöht, damit Bilder früher geladen werden beim Scrollen
                     cacheExtent: 500, 
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 3,
@@ -109,8 +126,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     ),
                     itemCount: visibleCards.length,
                     itemBuilder: (context, index) {
-                      // Hier wird direkt das Widget gebaut. 
-                      // Das ist effizient, da es nur für sichtbare Items passiert.
                       return _buildCardItem(visibleCards[index], visibleCards[index].isOwned);
                     },
                   ),
@@ -133,7 +148,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     final int standardTotal = widget.set.printedTotal;
     final int userOwnedStandard = allCards.where((c) {
       final num = int.tryParse(c.number);
-      // Sicherheit: Number kann auch "TG01" sein, dann ist int.tryParse null
       return c.isOwned && num != null && num <= standardTotal;
     }).length;
 
@@ -149,7 +163,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
       }
     }
     
-    // Sortieren der Raritäten (fest definiert)
+    // Sortieren der Raritäten
     final sortedRarities = totalRarityCounts.keys.toList()
       ..sort((a, b) => _getRarityWeight(a).compareTo(_getRarityWeight(b)));
 
@@ -172,7 +186,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                   child: CachedNetworkImage(
                     imageUrl: logoUrl, 
                     fit: BoxFit.contain,
-                    placeholder: (_,__) => const SizedBox(), // Kein Loader im Header, flackert sonst
+                    placeholder: (_,__) => const SizedBox(), 
                     errorWidget: (_,__,___) => const SizedBox(),
                   ),
                 ),
@@ -239,23 +253,33 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
           const SizedBox(height: 8),
 
-          // 4. BESITZ FILTER
-          Container(
-            height: 32,
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildToggleOption("Alle", OwnershipFilter.all),
-                _buildToggleOption("Im Besitz", OwnershipFilter.owned),
-                _buildToggleOption("Fehlend", OwnershipFilter.missing),
-              ],
-            ),
+          // 4. BESITZ FILTER & ANIMIERTE SUCHE
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildToggleOption("Alle", OwnershipFilter.all),
+                    _buildToggleOption("Im Besitz", OwnershipFilter.owned),
+                    _buildToggleOption("Fehlend", OwnershipFilter.missing),
+                  ],
+                ),
+              ),
+              
+              // --- HIER IST DIE ANIMIERTE LUPE ---
+              _buildCompactSearch(allCards),
+            ],
           ),
           
+          const SizedBox(height: 4),
+
           // 5. RARITÄTEN FILTER
           TextButton.icon(
             onPressed: () => setState(() => _isRaritiesExpanded = !_isRaritiesExpanded),
@@ -373,7 +397,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
   }
 
   Widget _buildCardItem(ApiCard card, bool isOwned) {
-    // Preis-Logik (wie gehabt)
     double? displayPrice = card.cardmarket?.trendPrice;
     if (displayPrice == null || displayPrice == 0) {
       displayPrice = card.tcgplayer?.prices?.normal?.market ?? 
@@ -381,9 +404,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                      card.tcgplayer?.prices?.reverseHolofoil?.market;
     }
 
-    // BILD LOGIK: Nutze den neuen Getter
     final String imageUrl = card.displayImage;
-    // Prüfen, ob wir wirklich eine URL haben
     final bool hasImage = imageUrl.isNotEmpty;
 
     return InkWell(
@@ -406,9 +427,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // BILD ANZEIGE (Mit Sicherheits-Check)
             if (hasImage)
-              // Wenn Bild da ist: Zeigen (mit Graufilter Logik)
               TweenAnimationBuilder<double>(
                 duration: const Duration(milliseconds: 300),
                 tween: Tween<double>(begin: 0, end: isOwned ? 1.0 : 0.0),
@@ -426,14 +445,11 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                 child: CachedNetworkImage(
                   imageUrl: imageUrl, 
                   width: 160, 
-                  // Platzhalter während des Ladens
                   placeholder: (context, url) => Container(color: Colors.grey[200]), 
-                  // Fehler-Icon, falls URL kaputt ist
                   errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
                 ),
               )
             else
-              // Wenn KEIN Bild da ist: Platzhalter anzeigen
               Container(
                 color: Colors.grey[300],
                 child: const Center(
@@ -448,7 +464,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                 ),
               ),
             
-            // Info Leiste unten
             Positioned(
               bottom: 0, left: 0, right: 0,
               child: Container(
@@ -498,5 +513,117 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     if (r.contains('uncommon')) return Colors.grey.withOpacity(0.3);
     if (r.contains('common')) return Colors.grey.withOpacity(0.1);
     return Colors.grey.withOpacity(0.1);
+  }
+
+  // --- DAS KOMPAKTE, ANIMIERTE SUCH-WIDGET ---
+  Widget _buildCompactSearch(List<ApiCard> cards) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      // Wenn eingeklappt: 32px breit (Lupe). Wenn ausgeklappt: 160px breit (Textfeld)
+      width: _isSearchExpanded ? 160 : 32, 
+      height: 32,
+      child: _isSearchExpanded 
+        ? LayoutBuilder(
+            builder: (context, constraints) => RawAutocomplete<String>(
+              textEditingController: _searchController,
+              focusNode: _searchFocusNode,
+              optionsBuilder: (TextEditingValue textEditingValue) {
+                final query = textEditingValue.text.trim().toLowerCase();
+                if (query.isEmpty) return const Iterable<String>.empty();
+                
+                final Set<String> results = {};
+                for (var card in cards) {
+                  if (card.nameDe != null && card.nameDe!.toLowerCase().contains(query)) {
+                    results.add(card.nameDe!);
+                  } else if (card.name.toLowerCase().contains(query)) {
+                    results.add(card.name);
+                  }
+                  if (card.number.toLowerCase().contains(query)) {
+                    results.add(card.number);
+                  }
+                }
+                return results.take(5);
+              },
+              onSelected: (String selection) {
+                setState(() => _searchQuery = selection);
+                _searchFocusNode.unfocus();
+              },
+              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                return TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  autofocus: true, 
+                  style: const TextStyle(fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: "Suchen...",
+                    prefixIcon: const Icon(Icons.search, size: 16, color: Colors.grey),
+                    suffixIcon: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.close, size: 16),
+                      onPressed: () {
+                        setState(() {
+                          _isSearchExpanded = false;
+                          _searchQuery = '';
+                          controller.clear();
+                        });
+                        focusNode.unfocus();
+                      },
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white, // Hebt sich leicht vom grauen Header ab
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                  ),
+                  onChanged: (val) => setState(() => _searchQuery = val),
+                  onSubmitted: (_) {
+                    focusNode.unfocus();
+                    onFieldSubmitted();
+                  },
+                );
+              },
+              optionsViewBuilder: (context, onSelected, options) {
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 6,
+                    borderRadius: BorderRadius.circular(8),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: 200, maxWidth: constraints.maxWidth),
+                      child: ListView.separated(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: options.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.black12),
+                        itemBuilder: (context, index) {
+                          final option = options.elementAt(index);
+                          return ListTile(
+                            title: Text(option, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            visualDensity: VisualDensity.compact,
+                            onTap: () => onSelected(option),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          )
+        : InkWell(
+            onTap: () {
+              setState(() => _isSearchExpanded = true);
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[300], // Leicht abgedunkeltes Grau für den runden Button
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.search, size: 18, color: Colors.black87),
+            ),
+          ),
+    );
   }
 }

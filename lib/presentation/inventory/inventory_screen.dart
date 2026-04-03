@@ -2,11 +2,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import 'dart:math' as math; 
 
 import '../../data/api/search_provider.dart';
 import '../cards/card_detail_screen.dart';
 import 'inventory_bottom_sheet.dart';
+
 
 final inventorySearchProvider = StateProvider<String>((ref) => '');
 
@@ -58,19 +60,16 @@ class InventoryScreen extends ConsumerWidget {
             }).toList();
           }
 
-          // 2. KARTEN ZUSAMMENFASSEN (mit Grading/Preis Trennung!)
+          // 2. KARTEN ZUSAMMENFASSEN
           if (groupMode != InventoryGroupMode.byBinder) {
             final Map<String, InventoryItem> mergedMap = {};
             
             for (final item in filteredItems) {
-              // --- NEU: Grading und CustomPreis in den Verschmelzungs-Schlüssel aufnehmen ---
-              // Eine PSA 10 Karte wird niemals mit einer normalen verschmolzen!
               final company = item.userCard.gradingCompany ?? 'none';
               final score = item.userCard.gradingScore ?? 'none';
               final cPrice = item.userCard.customPrice?.toStringAsFixed(2) ?? 'none';
               
               final key = "${item.card.id}_${item.variant}_${company}_${score}_$cPrice";
-              // --------------------------------------------------------------------------------
               
               if (mergedMap.containsKey(key)) {
                 final existing = mergedMap[key]!;
@@ -81,7 +80,9 @@ class InventoryScreen extends ConsumerWidget {
                   variant: existing.variant,
                   totalValue: existing.totalValue + item.totalValue,
                   binderName: null,
-                  userCard: existing.userCard, // Das Objekt bleibt gleich (inkl. Grading)
+                  userCard: existing.userCard, 
+                  // --- FIX: Performance addieren! ---
+                  performance: existing.performance + item.performance, 
                 );
               } else {
                 mergedMap[key] = InventoryItem(
@@ -92,6 +93,8 @@ class InventoryScreen extends ConsumerWidget {
                   totalValue: item.totalValue,
                   binderName: null, 
                   userCard: item.userCard,
+                  // --- FIX: Performance übernehmen! ---
+                  performance: item.performance, 
                 );
               }
             }
@@ -102,25 +105,39 @@ class InventoryScreen extends ConsumerWidget {
           final int totalCards = filteredItems.fold(0, (sum, item) => sum + item.quantity);
           final double totalValue = filteredItems.fold(0.0, (sum, item) => sum + item.totalValue);
 
-          // 4. SORTIEREN
+          // 4. SORTIEREN (Mit Aufsteigend/Absteigend Logik)
+          final isAscending = ref.watch(inventorySortAscendingProvider);
           final sortedItems = List<InventoryItem>.from(filteredItems);
+          
           sortedItems.sort((a, b) {
+            int comp = 0;
             switch (sortMode) {
               case InventorySort.value:
-                return b.totalValue.compareTo(a.totalValue);
+                comp = a.totalValue.compareTo(b.totalValue);
+                break;
+              case InventorySort.performance:
+                comp = a.performance.compareTo(b.performance);
+                break;
+              case InventorySort.dateAdded:
+                comp = a.userCard.createdAt.compareTo(b.userCard.createdAt);
+                break;
               case InventorySort.name:
-                return (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
+                comp = (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
+                break;
               case InventorySort.rarity:
-                return (b.card.rarity).compareTo(a.card.rarity); 
+                comp = (a.card.rarity ?? '').compareTo(b.card.rarity ?? ''); 
+                break;
               case InventorySort.type:
                 final tA = a.card.cardType ?? 'ZZZ'; 
                 final tB = b.card.cardType ?? 'ZZZ';
-                final typeComp = tA.compareTo(tB);
-                if (typeComp != 0) return typeComp;
-                return (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
-              default:
-                return 0;
+                comp = tA.compareTo(tB);
+                if (comp == 0) comp = (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
+                break;
             }
+            
+            // Standardmäßig wollen wir das Beste/Neueste ganz oben sehen (Absteigend -> -comp).
+            // Wenn der Nutzer den Pfeil klickt, drehen wir es um (Aufsteigend -> comp).
+            return isAscending ? comp : -comp;
           });
 
           return Column(
@@ -264,6 +281,8 @@ class InventoryScreen extends ConsumerWidget {
   }
 
   Widget _buildFilterBar(BuildContext context, WidgetRef ref, InventorySort currentSort, InventoryGroupMode currentGroup) {
+    final isAscending = ref.watch(inventorySortAscendingProvider);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
@@ -275,15 +294,39 @@ class InventoryScreen extends ConsumerWidget {
             underline: const SizedBox(),
             style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500, fontSize: 13),
             items: const [
+              DropdownMenuItem(value: InventorySort.dateAdded, child: Text("Erhalten am")),
               DropdownMenuItem(value: InventorySort.value, child: Text("Wert")),
+              DropdownMenuItem(value: InventorySort.performance, child: Text("Performance")),
               DropdownMenuItem(value: InventorySort.name, child: Text("Name")),
               DropdownMenuItem(value: InventorySort.rarity, child: Text("Seltenheit")),
               DropdownMenuItem(value: InventorySort.type, child: Text("Element")),
             ],
             onChanged: (val) {
-              if (val != null) ref.read(inventorySortProvider.notifier).state = val;
+              if (val != null && val != currentSort) {
+                // Wenn eine neue Kategorie gewählt wird, setzen wir wieder auf "Absteigend" (Pfeil runter) zurück
+                ref.read(inventorySortProvider.notifier).state = val;
+                ref.read(inventorySortAscendingProvider.notifier).state = false;
+              }
             },
           ),
+          
+          // --- DER NEUE PFEIL ZUM UMKEHREN DER SORTIERUNG ---
+          InkWell(
+            onTap: () {
+              // Dreht true zu false und false zu true
+              ref.read(inventorySortAscendingProvider.notifier).state = !isAscending;
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.all(4.0),
+              child: Icon(
+                isAscending ? Icons.arrow_upward : Icons.arrow_downward, 
+                size: 16, 
+                color: Colors.blue[800]
+              ),
+            ),
+          ),
+          
           const Spacer(),
           SegmentedButton<InventoryGroupMode>(
             segments: const [
@@ -449,7 +492,7 @@ class InventoryScreen extends ConsumerWidget {
   }
 }
 
-// --- DAS KARTEN-TILE (Mit Holo Effekt & PSA Sternchen!) ---
+// --- DAS MINIMALISTISCHE KARTEN-TILE (Clean & Edel!) ---
 class _InventoryCardTile extends ConsumerWidget {
   final InventoryItem item;
 
@@ -461,11 +504,26 @@ class _InventoryCardTile extends ConsumerWidget {
     final bool isHolo = item.variant == 'Holo';
     final bool showEffect = isReverseHolo || isHolo;
 
-    // --- NEU: Prüfen, ob die Karte etwas Besonderes ist ---
-    final bool hasSpecificPrice = item.userCard.customPrice != null && item.userCard.customPrice! > 0;
     final bool isGraded = item.userCard.gradingCompany != null && item.userCard.gradingCompany != 'Kein Grading';
 
     final displayImage = item.card.displayImage;
+
+    // --- Preise und Performance ---
+    final double singlePrice = item.totalValue / (item.quantity > 0 ? item.quantity : 1);
+    final double singlePerformance = item.performance / (item.quantity > 0 ? item.quantity : 1);
+    
+    final bool hasSpecificPrice = item.userCard.customPrice != null && item.userCard.customPrice! > 0;
+    final bool isNeutral = singlePerformance.abs() < 0.01;
+    final bool isPositive = singlePerformance > 0;
+    
+    final Color perfColor = isNeutral ? Colors.grey[400]! : (isPositive ? Colors.greenAccent : Colors.redAccent);
+    final IconData perfIcon = isNeutral ? Icons.remove : (isPositive ? Icons.arrow_drop_up : Icons.arrow_drop_down);
+
+    // --- Daten für die Anzeige ---
+    final String dateStr = DateFormat('dd.MM.yy').format(item.userCard.createdAt);
+    final String variantStr = _getVariantAbbreviation(item.variant);
+    final String conditionStr = _getConditionAbbreviation(item.userCard.condition);
+    final Color conditionColor = _getConditionColor(item.userCard.condition);
 
     return InkWell(
       onTap: () {
@@ -480,19 +538,20 @@ class _InventoryCardTile extends ConsumerWidget {
       },
       child: Card(
         clipBehavior: Clip.antiAlias,
-        elevation: isGraded ? 6 : 2, // Gegraded = Besserer Schatten!
+        elevation: isGraded ? 6 : 2, 
         shape: RoundedRectangleBorder(
            borderRadius: BorderRadius.circular(12),
-           // Orange Border für gegradete Karten!
            side: isGraded ? BorderSide(color: Colors.orange[400]!, width: 1.5) : BorderSide.none
         ),
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // 1. Das Kartenbild (Hintergrund)
             Builder(
               builder: (context) {
                 Widget imageWidget = CachedNetworkImage(
                   imageUrl: displayImage,
+                  fit: BoxFit.contain,
                   placeholder: (context, url) => Container(color: Colors.grey[200]),
                   errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
                 );
@@ -500,11 +559,73 @@ class _InventoryCardTile extends ConsumerWidget {
                 return imageWidget;
               },
             ),
+
+            // --- 2. OBERER BEREICH (Sanfter Gradient + Name & Variante) ---
+            Positioned(
+              top: 0, left: 0, right: 0,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.black.withOpacity(0.8), Colors.transparent],
+                    stops: const [0.0, 1.0],
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(6, 6, 6, 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // --- NEU: KARTEN-NAME MIT TRADING CARD OUTLINE ---
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          // 1. Die weiße, dicke Kontur (Outline)
+                          Text(
+                            item.card.nameDe ?? item.card.name,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900, // Extra fett
+                              foreground: Paint()
+                                ..style = PaintingStyle.stroke
+                                ..strokeWidth = 1.0 // Dicke der Umrandung
+                                ..color = Colors.white,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          // 2. Die schwarze Füllung
+                          Text(
+                            item.card.nameDe ?? item.card.name,
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      variantStr,
+                      style: TextStyle(
+                        color: showEffect ? Colors.amberAccent : Colors.white70, 
+                        fontSize: 9, 
+                        fontWeight: showEffect ? FontWeight.bold : FontWeight.normal
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             
-            // Grading Score oben links (z.B. "PSA 10")
+            // Grading Score (PSA)
             if (isGraded)
               Positioned(
-                top: 4, left: 4,
+                top: 30, left: 4, 
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                   decoration: BoxDecoration(color: Colors.orange[800], borderRadius: BorderRadius.circular(6)),
@@ -515,8 +636,9 @@ class _InventoryCardTile extends ConsumerWidget {
                 ),
               ),
 
+            // Anzahl Badge (3x)
             Positioned(
-              top: 4, right: 4,
+              top: 30, right: 4, 
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(color: Colors.blue[800], borderRadius: BorderRadius.circular(10)),
@@ -527,42 +649,85 @@ class _InventoryCardTile extends ConsumerWidget {
               ),
             ),
 
+            // --- NEU: ZUSTANDS BADGE (Schwebend über dem unteren Balken) ---
+            Positioned(
+              bottom: 20, left: 4, 
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(
+                  color: conditionColor, 
+                  borderRadius: BorderRadius.circular(6),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 2, offset: const Offset(0, 1))],
+                ),
+                child: Text(
+                  conditionStr, 
+                  style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)
+                ),
+              ),
+            ),
+
+            // --- 3. UNTERER BEREICH (Sanfter Gradient + Preis/Performance gestapelt) ---
             Positioned(
               bottom: 0, left: 0, right: 0,
               child: Container(
-                color: Colors.black.withOpacity(0.7),
-                padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black.withOpacity(0.9), Colors.transparent],
+                    stops: const [0.0, 1.0],
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(6, 16, 6, 6), 
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Row(
+                    // Datum (Links, unten ausgerichtet)
+                    Expanded(
+                      child: Text(
+                        "Am: $dateStr",
+                        style: const TextStyle(color: Colors.white70, fontSize: 9),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    
+                    const SizedBox(width: 4),
+                    
+                    // Performance OBERHALB des Preises
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        if (showEffect) const Padding(padding: EdgeInsets.only(right: 2.0)),
-                        Text(
-                          _getVariantAbbreviation(item.variant),
-                          style: TextStyle(
-                            color: showEffect ? Colors.amberAccent : Colors.white70,
-                            fontSize: 9,
-                            fontWeight: showEffect ? FontWeight.bold : FontWeight.normal,
+                        if (!hasSpecificPrice)
+                          Row(
+                            children: [
+                              Icon(perfIcon, color: perfColor, size: 12),
+                              Text(
+                                "${singlePerformance.abs().toStringAsFixed(2)}€",
+                                style: TextStyle(color: perfColor, fontSize: 9, fontWeight: FontWeight.bold),
+                              ),
+                            ],
                           ),
+                        if (!hasSpecificPrice) const SizedBox(height: 2),
+                        
+                        Row(
+                          children: [
+                            if (hasSpecificPrice) const Icon(Icons.star, color: Colors.amber, size: 10),
+                            if (hasSpecificPrice) const SizedBox(width: 2),
+                            Text(
+                              "${singlePrice.toStringAsFixed(2)}€",
+                              style: TextStyle(
+                                color: hasSpecificPrice ? Colors.amberAccent : Colors.greenAccent, 
+                                fontSize: 11, 
+                                fontWeight: FontWeight.bold
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    // --- NEU: Sternchen bei Spezifischem Preis ---
-                    Row(
-                      children: [
-                         if (hasSpecificPrice) const Icon(Icons.star, color: Colors.amber, size: 10),
-                         if (hasSpecificPrice) const SizedBox(width: 2),
-                         Text(
-                          "${item.totalValue.toStringAsFixed(2)}€",
-                          style: TextStyle(
-                             color: hasSpecificPrice ? Colors.amberAccent : Colors.lightGreenAccent, 
-                             fontSize: 10, 
-                             fontWeight: FontWeight.bold
-                          ),
-                        ),
-                      ],
-                    )
                   ],
                 ),
               ),
@@ -573,12 +738,45 @@ class _InventoryCardTile extends ConsumerWidget {
     );
   }
 
+  // --- HILFSFUNKTIONEN FÜR ABKÜRZUNGEN UND FARBEN ---
+
   String _getVariantAbbreviation(String variant) {
     if (variant == 'Reverse Holo') return 'Rev.';
     if (variant == 'Normal') return 'Norm.';
     if (variant == 'Holo') return 'Holo';
     if (variant == '1st Edition') return '1.Ed';
     return variant;
+  }
+
+  String _getConditionAbbreviation(String condition) {
+    switch (condition) {
+      case 'Mint': return 'MINT';
+      case 'Near Mint': return 'NM';
+      case 'Excellent': return 'EX';
+      case 'Good': return 'GD';
+      case 'Light Played': return 'LP';
+      case 'Played': return 'PL';
+      case 'Poor': return 'POOR';
+      default: return condition;
+    }
+  }
+
+  Color _getConditionColor(String condition) {
+    switch (condition) {
+      case 'Mint':
+      case 'Near Mint': 
+        return Colors.green[700]!;
+      case 'Excellent': 
+      case 'Good': 
+        return Colors.blue[700]!;
+      case 'Light Played': 
+      case 'Played': 
+        return Colors.orange[700]!;
+      case 'Poor': 
+        return Colors.red[700]!;
+      default: 
+        return Colors.grey[700]!;
+    }
   }
 }
 
@@ -622,7 +820,8 @@ class _HoloEffectState extends State<HoloEffect> with SingleTickerProviderStateM
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  transform: GradientRotation(_controller.value * 2 * math.pi), 
+                  // Wir nutzen Flutters natives GradientRotation (kein import dart:math nötig)
+                  transform: GradientRotation(_controller.value * 2 * 3.1415926535), 
                   colors: [
                     Colors.transparent,
                     Colors.white.withOpacity(0.1),

@@ -318,9 +318,11 @@ class InventoryItem {
     this.performance = 0.0, // Standardmäßig 0
   });
 }
-// --- NEU: "performance" (Rendite) als Sortierkriterium hinzugefügt ---
-enum InventorySort { value, name, rarity, type }
+// --- NEU: Erweiterte Sortierung & Sortier-Richtung ---
+enum InventorySort { value, name, rarity, type, performance, dateAdded }
 final inventorySortProvider = StateProvider<InventorySort>((ref) => InventorySort.value);
+// false = Absteigend (Das Beste/Neueste zuerst), true = Aufsteigend (Das Schlechteste/Älteste zuerst)
+final inventorySortAscendingProvider = StateProvider<bool>((ref) => false);
 
 final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
   final db = ref.watch(databaseProvider); 
@@ -381,101 +383,117 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
 
       // --- PREIS LOGIK ---
       double singlePrice = 0.0;
+      double purchasePrice = 0.0;
       
+      bool baseIsHolo = !dbCard.hasNormal && dbCard.hasHolo;
+      final variant = userCard.variant;
+      final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
+      final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
+      final isReverse = variant == 'Reverse Holo';
+      final pref = dbCard.preferredPriceSource;
+      
+      // Hilfsfunktion: TCG Preis holen (Mit internem Fallback)
+      double getTcg(ApiTcgPlayer? tcg) {
+         if (tcg == null) return 0.0;
+         double p = 0.0;
+         if (isReverse) p = tcg.prices?.reverseHolofoil?.market ?? 0.0;
+         else if (isHolo) p = tcg.prices?.holofoil?.market ?? 0.0;
+         else p = tcg.prices?.normal?.market ?? 0.0;
+         if (p == 0.0) p = tcg.prices?.normal?.market ?? tcg.prices?.holofoil?.market ?? tcg.prices?.reverseHolofoil?.market ?? 0.0;
+         return p;
+      }
+      
+      // Hilfsfunktion: CM Preis holen (Mit internem Fallback)
+      double getCm(ApiCardMarket? cm) {
+         if (cm == null) return 0.0;
+         double p = 0.0;
+         if (dbCard.hasFirstEdition) {
+            p = isFirstEd ? (isHolo ? cm.trendPrice ?? 0.0 : cm.trendHolo ?? 0.0) : (isHolo ? cm.trendHolo ?? 0.0 : cm.trendPrice ?? 0.0);
+         } else if (isReverse) {
+            p = cm.reverseHoloTrend ?? cm.trendHolo ?? 0.0;
+         } else if (isHolo && !baseIsHolo) {
+            p = cm.trendHolo ?? 0.0;
+         } else {
+            p = cm.trendPrice ?? 0.0;
+         }
+         if (p == 0.0) p = cm.trendPrice ?? cm.trendHolo ?? 0.0;
+         return p;
+      }
+      
+      String usedSource = pref;
+
       if (userCard.customPrice != null && userCard.customPrice! > 0) {
           singlePrice = userCard.customPrice!;
+          purchasePrice = singlePrice;
+          usedSource = 'custom';
       } else {
-          bool baseIsHolo = !dbCard.hasNormal && dbCard.hasHolo;
-          final variant = userCard.variant;
+          double tcgCur = getTcg(apiCard.tcgplayer);
+          double cmCur = getCm(apiCard.cardmarket);
           
-          final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
-          final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
-          final isReverse = variant == 'Reverse Holo';
-
-          final pref = dbCard.preferredPriceSource;
-
-          if (pref == 'custom' && apiCard.customPrice != null) {
-              singlePrice = apiCard.customPrice!;
-          } else if (pref == 'tcgplayer') {
-              if (isReverse) {
-                singlePrice = apiCard.tcgplayer?.prices?.reverseHolofoil?.market ?? 0.0;
-              } else if (isHolo) singlePrice = apiCard.tcgplayer?.prices?.holofoil?.market ?? 0.0;
-              else singlePrice = apiCard.tcgplayer?.prices?.normal?.market ?? 0.0;
+          // --- FIX: Eigener Preis hinzugefügt! ---
+          if (pref == 'custom' && apiCard.customPrice != null && apiCard.customPrice! > 0) {
+              singlePrice = apiCard.customPrice!; 
+              usedSource = 'custom'; 
+              purchasePrice = singlePrice;
+          } else if (pref == 'tcgplayer' && tcgCur > 0.0) {
+              singlePrice = tcgCur; usedSource = 'tcgplayer';
+          } else if (pref == 'cardmarket' && cmCur > 0.0) {
+              singlePrice = cmCur; usedSource = 'cardmarket';
           } else {
-              if (dbCard.hasFirstEdition) {
-                 if (isHolo) {
-                   singlePrice = isFirstEd ? (apiCard.cardmarket?.trendPrice ?? 0.0) : (apiCard.cardmarket?.trendHolo ?? 0.0);
-                 } else {
-                   singlePrice = isFirstEd ? (apiCard.cardmarket?.trendHolo ?? 0.0) : (apiCard.cardmarket?.trendPrice ?? 0.0);
-                 }
-              } else if (isReverse) {
-                 singlePrice = apiCard.cardmarket?.reverseHoloTrend ?? apiCard.cardmarket?.trendHolo ?? 0.0;
-              } else if (isHolo && !baseIsHolo) {
-                 singlePrice = apiCard.cardmarket?.trendHolo ?? 0.0;
-              } else {
-                 singlePrice = apiCard.cardmarket?.trendPrice ?? 0.0;
-              }
-          }
-          if (singlePrice == 0.0) {
-             singlePrice = apiCard.cardmarket?.trendPrice ?? apiCard.tcgplayer?.prices?.normal?.market ?? apiCard.customPrice ?? 0.0;
+              // Harter Fallback, falls Wunsch-Quelle leer ist
+              if (cmCur > 0.0) { singlePrice = cmCur; usedSource = 'cardmarket'; }
+              else if (tcgCur > 0.0) { singlePrice = tcgCur; usedSource = 'tcgplayer'; }
+              else if (apiCard.customPrice != null) { singlePrice = apiCard.customPrice!; usedSource = 'custom'; purchasePrice = singlePrice; }
           }
       }
 
-      // --- NEUE LOGIK FÜR DIE RENDITE-BERECHNUNG ---
-      double purchasePrice = 0.0;
-      if (userCard.customPrice != null && userCard.customPrice! > 0) {
-         purchasePrice = singlePrice; 
-      } else {
+      // --- HISTORISCHER PREIS (Nur in der final genutzten Quelle suchen!) ---
+      if (usedSource != 'custom') {
          final targetDate = userCard.createdAt;
-         final pref = dbCard.preferredPriceSource;
          
-         bool baseIsHolo = !dbCard.hasNormal && dbCard.hasHolo;
-         final variant = userCard.variant;
-         final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
-         final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
-         final isReverse = variant == 'Reverse Holo';
-         
-         if (pref == 'custom' && allCustomPrices.isNotEmpty) {
-            var closest = allCustomPrices.where((e) => e.cardId == dbCard.id && (e.fetchedAt.isBefore(targetDate) || e.fetchedAt.isAtSameMomentAs(targetDate))).toList();
-            if (closest.isEmpty) closest = allCustomPrices.where((e) => e.cardId == dbCard.id).toList();
-            if (closest.isNotEmpty) { closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt)); purchasePrice = closest.first.price; }
-         } else if (pref == 'tcgplayer' && allTcgPrices.isNotEmpty) {
+         if (usedSource == 'tcgplayer' && allTcgPrices.isNotEmpty) {
             var closest = allTcgPrices.where((e) => e.cardId == dbCard.id && (e.fetchedAt.isBefore(targetDate) || e.fetchedAt.isAtSameMomentAs(targetDate))).toList();
-            if (closest.isEmpty) closest = allTcgPrices.where((e) => e.cardId == dbCard.id).toList();
-            if (closest.isNotEmpty) { 
-              closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt)); 
-              final p = closest.first;
-              if (isReverse) {
-                purchasePrice = p.reverseMarket ?? 0.0;
-              } else if (isHolo) purchasePrice = p.holoMarket ?? 0.0;
-              else purchasePrice = p.normalMarket ?? 0.0;
+            if (closest.isEmpty) {
+              var fList = allTcgPrices.where((e) => e.cardId == dbCard.id).toList();
+              if (fList.isNotEmpty) { fList.sort((a,b) => a.fetchedAt.compareTo(b.fetchedAt)); closest = [fList.first]; }
             }
-         } else if (allCmPrices.isNotEmpty) {
-            var closest = allCmPrices.where((e) => e.cardId == dbCard.id && (e.fetchedAt.isBefore(targetDate) || e.fetchedAt.isAtSameMomentAs(targetDate))).toList();
-            if (closest.isEmpty) closest = allCmPrices.where((e) => e.cardId == dbCard.id).toList();
             if (closest.isNotEmpty) { 
               closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt)); 
               final p = closest.first;
+              double hp = 0.0;
+              if (isReverse) hp = p.reverseMarket ?? 0.0;
+              else if (isHolo) hp = p.holoMarket ?? 0.0;
+              else hp = p.normalMarket ?? 0.0;
+              if (hp == 0.0) hp = p.normalMarket ?? p.holoMarket ?? p.reverseMarket ?? 0.0;
+              purchasePrice = hp;
+            }
+         } else if (usedSource == 'cardmarket' && allCmPrices.isNotEmpty) {
+            var closest = allCmPrices.where((e) => e.cardId == dbCard.id && (e.fetchedAt.isBefore(targetDate) || e.fetchedAt.isAtSameMomentAs(targetDate))).toList();
+            if (closest.isEmpty) {
+              var fList = allCmPrices.where((e) => e.cardId == dbCard.id).toList();
+              if (fList.isNotEmpty) { fList.sort((a,b) => a.fetchedAt.compareTo(b.fetchedAt)); closest = [fList.first]; }
+            }
+            if (closest.isNotEmpty) { 
+              closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt)); 
+              final p = closest.first;
+              double hp = 0.0;
               if (dbCard.hasFirstEdition) {
-                 if (isHolo) {
-                   purchasePrice = isFirstEd ? (p.trend ?? 0.0) : (p.trendHolo ?? 0.0);
-                 } else {
-                   purchasePrice = isFirstEd ? (p.trendHolo ?? 0.0) : (p.trend ?? 0.0);
-                 }
+                 hp = isFirstEd ? (isHolo ? p.trend ?? 0.0 : p.trendHolo ?? 0.0) : (isHolo ? p.trendHolo ?? 0.0 : p.trend ?? 0.0);
               } else if (isReverse) {
-                 purchasePrice = p.trendReverse ?? p.trendHolo ?? 0.0;
+                 hp = p.trendReverse ?? p.trendHolo ?? 0.0;
               } else if (isHolo && !baseIsHolo) {
-                 purchasePrice = p.trendHolo ?? 0.0;
+                 hp = p.trendHolo ?? 0.0;
               } else {
-                 purchasePrice = p.trend ?? 0.0;
+                 hp = p.trend ?? 0.0;
               }
+              if (hp == 0.0) hp = p.trend ?? p.trendHolo ?? 0.0;
+              purchasePrice = hp;
             }
          }
       }
       
       if (purchasePrice == 0.0) purchasePrice = singlePrice;
       
-      // Die Rendite (z.B. +15.50€ Gewinn)
       final double itemPerformance = (singlePrice - purchasePrice);
       // -----------------------------------------------------------
 

@@ -6,7 +6,6 @@ import '../../data/database/database_provider.dart';
 class BinderSlotData {
   final BinderCard binderCard; 
   final Card? card;   
-  // --- NEU: Der Slot kennt jetzt die physische Karte aus dem Inventar! ---         
   final UserCard? userCard; 
   final double marketPrice;    
   
@@ -61,7 +60,6 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
   final query = db.select(db.binderCards).join([
     leftOuterJoin(db.cards, db.cards.id.equalsExp(db.binderCards.cardId)),
     innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId)), 
-    // --- DER ENTSCHEIDENDE FIX: Wir laden die spezifische Inventar-Karte dazu! ---
     leftOuterJoin(db.userCards, db.userCards.id.equalsExp(db.binderCards.userCardId)), 
   ]);
 
@@ -104,59 +102,72 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
       if (uniqueSlotsMap.containsKey(bc.id)) continue;
 
       final card = row.readTableOrNull(db.cards);
-      final userCard = row.readTableOrNull(db.userCards); // <--- Lade das gefundene Inventar-Stück
+      final userCard = row.readTableOrNull(db.userCards); 
       double price = 0.0;
 
       if (card != null && !bc.isPlaceholder) {
         final cmPrice = cmMap[card.id];
         final tcgPrice = tcgMap[card.id];
-        final customPriceRow = customMap[card.id]; 
         
         bool baseIsHolo = !card.hasNormal && card.hasHolo;
-        // Priorisiere die Variante aus dem Inventar!
         final variant = userCard?.variant ?? bc.variant ?? 'Normal';
         
         final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
         final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
         final isReverse = variant == 'Reverse Holo';
         
-        // --- DIE NEUE WERT-HIERARCHIE FÜR DEN BINDER! ---
-        if (userCard != null && userCard.customPrice != null && userCard.customPrice! > 0) {
-            price = userCard.customPrice!; // Der Joker schlägt alles!
-        } 
-        else {
-            final pref = card.preferredPriceSource;
-            final customPrice = customPriceRow?.price;
+final pref = card.preferredPriceSource;
+        final customPrice = customMap[card.id]?.price; // <-- WICHTIG: Globale Custom-Preise bereitlegen!
 
+        // --- NEUE SMARTE PREIS LOGIK (Exakt wie im Search Provider) ---
+        if (userCard != null && userCard.customPrice != null && userCard.customPrice! > 0) {
+            price = userCard.customPrice!;
+        } else {
+            // Hilfsfunktion: TCG Preis holen
+            double getTcg() {
+               double p = 0.0;
+               if (isReverse) p = tcgPrice?.reverseMarket ?? 0.0;
+               else if (isHolo) p = tcgPrice?.holoMarket ?? 0.0;
+               else p = tcgPrice?.normalMarket ?? 0.0;
+               if (p == 0.0) p = tcgPrice?.normalMarket ?? tcgPrice?.holoMarket ?? tcgPrice?.reverseMarket ?? 0.0;
+               return p;
+            }
+
+            // Hilfsfunktion: CM Preis holen
+            double getCm() {
+               double p = 0.0;
+               if (card.hasFirstEdition) {
+                  p = isFirstEd ? (isHolo ? cmPrice?.trend ?? 0.0 : cmPrice?.trendHolo ?? 0.0) : (isHolo ? cmPrice?.trendHolo ?? 0.0 : cmPrice?.trend ?? 0.0);
+               } else if (isReverse) {
+                  p = cmPrice?.trendReverse ?? cmPrice?.trendHolo ?? 0.0;
+               } else if (isHolo && !baseIsHolo) {
+                  p = cmPrice?.trendHolo ?? 0.0;
+               } else {
+                  p = cmPrice?.trend ?? 0.0;
+               }
+               if (p == 0.0) p = cmPrice?.trend ?? cmPrice?.trendHolo ?? 0.0;
+               return p;
+            }
+
+            double tcgCur = getTcg();
+            double cmCur = getCm();
+
+            // --- FIX: WEICHE FÜR GLOBALE CUSTOM PREISE EINGEBAUT! ---
             if (pref == 'custom' && customPrice != null && customPrice > 0) {
                 price = customPrice;
-            } 
-            else if (pref == 'tcgplayer') {
-                if (isReverse) {
-                  price = tcgPrice?.reverseMarket ?? 0.0;
-                } else if (isHolo) price = tcgPrice?.holoMarket ?? 0.0;
-                else price = tcgPrice?.normalMarket ?? 0.0;
-            } 
-            else {
-                if (card.hasFirstEdition) {
-                   if (isHolo) {
-                     price = isFirstEd ? (cmPrice?.trend ?? 0.0) : (cmPrice?.trendHolo ?? 0.0);
-                   } else {
-                     price = isFirstEd ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
-                   }
-                } else if (isReverse) {
-                   price = cmPrice?.trendHolo ?? cmPrice?.trendReverse ?? 0.0;
-                } else if (isHolo && !baseIsHolo) {
-                   price = cmPrice?.trendHolo ?? 0.0;
-                } else {
-                   price = cmPrice?.trend ?? 0.0;
-                }
+            } else if (pref == 'tcgplayer' && tcgCur > 0.0) {
+                price = tcgCur;
+            } else if (pref == 'cardmarket' && cmCur > 0.0) {
+                price = cmCur;
+            } else {
+                if (cmCur > 0.0) price = cmCur; 
+                else if (tcgCur > 0.0) price = tcgCur;
+                else if (customPrice != null) price = customPrice;
             }
-            if (price == 0.0) price = (isHolo ? tcgPrice?.holoMarket : tcgPrice?.normalMarket) ?? cmPrice?.trend ?? customPrice ?? 0.0;
         }
+        // -------------------------------------------------------------
       }
 
-      // userCard an das UI übergeben!
       uniqueSlotsMap[bc.id] = BinderSlotData(binderCard: bc, card: card, userCard: userCard, marketPrice: price);
     }
 
