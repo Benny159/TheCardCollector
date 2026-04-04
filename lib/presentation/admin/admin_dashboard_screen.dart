@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart'; 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../data/database/app_database.dart' as db; 
 import '../../data/database/database_provider.dart';
 import '../../data/sync/pokedex_importer.dart';
+
+// ==========================================
+// MODELLE
+// ==========================================
 
 class TranslationProposal {
   final db.Card card;
@@ -19,10 +25,28 @@ class TranslationProposal {
     required this.isSafe,
   }) : controller = TextEditingController(text: proposedNameDe);
 
+  void dispose() => controller.dispose();
+}
+
+class CardEditorItem {
+  final db.Card card;
+  final TextEditingController imgEnCtrl;
+  final TextEditingController artistCtrl;
+  String? cmUrl; 
+
+  CardEditorItem({required this.card, this.cmUrl}) 
+    : imgEnCtrl = TextEditingController(text: card.imageUrl),
+      artistCtrl = TextEditingController(text: card.artist);
+
   void dispose() {
-    controller.dispose();
+    imgEnCtrl.dispose();
+    artistCtrl.dispose();
   }
 }
+
+// ==========================================
+// SCREEN
+// ==========================================
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -32,18 +56,23 @@ class AdminDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
-  bool _isLoading = false;
-  String _statusText = "Bereit.";
-  
+  // --- Translator State ---
+  bool _isLoadingTranslator = false;
+  String _statusTranslator = "Bereit.";
   List<TranslationProposal> _proposals = [];
+  bool _isSafeExpanded = false;  
+  bool _isReviewExpanded = true; 
 
-  // --- NEU: Zustand für die einklappbaren Bereiche ---
-  bool _isSafeExpanded = false;  // Sichere Treffer klappen wir standardmäßig ein (spart massiv Platz)
-  bool _isReviewExpanded = true; // Zu überprüfende klappen wir aus
+  // --- Image Manager State ---
+  bool _isLoadingEditor = false;
+  List<CardEditorItem> _editorItems = [];
+  final TextEditingController _searchCtrl = TextEditingController();
 
   @override
   void dispose() {
     _clearProposals();
+    _clearEditorItems();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -52,29 +81,41 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     _proposals.clear();
   }
 
-  // --- 1. WÖRTERBUCH AUFBAUEN ---
-  Future<void> _buildDictionary() async {
-    setState(() { _isLoading = true; _statusText = "Starte Wörterbuch-Download..."; });
-    final database = ref.read(databaseProvider);
-    final importer = PokedexImporter(database);
-    await importer.buildTranslationDictionary(onProgress: (status) => setState(() => _statusText = status));
-    setState(() { _isLoading = false; });
+  void _clearEditorItems() {
+    for (var i in _editorItems) { i.dispose(); }
+    _editorItems.clear();
   }
 
-  // --- 2. ÜBERSETZUNGS-ALGORITHMUS ---
+  // ==========================================
+  // TAB 1: ÜBERSETZER 
+  // ==========================================
+  
+  Future<void> _buildDictionary() async {
+    setState(() { _isLoadingTranslator = true; _statusTranslator = "Starte Wörterbuch..."; });
+    final database = ref.read(databaseProvider);
+    final importer = PokedexImporter(database);
+    await importer.buildTranslationDictionary(onProgress: (status) => setState(() => _statusTranslator = status));
+    setState(() { _isLoadingTranslator = false; });
+  }
+
   Future<void> _generateProposals() async {
-    setState(() { _isLoading = true; _statusText = "Analysiere Karten..."; _clearProposals(); });
-    
+    setState(() { _isLoadingTranslator = true; _statusTranslator = "Analysiere..."; _clearProposals(); });
     final dbase = ref.read(databaseProvider);
-    
     final dex = await (dbase.select(dbase.pokedex)..where((t) => t.nameDe.isNotNull() & t.nameDe.isNotValue(''))).get();
     dex.sort((a, b) => b.name.length.compareTo(a.name.length));
-
-    final cards = await (dbase.select(dbase.cards)..where((t) => 
-        t.nameDe.isNull() | t.nameDe.equals('') | t.nameDe.equalsExp(t.name)
-    )).get();
+    final cards = await (dbase.select(dbase.cards)..where((t) => t.nameDe.isNull() | t.nameDe.equals('') | t.nameDe.equalsExp(t.name))).get();
 
     List<TranslationProposal> newProposals = [];
+    final Map<String, String> trainerDict = {
+      "Brock's": "Rockos", "Misty's": "Mistys", "Lt. Surge's": "Major Bobs",
+      "Erika's": "Erikas", "Koga's": "Kogas", "Sabrina's": "Sabrinas",
+      "Blaine's": "Pyros", "Giovanni's": "Giovannis", "Rocket's": "Rockets", 
+      "Lance's": "Siegfrieds", "Falkner's": "Falks", "Bugsy's": "Kais",
+      "Whitney's": "Biankas", "Morty's": "Jens'", "Jasmine's": "Jasmins",
+      "Chuck's": "Hartwigs", "Pryce's": "Norberts", "Clair's": "Sandras",
+      "Professor Oak's": "Professor Eichs", "Team Aqua's": "Team Aquas",
+      "Team Magma's": "Team Magmas", "Team Plasma's": "Team Plasmas",
+    };
 
     for (var card in cards) {
       String engName = card.name;
@@ -88,16 +129,23 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
            break;
         }
 
-        final regExp = RegExp(r'\b' + RegExp.escape(p.name) + r'\b', caseSensitive: false);
+        String searchPattern = RegExp.escape(p.name).replaceAll(r'\-', r'[\s-]+');
+        final regExp = RegExp(r'\b' + searchPattern + r'\b', caseSensitive: false);
+        
         if (regExp.hasMatch(engName)) {
           String translatedName = engName.replaceAllMapped(regExp, (match) => p.nameDe!);
 
-          // TCG Wörterbuch
+          trainerDict.forEach((engTrainer, gerTrainer) {
+            translatedName = translatedName.replaceAll(RegExp(RegExp.escape(engTrainer), caseSensitive: false), gerTrainer);
+          });
+
           translatedName = translatedName.replaceAll(RegExp(r'\bDark\b', caseSensitive: false), 'Dunkles');
           translatedName = translatedName.replaceAll(RegExp(r'\bLight\b', caseSensitive: false), 'Helles');
           translatedName = translatedName.replaceAll(RegExp(r'\bShining\b', caseSensitive: false), 'Schimmerndes');
           translatedName = translatedName.replaceAll(RegExp(r'\bRadiant\b', caseSensitive: false), 'Strahlendes');
           translatedName = translatedName.replaceAll(RegExp(r'\bShadow\b', caseSensitive: false), 'Crypto');
+          
+          translatedName = translatedName.replaceAllMapped(RegExp(r'[\s-]+Spirit Link\b', caseSensitive: false), (match) => '-Geisterbund');
           
           translatedName = translatedName.replaceAll(RegExp(r'\bAlolan\b', caseSensitive: false), 'Alola');
           translatedName = translatedName.replaceAll(RegExp(r'\bGalarian\b', caseSensitive: false), 'Galar');
@@ -109,8 +157,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             return "${base[0].toUpperCase()}${base.substring(1).toLowerCase()}s";
           });
 
-          translatedName = translatedName.replaceAllMapped(RegExp(r'\b(ex|gx|v|vmax|vstar)\b', caseSensitive: false), (match) {
-            return match.group(1)!.toUpperCase();
+          translatedName = translatedName.replaceAllMapped(RegExp(r'\b(Mega)[\s-]+', caseSensitive: false), (match) => 'Mega-');
+          translatedName = translatedName.replaceAllMapped(RegExp(r'[\s-]+(ex|gx|v|vmax|vstar|break)\b', caseSensitive: false), (match) {
+            String suffix = match.group(1)!.toUpperCase();
+            if (suffix == 'BREAK') suffix = 'TURBO';
+            return '-$suffix';
           });
           
           foundGermanBase = translatedName;
@@ -119,36 +170,24 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       }
 
       if (foundGermanBase != null && foundGermanBase.toLowerCase() != engName.toLowerCase()) {
-        newProposals.add(TranslationProposal(
-          card: card, 
-          proposedNameDe: foundGermanBase,
-          isSafe: isExactMatch,
-        ));
+        newProposals.add(TranslationProposal(card: card, proposedNameDe: foundGermanBase, isSafe: isExactMatch));
       }
     }
 
-    setState(() { 
-      _proposals = newProposals;
-      _isLoading = false; 
-      _statusText = "${newProposals.length} Vorschläge gefunden!"; 
-    });
+    setState(() { _proposals = newProposals; _isLoadingTranslator = false; _statusTranslator = "${newProposals.length} Vorschläge gefunden!"; });
   }
 
-  // --- 3. SPEICHERN ---
   Future<void> _saveProposals() async {
     final selected = _proposals.where((p) => p.isSelected).toList();
     if (selected.isEmpty) return;
 
-    setState(() { _isLoading = true; _statusText = "Speichere ${selected.length} Übersetzungen..."; });
+    setState(() { _isLoadingTranslator = true; _statusTranslator = "Speichere ${selected.length} Übersetzungen..."; });
     final dbase = ref.read(databaseProvider);
     
     await dbase.batch((batch) {
       for (var prop in selected) {
         batch.update(dbase.cards, 
-          db.CardsCompanion( 
-            nameDe: drift.Value(prop.controller.text), 
-            hasManualTranslations: const drift.Value(true),
-          ),
+          db.CardsCompanion(nameDe: drift.Value(prop.controller.text), hasManualTranslations: const drift.Value(true)),
           where: (t) => t.id.equals(prop.card.id)
         );
       }
@@ -157,118 +196,389 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     setState(() {
       for (var p in selected) { p.dispose(); } 
       _proposals.removeWhere((p) => p.isSelected);
-      _isLoading = false;
-      _statusText = "Erfolgreich gespeichert!";
+      _isLoadingTranslator = false;
+      _statusTranslator = "Erfolgreich gespeichert!";
     });
   }
 
+  Future<void> _confirmAndResetTranslations() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Notfall Reset", style: TextStyle(color: Colors.red)),
+        content: const Text("Möchtest du wirklich ALLE manuellen Übersetzungen löschen?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Abbrechen")),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(ctx, true), child: const Text("Ja, alles löschen")),
+        ],
+      )
+    );
+
+    if (confirm != true) return;
+
+    setState(() { _isLoadingTranslator = true; _statusTranslator = "Lösche manuelle Übersetzungen..."; _clearProposals(); });
+    final dbase = ref.read(databaseProvider);
+    final updatedRows = await (dbase.update(dbase.cards)..where((t) => t.hasManualTranslations.equals(true)))
+        .write(const db.CardsCompanion(nameDe: drift.Value(null), hasManualTranslations: drift.Value(false)));
+
+    setState(() { _isLoadingTranslator = false; _statusTranslator = "✅ Reset erfolgreich! ($updatedRows Karten zurückgesetzt)"; });
+  }
+
+
+  // ==========================================
+  // TAB 2: BILDER & DATEN EDITOR (Nur EN Bilder)
+  // ==========================================
+
+  Future<void> _loadMissingImages() async {
+    setState(() { _isLoadingEditor = true; _clearEditorItems(); });
+    final dbase = ref.read(databaseProvider);
+
+    // Lädt max 100 Karten, denen das ENGLISCHE Bild fehlt
+    final cards = await (dbase.select(dbase.cards)
+      ..where((t) => t.imageUrl.equals('') | t.imageUrl.isNull())
+      ..limit(100)
+    ).get();
+
+    await _populateEditorItems(cards, dbase);
+  }
+
+  Future<void> _searchCardsToEdit(String query) async {
+    if (query.isEmpty) return;
+    setState(() { _isLoadingEditor = true; _clearEditorItems(); });
+    final dbase = ref.read(databaseProvider);
+
+    final cards = await (dbase.select(dbase.cards)
+      ..where((t) => t.name.like('%$query%') | t.nameDe.like('%$query%'))
+      ..limit(100)
+    ).get();
+
+    await _populateEditorItems(cards, dbase);
+  }
+
+  Future<void> _populateEditorItems(List<db.Card> cards, db.AppDatabase dbase) async {
+    List<CardEditorItem> newItems = [];
+    
+    for (var c in cards) {
+      final cmPrice = await (dbase.select(dbase.cardMarketPrices)
+        ..where((t) => t.cardId.equals(c.id))
+        ..orderBy([(t) => drift.OrderingTerm(expression: t.fetchedAt, mode: drift.OrderingMode.desc)])
+        ..limit(1)
+      ).getSingleOrNull();
+
+      newItems.add(CardEditorItem(card: c, cmUrl: cmPrice?.url));
+    }
+
+    setState(() {
+      _editorItems = newItems;
+      _isLoadingEditor = false;
+    });
+  }
+
+  Future<void> _saveEditorItem(CardEditorItem item) async {
+    final dbase = ref.read(databaseProvider);
+    
+    await (dbase.update(dbase.cards)..where((t) => t.id.equals(item.card.id))).write(
+      db.CardsCompanion(
+        imageUrl: drift.Value(item.imgEnCtrl.text.trim()),
+        artist: drift.Value(item.artistCtrl.text.trim()),
+        hasManualImages: const drift.Value(true), 
+        hasManualStats: const drift.Value(true),  
+      )
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("✅ Karte gespeichert!"), backgroundColor: Colors.green, duration: Duration(seconds: 1))
+    );
+  }
+
+  void _openCardmarket(CardEditorItem item) async {
+    String url = item.cmUrl ?? "";
+    if (url.isEmpty) {
+      url = 'https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${Uri.encodeComponent(item.card.name)}';
+    }
+    
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  // ==========================================
+  // UI BUILD
+  // ==========================================
+
   @override
   Widget build(BuildContext context) {
-    final safeProposals = _proposals.where((p) => p.isSafe).toList();
-    final reviewProposals = _proposals.where((p) => !p.isSafe).toList();
-
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(title: const Text("Dev Dashboard"), backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
-      body: Column(
-        children: [
-          // --- HEADER & BUTTONS ---
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.white,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text("Status: $_statusText", style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(child: FilledButton.icon(onPressed: _isLoading ? null : _buildDictionary, icon: const Icon(Icons.book), label: const Text("1. Pokedex"))),
-                    const SizedBox(width: 8),
-                    Expanded(child: FilledButton.icon(onPressed: _isLoading ? null : _generateProposals, icon: const Icon(Icons.translate), label: const Text("2. Übersetzen"), style: FilledButton.styleFrom(backgroundColor: Colors.orange[700]))),
-                  ],
-                ),
-                if (_isLoading) ...[const SizedBox(height: 16), const LinearProgressIndicator()],
-              ],
-            ),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: Colors.grey[100],
+        appBar: AppBar(
+          title: const Text("Dev Dashboard"), 
+          backgroundColor: Colors.deepPurple, 
+          foregroundColor: Colors.white,
+          bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white54,
+            indicatorColor: Colors.orange,
+            tabs: [
+              Tab(icon: Icon(Icons.translate), text: "Übersetzer"),
+              Tab(icon: Icon(Icons.image_search), text: "Bilder & Daten"),
+            ],
           ),
-          
-          if (_proposals.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Colors.deepPurple.withOpacity(0.1),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text("${_proposals.where((p) => p.isSelected).length} ausgewählt", style: const TextStyle(fontWeight: FontWeight.bold)),
-                  FilledButton.icon(onPressed: _isLoading ? null : _saveProposals, icon: const Icon(Icons.save), label: const Text("Speichern"), style: FilledButton.styleFrom(backgroundColor: Colors.green))
-                ],
-              ),
-            ),
-            
-            // --- DIE GESTAFFELTE LISTE (CustomScrollView) ---
-            Expanded(
-              child: CustomScrollView(
-                slivers: [
-                  // 1. Sektion: SICHERE TREFFER
-                  if (safeProposals.isNotEmpty) ...[
-                    SliverToBoxAdapter(
-                      child: _buildSectionHeader(
-                        title: "✅ Exakte Treffer (${safeProposals.length})", 
-                        color: Colors.green,
-                        sectionProposals: safeProposals,
-                        isExpanded: _isSafeExpanded,
-                        onToggleExpand: () => setState(() => _isSafeExpanded = !_isSafeExpanded),
-                      ),
-                    ),
-                    if (_isSafeExpanded)
-                      SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) => _buildProposalItem(safeProposals[index]),
-                          childCount: safeProposals.length,
-                        ),
-                      ),
-                  ],
-
-                  // 2. Sektion: ZUR ÜBERPRÜFUNG
-                  if (reviewProposals.isNotEmpty) ...[
-                    SliverToBoxAdapter(
-                      child: _buildSectionHeader(
-                        title: "⚠️ Zur Überprüfung (${reviewProposals.length})", 
-                        color: Colors.orange[800]!,
-                        sectionProposals: reviewProposals,
-                        isExpanded: _isReviewExpanded,
-                        onToggleExpand: () => setState(() => _isReviewExpanded = !_isReviewExpanded),
-                      ),
-                    ),
-                    if (_isReviewExpanded)
-                      SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) => _buildProposalItem(reviewProposals[index]),
-                          childCount: reviewProposals.length,
-                        ),
-                      ),
-                  ]
-                ],
-              ),
-            ),
-          ] else if (!_isLoading) ...[
-             const Expanded(child: Center(child: Text("Keine Vorschläge.", style: TextStyle(color: Colors.grey)))),
-          ]
-        ],
+        ),
+        body: TabBarView(
+          children: [
+            _buildTranslatorTab(),
+            _buildImageManagerTab(),
+          ],
+        ),
       ),
     );
   }
 
-  // --- NEU: Master-Header (Ausklappbar & Master-Checkbox) ---
+  // --- TAB 1 UI ---
+  Widget _buildTranslatorTab() {
+    final safeProposals = _proposals.where((p) => p.isSafe).toList();
+    final reviewProposals = _proposals.where((p) => !p.isSafe).toList();
+
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.white,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text("Status: $_statusTranslator", style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: FilledButton.icon(onPressed: _isLoadingTranslator ? null : _buildDictionary, icon: const Icon(Icons.book), label: const Text("1. Pokedex"))),
+                  const SizedBox(width: 8),
+                  Expanded(child: FilledButton.icon(onPressed: _isLoadingTranslator ? null : _generateProposals, icon: const Icon(Icons.translate), label: const Text("2. Übersetzen"), style: FilledButton.styleFrom(backgroundColor: Colors.orange[700]))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _isLoadingTranslator ? null : _confirmAndResetTranslations, 
+                icon: const Icon(Icons.warning_amber, color: Colors.red), 
+                label: const Text("Notfall: Alle Übersetzungen zurücksetzen", style: TextStyle(color: Colors.red)),
+                style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
+              ),
+              if (_isLoadingTranslator) ...[const SizedBox(height: 16), const LinearProgressIndicator()],
+            ],
+          ),
+        ),
+        
+        if (_proposals.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: Colors.deepPurple.withOpacity(0.1),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("${_proposals.where((p) => p.isSelected).length} ausgewählt", style: const TextStyle(fontWeight: FontWeight.bold)),
+                FilledButton.icon(onPressed: _isLoadingTranslator ? null : _saveProposals, icon: const Icon(Icons.save), label: const Text("Speichern"), style: FilledButton.styleFrom(backgroundColor: Colors.green))
+              ],
+            ),
+          ),
+          
+          Expanded(
+            child: CustomScrollView(
+              slivers: [
+                if (safeProposals.isNotEmpty) ...[
+                  SliverToBoxAdapter(
+                    child: _buildSectionHeader(
+                      title: "✅ Exakte Treffer (${safeProposals.length})", color: Colors.green, sectionProposals: safeProposals,
+                      isExpanded: _isSafeExpanded, onToggleExpand: () => setState(() => _isSafeExpanded = !_isSafeExpanded),
+                    ),
+                  ),
+                  if (_isSafeExpanded)
+                    SliverList(delegate: SliverChildBuilderDelegate((context, index) => _buildProposalItem(safeProposals[index]), childCount: safeProposals.length)),
+                ],
+                if (reviewProposals.isNotEmpty) ...[
+                  SliverToBoxAdapter(
+                    child: _buildSectionHeader(
+                      title: "⚠️ Zur Überprüfung (${reviewProposals.length})", color: Colors.orange[800]!, sectionProposals: reviewProposals,
+                      isExpanded: _isReviewExpanded, onToggleExpand: () => setState(() => _isReviewExpanded = !_isReviewExpanded),
+                    ),
+                  ),
+                  if (_isReviewExpanded)
+                    SliverList(delegate: SliverChildBuilderDelegate((context, index) => _buildProposalItem(reviewProposals[index]), childCount: reviewProposals.length)),
+                ]
+              ],
+            ),
+          ),
+        ] else if (!_isLoadingTranslator) ...[
+           const Expanded(child: Center(child: Text("Keine Vorschläge.", style: TextStyle(color: Colors.grey)))),
+        ]
+      ],
+    );
+  }
+
+  // --- TAB 2 UI ---
+  Widget _buildImageManagerTab() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.white,
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _isLoadingEditor ? null : _loadMissingImages, 
+                      icon: const Icon(Icons.broken_image), 
+                      label: const Text("Fehlende EN-Bilder laden (Max 100)"),
+                      style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _searchCtrl,
+                      decoration: const InputDecoration(
+                        labelText: "Manuelle Suche (z.B. Glurak)",
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onSubmitted: (val) => _searchCardsToEdit(val),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    onPressed: () => _searchCardsToEdit(_searchCtrl.text), 
+                    icon: const Icon(Icons.search)
+                  )
+                ],
+              ),
+              if (_isLoadingEditor) const Padding(padding: EdgeInsets.only(top: 16), child: LinearProgressIndicator())
+            ],
+          ),
+        ),
+
+        Expanded(
+          child: _editorItems.isEmpty && !_isLoadingEditor
+            ? const Center(child: Text("Keine Karten gefunden.", style: TextStyle(color: Colors.grey)))
+            : ListView.builder(
+                padding: const EdgeInsets.all(8),
+                itemCount: _editorItems.length,
+                itemBuilder: (context, index) {
+                  final item = _editorItems[index];
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Kopfzeile: Name, Info & Cardmarket Link
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.card.nameDe ?? item.card.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    Text("EN: ${item.card.name}  |  Set: ${item.card.setId.toUpperCase()}  |  Nr: ${item.card.number}", style: TextStyle(color: Colors.grey[700], fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () => _openCardmarket(item),
+                                icon: const Icon(Icons.open_in_browser, size: 16),
+                                label: const Text("Cardmarket", style: TextStyle(fontSize: 12)),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                  side: BorderSide(color: Colors.blue[700]!),
+                                  foregroundColor: Colors.blue[700]
+                                ),
+                              )
+                            ],
+                          ),
+                          const Divider(),
+                          
+                          // Editor mit Live-Vorschau
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // VORSCHAU BOX
+                              Container(
+                                width: 70, height: 100,
+                                decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
+                                child: ValueListenableBuilder(
+                                  valueListenable: item.imgEnCtrl,
+                                  builder: (context, value, _) {
+                                    if (value.text.isEmpty) return const Icon(Icons.add_a_photo, color: Colors.grey);
+                                    return ClipRRect(
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: CachedNetworkImage(
+                                        imageUrl: value.text,
+                                        fit: BoxFit.cover,
+                                        errorWidget: (_,__,___) => const Icon(Icons.broken_image, color: Colors.red),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // EINGABE FELDER
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    TextField(
+                                      controller: item.imgEnCtrl,
+                                      decoration: const InputDecoration(labelText: "Bild URL (Englisch / Fallback)", isDense: true),
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextField(
+                                            controller: item.artistCtrl,
+                                            decoration: const InputDecoration(labelText: "Künstler (Artist)", isDense: true),
+                                            style: const TextStyle(fontSize: 13),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        FilledButton.icon(
+                                          onPressed: () => _saveEditorItem(item), 
+                                          icon: const Icon(Icons.save, size: 16), 
+                                          label: const Text("Speichern"),
+                                          style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                                        )
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+        )
+      ],
+    );
+  }
+
+  // --- UI Hilfs-Widgets (Translator) ---
   Widget _buildSectionHeader({
-    required String title, 
-    required Color color, 
-    required List<TranslationProposal> sectionProposals,
-    required bool isExpanded,
-    required VoidCallback onToggleExpand,
+    required String title, required Color color, required List<TranslationProposal> sectionProposals, required bool isExpanded, required VoidCallback onToggleExpand,
   }) {
-    // Ermittelt den Zustand der Master-Checkbox
     bool allSelected = sectionProposals.every((p) => p.isSelected);
     bool noneSelected = sectionProposals.every((p) => !p.isSelected);
     bool? checkboxState = allSelected ? true : (noneSelected ? false : null);
@@ -276,28 +586,21 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     return Material(
       color: color.withOpacity(0.1),
       child: InkWell(
-        onTap: onToggleExpand, // Klick auf die Leiste klappt auf/zu
+        onTap: onToggleExpand,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
             children: [
               Checkbox(
-                tristate: true,
-                value: checkboxState,
-                activeColor: color,
+                tristate: true, value: checkboxState, activeColor: color,
                 onChanged: (val) {
                   setState(() {
-                    // Wenn der Zustand vorher "gemischt" (null) war, machen wir bei Klick "Alle an"
                     bool targetState = (checkboxState == null) ? true : (val ?? false);
-                    for (var p in sectionProposals) {
-                      p.isSelected = targetState;
-                    }
+                    for (var p in sectionProposals) p.isSelected = targetState;
                   });
                 },
               ),
-              Expanded(
-                child: Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-              ),
+              Expanded(child: Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color))),
               Icon(isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: color),
               const SizedBox(width: 8),
             ],
@@ -307,7 +610,6 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
-  // --- Einzelnes Listen-Element ---
   Widget _buildProposalItem(TranslationProposal prop) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -317,8 +619,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         child: Row(
           children: [
             Checkbox(
-              value: prop.isSelected,
-              activeColor: Colors.deepPurple,
+              value: prop.isSelected, activeColor: Colors.deepPurple,
               onChanged: (val) => setState(() => prop.isSelected = val ?? false),
             ),
             Expanded(
