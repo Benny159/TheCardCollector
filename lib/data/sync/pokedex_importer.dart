@@ -109,6 +109,7 @@ class PokedexImporter {
             if (deNameObj != null) {
               return PokedexCompanion(
                 id: Value(pokemon.id),
+                name: Value(pokemon.name), // <--- DIESE ZEILE HINZUFÜGEN!
                 nameDe: Value(deNameObj['name']),
               );
             }

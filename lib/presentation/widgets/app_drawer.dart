@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../admin/admin_dashboard_screen.dart';
 import '../../data/database/database_provider.dart';
 import '../../data/api/search_provider.dart'; // Für den Provider-Refresh
 
@@ -27,6 +28,18 @@ class AppDrawer extends ConsumerWidget {
             title: const Text("Nutzerdaten löschen", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
             subtitle: const Text("Inventar, Binder & Graphen leeren"),
             onTap: () => _confirmReset(context, ref),
+          ),
+          
+          ListTile(
+            leading: const Icon(Icons.developer_board, color: Colors.deepPurple),
+            title: const Text("Dev Dashboard", style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
+            onTap: () {
+              Navigator.pop(context); // Schließt den Drawer
+              Navigator.push(
+                context, 
+                MaterialPageRoute(builder: (_) => const AdminDashboardScreen())
+              );
+            },
           ),
           
           const Spacer(),
