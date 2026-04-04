@@ -111,9 +111,8 @@ class _SetListScreenState extends ConsumerState<SetListScreen> {
                       fillColor: Colors.grey[100],
                     ),
                     onChanged: (value) => ref.read(setListSearchProvider.notifier).state = value,
-                    onSubmitted: (_) {
+                    onSubmitted: (value) {
                       focusNode.unfocus();
-                      onFieldSubmitted();
                     },
                   );
                 },

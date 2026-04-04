@@ -106,9 +106,8 @@ class BinderListScreen extends ConsumerWidget {
                                   fillColor: Colors.grey[100],
                                 ),
                                 onChanged: (val) => ref.read(storageSearchProvider.notifier).state = val,
-                                onSubmitted: (_) {
+                                onSubmitted: (val) {
                                   focusNode.unfocus();
-                                  onFieldSubmitted();
                                 },
                               );
                             },

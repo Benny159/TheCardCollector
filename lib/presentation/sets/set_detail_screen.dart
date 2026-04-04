@@ -577,9 +577,8 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
                   ),
                   onChanged: (val) => setState(() => _searchQuery = val),
-                  onSubmitted: (_) {
+                  onSubmitted: (val) {
                     focusNode.unfocus();
-                    onFieldSubmitted();
                   },
                 );
               },

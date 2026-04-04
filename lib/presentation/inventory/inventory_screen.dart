@@ -242,9 +242,8 @@ class InventoryScreen extends ConsumerWidget {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               ),
               onChanged: (val) => ref.read(inventorySearchProvider.notifier).state = val,
-              onSubmitted: (_) {
+              onSubmitted: (val) {
                 focusNode.unfocus();
-                onFieldSubmitted();
               },
             );
           },

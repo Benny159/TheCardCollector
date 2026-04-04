@@ -183,7 +183,6 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                           if (_debounce?.isActive ?? false) _debounce!.cancel();
                           if (mounted) ref.read(searchQueryProvider.notifier).state = val;
                           focusNode.unfocus();
-                          onFieldSubmitted();
                         },
                       );
                     },
