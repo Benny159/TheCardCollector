@@ -72,4 +72,67 @@ class PokedexImporter {
       print("❌ Fehler beim Pokedex Import: $e");
     }
   }
+
+  // --- NEU: Baut das deutsch-englische Wörterbuch auf! ---
+  Future<void> buildTranslationDictionary({Function(String status)? onProgress}) async {
+    onProgress?.call("Lade Pokedex-Daten aus der Datenbank...");
+    final allDex = await db.select(db.pokedex).get();
+    
+    // Filtere alle raus, die noch keinen deutschen Namen haben
+    final missingTranslations = allDex.where((p) => p.nameDe == null || p.nameDe!.isEmpty).toList();
+    
+    if (missingTranslations.isEmpty) {
+      onProgress?.call("✅ Das Wörterbuch ist bereits zu 100% vollständig!");
+      return;
+    }
+
+    int current = 0;
+    final int total = missingTranslations.length;
+    List<PokedexCompanion> updates = [];
+
+    onProgress?.call("Lade $total deutsche Namen von PokeAPI herunter...");
+
+    // Wir holen sie in 20er-Batches, um die API nicht abzuschießen und Zeit zu sparen
+    for (int i = 0; i < total; i += 20) {
+      final end = (i + 20 < total) ? i + 20 : total;
+      final batch = missingTranslations.sublist(i, end);
+
+      final futures = batch.map((pokemon) async {
+        try {
+          final res = await http.get(Uri.parse('https://pokeapi.co/api/v2/pokemon-species/${pokemon.id}/'));
+          if (res.statusCode == 200) {
+            final data = json.decode(res.body);
+            final names = data['names'] as List;
+            // Suche den deutschen Namen ("language": {"name": "de"})
+            final deNameObj = names.firstWhere((n) => n['language']['name'] == 'de', orElse: () => null);
+            
+            if (deNameObj != null) {
+              return PokedexCompanion(
+                id: Value(pokemon.id),
+                nameDe: Value(deNameObj['name']),
+              );
+            }
+          }
+        } catch (e) {
+          print("Fehler bei ${pokemon.name}: $e");
+        }
+        return null;
+      });
+
+      final batchResults = await Future.wait(futures);
+      updates.addAll(batchResults.whereType<PokedexCompanion>());
+      
+      current += batch.length;
+      onProgress?.call("Wörterbuch aufbauen: $current / $total ...");
+    }
+
+    if (updates.isNotEmpty) {
+      onProgress?.call("Speichere ${updates.length} Übersetzungen in der Datenbank...");
+      await db.batch((batch) {
+        batch.insertAllOnConflictUpdate(db.pokedex, updates);
+      });
+    }
+    
+    onProgress?.call("✅ Wörterbuch erfolgreich aufgebaut!");
+  }
 }

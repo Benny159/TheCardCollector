@@ -112,12 +112,34 @@ class SetImporter {
     drift.Value<String?> dbLogoDe = logoDe != null ? drift.Value(logoDe) : const drift.Value.absent();
     drift.Value<String?> dbSymbol = symbol != null ? drift.Value(symbol) : const drift.Value.absent();
 
+    drift.Value<bool> dbHasManualTranslationsSet = const drift.Value.absent();
+    drift.Value<bool> dbHasManualImagesSet = const drift.Value.absent();
+
     if (existingSet != null) {
-      if (existingSet.hasManualTranslations) dbNameDe = const drift.Value.absent(); 
+      // 1. Smarte Übersetzungen
+      if (existingSet.hasManualTranslations) {
+        bool apiHasRealTranslation = de?['name'] != null && de!['name'].toString().isNotEmpty && de!['name'].toString().toLowerCase() != en['name'].toString().toLowerCase();
+        if (apiHasRealTranslation) {
+           dbNameDe = drift.Value(de!['name']);
+           dbHasManualTranslationsSet = const drift.Value(false); // Schutzschild fällt!
+        } else {
+           dbNameDe = const drift.Value.absent();
+        }
+      } 
+      // 2. Smarte Set-Bilder
       if (existingSet.hasManualImages) {
-         dbLogoEn = const drift.Value.absent();
-         dbLogoDe = const drift.Value.absent();
-         dbSymbol = const drift.Value.absent();
+        // Hat die API jetzt ein echtes Logo?
+        bool apiHasRealLogo = logoEn != null && logoEn.isNotEmpty;
+        if (apiHasRealLogo) {
+           dbLogoEn = drift.Value(logoEn);
+           dbLogoDe = logoDe != null ? drift.Value(logoDe) : const drift.Value.absent();
+           dbSymbol = symbol != null ? drift.Value(symbol) : const drift.Value.absent();
+           dbHasManualImagesSet = const drift.Value(false); // Schutzschild fällt!
+        } else {
+           dbLogoEn = const drift.Value.absent();
+           dbLogoDe = const drift.Value.absent();
+           dbSymbol = const drift.Value.absent();
+        }
       }
     }
 
@@ -134,6 +156,8 @@ class SetImporter {
         logoUrl: dbLogoEn,
         logoUrlDe: dbLogoDe,
         symbolUrl: dbSymbol,
+        hasManualTranslations: dbHasManualTranslationsSet,
+        hasManualImages: dbHasManualImagesSet,
       )
     );
   }
@@ -299,19 +323,48 @@ class SetImporter {
     drift.Value<bool> dbHasRev = drift.Value(v['reverse'] == true);
     drift.Value<bool> dbHasPromo = drift.Value(v['wPromo'] == true);
 
+    drift.Value<bool> dbHasManualTranslationsCard = const drift.Value.absent();
+    drift.Value<bool> dbHasManualImagesCard = const drift.Value.absent();
+    drift.Value<bool> dbHasManualStatsCard = const drift.Value.absent();
+
     if (existingCard != null) {
-      if (existingCard.hasManualTranslations) dbNameDe = const drift.Value.absent();
+      // 1. Smarte Übersetzungen
+      if (existingCard.hasManualTranslations) {
+        bool apiHasRealTranslation = nameDeApi != null && nameDeApi.isNotEmpty && nameDeApi.toLowerCase() != nameEn.toLowerCase();
+        if (apiHasRealTranslation) {
+           dbNameDe = drift.Value(nameDeApi);
+           dbHasManualTranslationsCard = const drift.Value(false);
+        } else {
+           dbNameDe = const drift.Value.absent();
+        }
+      }
+      // 2. Smarte Karten-Bilder
       if (existingCard.hasManualImages) {
-        dbImgEn = const drift.Value.absent();
-        dbImgDe = const drift.Value.absent();
+        bool apiHasRealImage = finalImageEn.isNotEmpty;
+        if (apiHasRealImage) {
+           dbImgEn = drift.Value(finalImageEn);
+           dbImgDe = drift.Value(finalImageDe);
+           dbHasManualImagesCard = const drift.Value(false);
+        } else {
+           dbImgEn = const drift.Value.absent();
+           dbImgDe = const drift.Value.absent();
+        }
       }
+      // 3. Smarte Stats (Künstler, Rarity etc.)
       if (existingCard.hasManualStats) {
-        dbArtist = const drift.Value.absent();
-        dbRarity = const drift.Value.absent();
-        dbHp = const drift.Value.absent();
-        dbCardType = const drift.Value.absent();
-        dbNumber = const drift.Value.absent();
+        bool apiHasRealArtist = artistApi != null && artistApi.isNotEmpty && artistApi.toLowerCase() != 'unknown' && artistApi.toLowerCase() != 'illustrator';
+        if (apiHasRealArtist) {
+           dbArtist = drift.Value(artistApi);
+           dbHasManualStatsCard = const drift.Value(false);
+        } else {
+           dbArtist = const drift.Value.absent();
+           dbRarity = const drift.Value.absent();
+           dbHp = const drift.Value.absent();
+           dbCardType = const drift.Value.absent();
+           dbNumber = const drift.Value.absent();
+        }
       }
+      // 4. Varianten bleiben hart gesperrt, bis man sie manuell auflöst
       if (existingCard.hasManualVariants) {
         dbHas1st = const drift.Value.absent();
         dbHasNormal = const drift.Value.absent();
@@ -339,6 +392,9 @@ class SetImporter {
         hasHolo: dbHasHolo,
         hasReverse: dbHasRev,
         hasWPromo: dbHasPromo,
+        hasManualTranslations: dbHasManualTranslationsCard,
+        hasManualImages: dbHasManualImagesCard,
+        hasManualStats: dbHasManualStatsCard,
     );
 
     CardMarketPricesCompanion? cmCompanion;

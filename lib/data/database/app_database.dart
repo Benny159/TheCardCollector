@@ -27,9 +27,9 @@ part 'app_database.g.dart';
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
-  // Wir springen auf Version 43 für die Schutzschilde und den Scanner
+  // Wir springen auf Version 44 für das Übersetzungs-Wörterbuch
   @override
-  int get schemaVersion => 43; 
+  int get schemaVersion => 44; 
 
   @override
   MigrationStrategy get migration {
@@ -48,30 +48,26 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(binderCards, binderCards.userCardId);
         }
 
-        // --- NEU: Version 43 (Schutzschilde, HP & Mapper) ---
-        // --- NEU: Version 43 (Schutzschilde, HP & Mapper) ---
+        // --- Version 43 (Schutzschilde, HP & Mapper) ---
         if (from < 43) {
-          // 1. Die neue Tabelle für API-Mappings erstellen
           await m.createTable(setMappings);
-
-          // 2. HP für den Scanner in die Karten-Tabelle
           await m.addColumn(cards, cards.hp);
-
-          // 3. Die Schutzschilde für die Karten-Tabelle
           await m.addColumn(cards, cards.hasManualVariants);
           await m.addColumn(cards, cards.hasManualImages);
           await m.addColumn(cards, cards.hasManualTranslations);
           await m.addColumn(cards, cards.hasManualStats);
-
-          // 4. Die Schutzschilde für die Set-Tabelle
           await m.addColumn(cardSets, cardSets.hasManualTranslations);
           await m.addColumn(cardSets, cardSets.hasManualImages);
           
-          // --- HIER! Wir zwingen Drift, die fehlenden Indizes zu bauen! ---
           await m.createIndex(Index('idx_cards_setid', 'CREATE INDEX idx_cards_setid ON cards (set_id)'));
           await m.createIndex(Index('idx_cmprices_cardid', 'CREATE INDEX idx_cmprices_cardid ON card_market_prices (card_id)'));
           await m.createIndex(Index('idx_tcgprices_cardid', 'CREATE INDEX idx_tcgprices_cardid ON tcg_player_prices (card_id)'));
           await m.createIndex(Index('idx_usercards_cardid', 'CREATE INDEX idx_usercards_cardid ON user_cards (card_id)'));
+        }
+
+        // --- NEU: Version 44 (Deutscher Pokedex) ---
+        if (from < 44) {
+          await m.addColumn(pokedex, pokedex.nameDe);
         }
       },
       beforeOpen: (details) async {

@@ -196,6 +196,7 @@ class BinderCards extends Table {
 class Pokedex extends Table {
   IntColumn get id => integer()(); 
   TextColumn get name => text()(); 
+  TextColumn get nameDe => text().nullable()();
   
   @override
   Set<Column> get primaryKey => {id};

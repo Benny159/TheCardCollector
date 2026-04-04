@@ -5713,8 +5713,13 @@ class $PokedexTable extends Pokedex with TableInfo<$PokedexTable, PokedexData> {
   late final GeneratedColumn<String> name = GeneratedColumn<String>(
       'name', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameDeMeta = const VerificationMeta('nameDe');
   @override
-  List<GeneratedColumn> get $columns => [id, name];
+  late final GeneratedColumn<String> nameDe = GeneratedColumn<String>(
+      'name_de', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [id, name, nameDe];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -5734,6 +5739,10 @@ class $PokedexTable extends Pokedex with TableInfo<$PokedexTable, PokedexData> {
     } else if (isInserting) {
       context.missing(_nameMeta);
     }
+    if (data.containsKey('name_de')) {
+      context.handle(_nameDeMeta,
+          nameDe.isAcceptableOrUnknown(data['name_de']!, _nameDeMeta));
+    }
     return context;
   }
 
@@ -5747,6 +5756,8 @@ class $PokedexTable extends Pokedex with TableInfo<$PokedexTable, PokedexData> {
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
       name: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      nameDe: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name_de']),
     );
   }
 
@@ -5759,12 +5770,16 @@ class $PokedexTable extends Pokedex with TableInfo<$PokedexTable, PokedexData> {
 class PokedexData extends DataClass implements Insertable<PokedexData> {
   final int id;
   final String name;
-  const PokedexData({required this.id, required this.name});
+  final String? nameDe;
+  const PokedexData({required this.id, required this.name, this.nameDe});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
+    if (!nullToAbsent || nameDe != null) {
+      map['name_de'] = Variable<String>(nameDe);
+    }
     return map;
   }
 
@@ -5772,6 +5787,8 @@ class PokedexData extends DataClass implements Insertable<PokedexData> {
     return PokedexCompanion(
       id: Value(id),
       name: Value(name),
+      nameDe:
+          nameDe == null && nullToAbsent ? const Value.absent() : Value(nameDe),
     );
   }
 
@@ -5781,6 +5798,7 @@ class PokedexData extends DataClass implements Insertable<PokedexData> {
     return PokedexData(
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
+      nameDe: serializer.fromJson<String?>(json['nameDe']),
     );
   }
   @override
@@ -5789,17 +5807,24 @@ class PokedexData extends DataClass implements Insertable<PokedexData> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
+      'nameDe': serializer.toJson<String?>(nameDe),
     };
   }
 
-  PokedexData copyWith({int? id, String? name}) => PokedexData(
+  PokedexData copyWith(
+          {int? id,
+          String? name,
+          Value<String?> nameDe = const Value.absent()}) =>
+      PokedexData(
         id: id ?? this.id,
         name: name ?? this.name,
+        nameDe: nameDe.present ? nameDe.value : this.nameDe,
       );
   PokedexData copyWithCompanion(PokedexCompanion data) {
     return PokedexData(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      nameDe: data.nameDe.present ? data.nameDe.value : this.nameDe,
     );
   }
 
@@ -5807,44 +5832,55 @@ class PokedexData extends DataClass implements Insertable<PokedexData> {
   String toString() {
     return (StringBuffer('PokedexData(')
           ..write('id: $id, ')
-          ..write('name: $name')
+          ..write('name: $name, ')
+          ..write('nameDe: $nameDe')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name);
+  int get hashCode => Object.hash(id, name, nameDe);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is PokedexData && other.id == this.id && other.name == this.name);
+      (other is PokedexData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.nameDe == this.nameDe);
 }
 
 class PokedexCompanion extends UpdateCompanion<PokedexData> {
   final Value<int> id;
   final Value<String> name;
+  final Value<String?> nameDe;
   const PokedexCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.nameDe = const Value.absent(),
   });
   PokedexCompanion.insert({
     this.id = const Value.absent(),
     required String name,
+    this.nameDe = const Value.absent(),
   }) : name = Value(name);
   static Insertable<PokedexData> custom({
     Expression<int>? id,
     Expression<String>? name,
+    Expression<String>? nameDe,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (nameDe != null) 'name_de': nameDe,
     });
   }
 
-  PokedexCompanion copyWith({Value<int>? id, Value<String>? name}) {
+  PokedexCompanion copyWith(
+      {Value<int>? id, Value<String>? name, Value<String?>? nameDe}) {
     return PokedexCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
+      nameDe: nameDe ?? this.nameDe,
     );
   }
 
@@ -5857,6 +5893,9 @@ class PokedexCompanion extends UpdateCompanion<PokedexData> {
     if (name.present) {
       map['name'] = Variable<String>(name.value);
     }
+    if (nameDe.present) {
+      map['name_de'] = Variable<String>(nameDe.value);
+    }
     return map;
   }
 
@@ -5864,7 +5903,8 @@ class PokedexCompanion extends UpdateCompanion<PokedexData> {
   String toString() {
     return (StringBuffer('PokedexCompanion(')
           ..write('id: $id, ')
-          ..write('name: $name')
+          ..write('name: $name, ')
+          ..write('nameDe: $nameDe')
           ..write(')'))
         .toString();
   }
@@ -8636,10 +8676,12 @@ class $$BinderHistoryTableOrderingComposer
 typedef $$PokedexTableCreateCompanionBuilder = PokedexCompanion Function({
   Value<int> id,
   required String name,
+  Value<String?> nameDe,
 });
 typedef $$PokedexTableUpdateCompanionBuilder = PokedexCompanion Function({
   Value<int> id,
   Value<String> name,
+  Value<String?> nameDe,
 });
 
 class $$PokedexTableTableManager extends RootTableManager<
@@ -8661,18 +8703,22 @@ class $$PokedexTableTableManager extends RootTableManager<
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<String> name = const Value.absent(),
+            Value<String?> nameDe = const Value.absent(),
           }) =>
               PokedexCompanion(
             id: id,
             name: name,
+            nameDe: nameDe,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required String name,
+            Value<String?> nameDe = const Value.absent(),
           }) =>
               PokedexCompanion.insert(
             id: id,
             name: name,
+            nameDe: nameDe,
           ),
         ));
 }
@@ -8689,6 +8735,11 @@ class $$PokedexTableFilterComposer
       column: $state.table.name,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get nameDe => $state.composableBuilder(
+      column: $state.table.nameDe,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
 }
 
 class $$PokedexTableOrderingComposer
@@ -8701,6 +8752,11 @@ class $$PokedexTableOrderingComposer
 
   ColumnOrderings<String> get name => $state.composableBuilder(
       column: $state.table.name,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get nameDe => $state.composableBuilder(
+      column: $state.table.nameDe,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 }
