@@ -113,10 +113,14 @@ class InventoryScreen extends ConsumerWidget {
             int comp = 0;
             switch (sortMode) {
               case InventorySort.value:
-                comp = a.totalValue.compareTo(b.totalValue);
+                final singleValA = a.totalValue / (a.quantity > 0 ? a.quantity : 1);
+                final singleValB = b.totalValue / (b.quantity > 0 ? b.quantity : 1);
+                comp = singleValA.compareTo(singleValB);
                 break;
               case InventorySort.performance:
-                comp = a.performance.compareTo(b.performance);
+                final singlePerfA = a.performance / (a.quantity > 0 ? a.quantity : 1);
+                final singlePerfB = b.performance / (b.quantity > 0 ? b.quantity : 1);
+                comp = singlePerfA.compareTo(singlePerfB);
                 break;
               case InventorySort.dateAdded:
                 comp = a.userCard.createdAt.compareTo(b.userCard.createdAt);

@@ -540,7 +540,12 @@ final top10CardsProvider = Provider<List<InventoryItem>>((ref) {
   return allItemsAsync.when(
     data: (items) {
       final sorted = List<InventoryItem>.from(items);
-      sorted.sort((a, b) => b.totalValue.compareTo(a.totalValue));
+      // --- FIX: Nach Einzel-Wert sortieren ---
+      sorted.sort((a, b) {
+         final singleA = a.totalValue / (a.quantity > 0 ? a.quantity : 1);
+         final singleB = b.totalValue / (b.quantity > 0 ? b.quantity : 1);
+         return singleB.compareTo(singleA);
+      });
       return sorted.take(10).toList();
     },
     loading: () => [],
@@ -548,12 +553,11 @@ final top10CardsProvider = Provider<List<InventoryItem>>((ref) {
   );
 });
 
-// --- NEU: TOP 10 GEWINNER (Nach Rendite sortiert) ---
+// --- TOP 10 GEWINNER (Nach Einzel-Rendite sortiert) ---
 final top10GainersProvider = Provider<List<InventoryItem>>((ref) {
   final allItemsAsync = ref.watch(inventoryProvider);
   return allItemsAsync.when(
     data: (items) {
-      // Duplikate (gleiche Karte, aber auf mehrere Binder aufgeteilt) zusammenfassen
       final Map<String, InventoryItem> mergedMap = {};
       for (final item in items) {
         final key = "${item.card.id}_${item.variant}";
@@ -565,7 +569,7 @@ final top10GainersProvider = Provider<List<InventoryItem>>((ref) {
             variant: existing.variant,
             totalValue: existing.totalValue + item.totalValue,
             binderName: null, userCard: existing.userCard,
-            performance: existing.performance + item.performance, // Rendite summieren!
+            performance: existing.performance + item.performance, 
           );
         } else {
           mergedMap[key] = item;
@@ -573,7 +577,12 @@ final top10GainersProvider = Provider<List<InventoryItem>>((ref) {
       }
 
       var sorted = mergedMap.values.where((item) => item.performance > 0).toList();
-      sorted.sort((a, b) => b.performance.compareTo(a.performance));
+      // --- FIX: Nach Einzelkarten-Performance sortieren! ---
+      sorted.sort((a, b) {
+         final singleA = a.performance / (a.quantity > 0 ? a.quantity : 1);
+         final singleB = b.performance / (b.quantity > 0 ? b.quantity : 1);
+         return singleB.compareTo(singleA);
+      });
       return sorted.take(10).toList();
     },
     loading: () => [],
@@ -581,7 +590,7 @@ final top10GainersProvider = Provider<List<InventoryItem>>((ref) {
   );
 });
 
-// --- NEU: TOP 10 VERLIERER (Nach Rendite sortiert, schlechteste zuerst) ---
+// --- TOP 10 VERLIERER (Nach Einzel-Rendite sortiert, schlechteste zuerst) ---
 final top10LosersProvider = Provider<List<InventoryItem>>((ref) {
   final allItemsAsync = ref.watch(inventoryProvider);
   return allItemsAsync.when(
@@ -597,17 +606,20 @@ final top10LosersProvider = Provider<List<InventoryItem>>((ref) {
             variant: existing.variant,
             totalValue: existing.totalValue + item.totalValue,
             binderName: null, userCard: existing.userCard,
-            performance: existing.performance + item.performance, // Rendite summieren!
+            performance: existing.performance + item.performance, 
           );
         } else {
           mergedMap[key] = item;
         }
       }
 
-      // Nur Karten, die im Minus sind!
       var sorted = mergedMap.values.where((item) => item.performance < 0).toList();
-      // Sortieren aufsteigend (die größten Minus-Beträge ganz nach vorne)
-      sorted.sort((a, b) => a.performance.compareTo(b.performance));
+      // --- FIX: Nach Einzelkarten-Performance sortieren! ---
+      sorted.sort((a, b) {
+         final singleA = a.performance / (a.quantity > 0 ? a.quantity : 1);
+         final singleB = b.performance / (b.quantity > 0 ? b.quantity : 1);
+         return singleA.compareTo(singleB); // a < b für schlechteste zuerst
+      });
       return sorted.take(10).toList();
     },
     loading: () => [],
