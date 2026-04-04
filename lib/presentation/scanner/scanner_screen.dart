@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:drift/drift.dart' hide Column; 
-import 'package:cached_network_image/cached_network_image.dart'; // --- NEU: Für das Set-Logo
+import 'package:cached_network_image/cached_network_image.dart'; 
 
 // Deine Datenbank Provider
 import '../../data/database/app_database.dart';
@@ -15,6 +15,7 @@ import '../../data/database/database_provider.dart';
 // UI Import
 import 'scanner_overlay_mask.dart';
 import '../inventory/inventory_bottom_sheet.dart'; 
+import '../search/card_search_screen.dart'; // Für die manuelle Suche
 import '../../domain/models/api_card.dart';
 
 class ScannerScreen extends ConsumerStatefulWidget {
@@ -35,13 +36,16 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
   String _scanStatus = "Lade Datenbank...";
   Card? _scannedCard; 
 
-  // --- NEU: Metadaten für die schicke Ergebnis-Anzeige ---
+  // --- Metadaten für die schicke Ergebnis-Anzeige ---
   CardSet? _scannedSet;
   int _scannedOwnedQuantity = 0;
   double _scannedCardPrice = 0.0;
   double _scannedSetProgress = 0.0;
   int _scannedSetOwned = 0;
   int _scannedSetTotal = 0;
+  
+  // --- Alternativen ---
+  List<Card> _alternativeCards = [];
 
   // Der Datenbank-Cache für den Heuhaufen-Algorithmus
   List<Card>? _allCardsCache;
@@ -196,6 +200,8 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     setState(() {
       _scannedCard = null;
       _scannedSet = null;
+      _scannedCardPrice = 0.0;
+      _alternativeCards.clear();
       _scanStatus = "Halte die Karte in den Rahmen...";
     });
     if (_cameraController != null && !_cameraController!.value.isStreamingImages) {
@@ -301,51 +307,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
           HapticFeedback.vibrate(); 
           await _cameraController!.stopImageStream(); 
           
-          // --- NEU: WIR LADEN ALLE ZUSATZDATEN FÜR DIE ANZEIGE ---
-          final db = ref.read(databaseProvider);
-          
-          // 1. Set Info
-          final setObj = await (db.select(db.cardSets)..where((t) => t.id.equals(bestCard!.setId))).getSingleOrNull();
-          
-          // 2. Set Fortschritt
-          final setCardsQuery = await (db.select(db.cards)..where((t) => t.setId.equals(bestCard!.setId))).get();
-          final setCardIds = setCardsQuery.map((c) => c.id).toList();
-          int uniqueOwnedInSet = 0;
-          if (setCardIds.isNotEmpty) {
-             final ownedInSet = await (db.select(db.userCards)..where((t) => t.cardId.isIn(setCardIds))).get();
-             uniqueOwnedInSet = ownedInSet.map((u) => u.cardId).toSet().length;
-          }
-          
-          // 3. Eigener Besitz
-          final myCards = await (db.select(db.userCards)..where((t) => t.cardId.equals(bestCard!.id))).get();
-          final int myQuantity = myCards.fold(0, (sum, c) => sum + c.quantity);
-
-          // 4. Preis
-          final cmPrice = await (db.select(db.cardMarketPrices)..where((t) => t.cardId.equals(bestCard!.id))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
-          final tcgPrice = await (db.select(db.tcgPlayerPrices)..where((t) => t.cardId.equals(bestCard!.id))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
-          
-          double displayPrice = 0.0;
-          bool isHolo = bestCard!.hasHolo && !bestCard!.hasNormal; 
-          
-          if (bestCard!.preferredPriceSource == 'tcgplayer') {
-              displayPrice = isHolo ? (tcgPrice?.holoMarket ?? 0.0) : (tcgPrice?.normalMarket ?? 0.0);
-              if (displayPrice == 0.0) displayPrice = tcgPrice?.normalMarket ?? tcgPrice?.holoMarket ?? cmPrice?.trend ?? 0.0;
-          } else {
-              displayPrice = isHolo ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
-              if (displayPrice == 0.0) displayPrice = cmPrice?.trend ?? cmPrice?.trendHolo ?? tcgPrice?.normalMarket ?? 0.0;
-          }
-
-          if (!mounted) return;
-          setState(() {
-            _scanStatus = "✅ Gefunden!";
-            _scannedCard = bestCard; 
-            _scannedSet = setObj;
-            _scannedOwnedQuantity = myQuantity;
-            _scannedCardPrice = displayPrice;
-            _scannedSetProgress = setCardsQuery.isNotEmpty ? uniqueOwnedInSet / setCardsQuery.length : 0.0;
-            _scannedSetOwned = uniqueOwnedInSet;
-            _scannedSetTotal = setCardsQuery.length;
-          });
+          await _loadCardDataAndShow(bestCard);
       }
 
     } catch (e) {
@@ -353,6 +315,61 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     } finally {
       _isProcessingImage = false;
     }
+  }
+
+  // --- Zentralisierte Funktion zum Laden der Karte ---
+  Future<void> _loadCardDataAndShow(Card bestCard) async {
+    final db = ref.read(databaseProvider);
+    
+    // 1. Set Info
+    final setObj = await (db.select(db.cardSets)..where((t) => t.id.equals(bestCard.setId))).getSingleOrNull();
+    
+    // 2. Set Fortschritt
+    final setCardsQuery = await (db.select(db.cards)..where((t) => t.setId.equals(bestCard.setId))).get();
+    final setCardIds = setCardsQuery.map((c) => c.id).toList();
+    int uniqueOwnedInSet = 0;
+    if (setCardIds.isNotEmpty) {
+       final ownedInSet = await (db.select(db.userCards)..where((t) => t.cardId.isIn(setCardIds))).get();
+       uniqueOwnedInSet = ownedInSet.map((u) => u.cardId).toSet().length;
+    }
+    
+    // 3. Eigener Besitz
+    final myCards = await (db.select(db.userCards)..where((t) => t.cardId.equals(bestCard.id))).get();
+    final int myQuantity = myCards.fold(0, (sum, c) => sum + c.quantity);
+
+    // 4. Preis
+    final cmPrice = await (db.select(db.cardMarketPrices)..where((t) => t.cardId.equals(bestCard.id))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
+    final tcgPrice = await (db.select(db.tcgPlayerPrices)..where((t) => t.cardId.equals(bestCard.id))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.desc)])..limit(1)).getSingleOrNull();
+    
+    double displayPrice = 0.0;
+    bool isHolo = bestCard.hasHolo && !bestCard.hasNormal; 
+    
+    if (bestCard.preferredPriceSource == 'tcgplayer') {
+        displayPrice = isHolo ? (tcgPrice?.holoMarket ?? 0.0) : (tcgPrice?.normalMarket ?? 0.0);
+        if (displayPrice == 0.0) displayPrice = tcgPrice?.normalMarket ?? tcgPrice?.holoMarket ?? cmPrice?.trend ?? 0.0;
+    } else {
+        displayPrice = isHolo ? (cmPrice?.trendHolo ?? 0.0) : (cmPrice?.trend ?? 0.0);
+        if (displayPrice == 0.0) displayPrice = cmPrice?.trend ?? cmPrice?.trendHolo ?? tcgPrice?.normalMarket ?? 0.0;
+    }
+
+    // 5. Andere Varianten suchen (NUR im selben Set!)
+    final altCards = await (db.select(db.cards)
+       ..where((t) => t.setId.equals(bestCard.setId) & t.name.equals(bestCard.name) & t.id.isNotValue(bestCard.id))
+       ..limit(10) // Max 10 anzeigen
+    ).get();
+
+    if (!mounted) return;
+    setState(() {
+      _scanStatus = "✅ Gefunden!";
+      _scannedCard = bestCard; 
+      _scannedSet = setObj;
+      _scannedOwnedQuantity = myQuantity;
+      _scannedCardPrice = displayPrice;
+      _scannedSetProgress = setCardsQuery.isNotEmpty ? uniqueOwnedInSet / setCardsQuery.length : 0.0;
+      _scannedSetOwned = uniqueOwnedInSet;
+      _scannedSetTotal = setCardsQuery.length;
+      _alternativeCards = altCards;
+    });
   }
 
   bool _isNameInText(String dbName, String rawClean, String rawFullText) {
@@ -411,7 +428,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
       body: Column(
         children: [
           Expanded(
-            flex: 65,
+            flex: 60, // Etwas mehr Platz für die Kamera und den fetten Preis!
             child: Stack(
               children: [
                 if (_cameraInitialized && _cameraController != null)
@@ -436,6 +453,40 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                 if (_cameraInitialized && _cameraController != null)
                    const Positioned.fill(child: ScannerOverlayMask()),
 
+                // --- RIESIGER ANIMIERTER PREIS ÜBER DEM KAMERABILD ---
+                if (_scannedCard != null && _scannedCardPrice > 0)
+                   Positioned.fill(
+                     child: Center(
+                       child: TweenAnimationBuilder<double>(
+                         tween: Tween<double>(begin: 0.0, end: 1.0),
+                         duration: const Duration(milliseconds: 600),
+                         curve: Curves.elasticOut, // Cooler "Pop"-Effekt
+                         builder: (context, val, child) {
+                           return Transform.scale(
+                             scale: val,
+                             child: Opacity(
+                               opacity: val.clamp(0.0, 1.0),
+                               child: Container(
+                                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                 decoration: BoxDecoration(
+                                   color: Colors.green[600]!.withOpacity(0.95),
+                                   borderRadius: BorderRadius.circular(16),
+                                   boxShadow: [
+                                     BoxShadow(color: Colors.greenAccent.withOpacity(0.6), blurRadius: 25 * val, spreadRadius: 5 * val)
+                                   ]
+                                 ),
+                                 child: Text(
+                                   "${_scannedCardPrice.toStringAsFixed(2)} €", 
+                                   style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.bold)
+                                 ),
+                               ),
+                             ),
+                           );
+                         }
+                       ),
+                     ),
+                   ),
+
                 Positioned(
                   top: 50, left: 10,
                   child: IconButton(
@@ -448,7 +499,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
           ),
 
           Expanded(
-            flex: 35,
+            flex: 40,
             child: Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -477,7 +528,6 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     );
   }
 
-  // --- NEU: DIE SCHICKE ERGEBNIS-ANZEIGE ---
   Widget _buildResultArea(BuildContext context, ThemeData theme) {
     final card = _scannedCard!;
     final bool isNewCard = _scannedOwnedQuantity == 0;
@@ -491,152 +541,190 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. Das Kartenbild
+                // 1. Das Kartenbild (Wieder in voller Original-Breite!)
                 AspectRatio(
                   aspectRatio: 0.716, 
                   child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: CachedNetworkImage(
-                        imageUrl: card.imageUrlDe ?? card.imageUrl,
-                        fit: BoxFit.cover,
-                        placeholder: (_,__) => Container(color: Colors.grey[200]),
-                        errorWidget: (c, e, s) => const Icon(Icons.broken_image, size: 50, color: Colors.grey),
-                      ),
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl: card.imageUrlDe ?? card.imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_,__) => Container(color: Colors.grey[200]),
+                      errorWidget: (c, e, s) => const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
                 
                 // 2. Die Details daneben
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Name & Nummer
-                      Text(card.nameDe ?? card.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18), maxLines: 2, overflow: TextOverflow.ellipsis),
-                      Text("${card.number} / ${_scannedSet?.printedTotal ?? '?'}", style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w600)),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // Badges für Besitz & Preis
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          // Besitz-Badge
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: isNewCard ? Colors.amber[600] : Colors.blue[100],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: isNewCard ? Colors.amber[800]! : Colors.blue[300]!)
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(isNewCard ? Icons.star : Icons.inventory_2, size: 14, color: isNewCard ? Colors.white : Colors.blue[900]),
-                                const SizedBox(width: 4),
-                                Text(
-                                  isNewCard ? "NEUE KARTE" : "In Sammlung: $_scannedOwnedQuantity x",
-                                  style: TextStyle(
-                                    color: isNewCard ? Colors.white : Colors.blue[900], 
-                                    fontWeight: FontWeight.bold, 
-                                    fontSize: 11
-                                  )
-                                ),
-                              ],
-                            ),
-                          ),
-                          
-                          // Preis-Badge
-                          if (_scannedCardPrice > 0)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.green[100],
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.green[400]!)
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.euro, size: 12, color: Colors.green[800]),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    _scannedCardPrice.toStringAsFixed(2),
-                                    style: TextStyle(color: Colors.green[900], fontWeight: FontWeight.bold, fontSize: 11)
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                      
-                      const Spacer(),
-                      
-                      // 3. Die hübsche Set-Box ganz unten
-                      if (_scannedSet != null)
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Name & Nummer
+                        Text(card.nameDe ?? card.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18), maxLines: 2, overflow: TextOverflow.ellipsis),
+                        Text("${card.number} / ${_scannedSet?.printedTotal ?? '?'}", style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w600)),
+                        
+                        const SizedBox(height: 8),
+                        
+                        // Badge für Besitz
                         Container(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.grey[100],
+                            color: isNewCard ? Colors.amber[600] : Colors.blue[100],
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey[300]!)
+                            border: Border.all(color: isNewCard ? Colors.amber[800]! : Colors.blue[300]!)
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                children: [
-                                  if (_scannedSet!.logoUrl != null || _scannedSet!.logoUrlDe != null)
-                                    SizedBox(
-                                      height: 20, width: 40,
-                                      child: CachedNetworkImage(
-                                        imageUrl: _scannedSet!.logoUrlDe ?? _scannedSet!.logoUrl!,
-                                        fit: BoxFit.contain,
-                                        errorWidget: (_,__,___) => const SizedBox(),
-                                      )
-                                    ),
-                                  if (_scannedSet!.logoUrl != null || _scannedSet!.logoUrlDe != null)
-                                    const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _scannedSet!.nameDe ?? _scannedSet!.name, 
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    )
-                                  ),
-                                ],
+                              Icon(isNewCard ? Icons.star : Icons.inventory_2, size: 14, color: isNewCard ? Colors.white : Colors.blue[900]),
+                              const SizedBox(width: 4),
+                              Text(
+                                isNewCard ? "NEUE KARTE" : "In Sammlung: $_scannedOwnedQuantity x",
+                                style: TextStyle(
+                                  color: isNewCard ? Colors.white : Colors.blue[900], 
+                                  fontWeight: FontWeight.bold, 
+                                  fontSize: 11
+                                )
                               ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(4),
-                                      child: LinearProgressIndicator(
-                                        value: _scannedSetProgress,
-                                        backgroundColor: Colors.grey[300],
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[400]!),
-                                        minHeight: 6,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text("$_scannedSetOwned / $_scannedSetTotal", style: TextStyle(fontSize: 10, color: Colors.grey[700], fontWeight: FontWeight.bold)),
-                                ],
-                              )
                             ],
                           ),
-                        )
-                    ],
+                        ),
+
+                        const SizedBox(height: 12),
+                        
+                        // --- ALTERNATIVE VARIANTEN (Wieder strikt auf das Set beschränkt!) ---
+                        if (_alternativeCards.isNotEmpty) ...[
+                          Text("Andere Variante erkannt?", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey[700])),
+                          const SizedBox(height: 4),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: _alternativeCards.map((alt) => GestureDetector(
+                                onTap: () => _loadCardDataAndShow(alt), // Wechselt die Karte per Tap!
+                                child: Padding(
+                                   padding: const EdgeInsets.only(right: 8.0),
+                                   child: ClipRRect(
+                                     borderRadius: BorderRadius.circular(6),
+                                     child: CachedNetworkImage(
+                                       imageUrl: alt.imageUrlDe ?? alt.imageUrl, 
+                                       width: 45, height: 63, fit: BoxFit.cover, // Etwas größer, da Shop-Links weg sind
+                                       placeholder: (_,__) => Container(width: 45, height: 63, color: Colors.grey[300]),
+                                     ),
+                                   )
+                                )
+                              )).toList(),
+                            )
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+
+                        // --- MANUELLE SUCHE BUTTON ---
+                        SizedBox(
+                          height: 28,
+                          child: TextButton.icon(
+                            onPressed: () async {
+                               final result = await Navigator.push(context, MaterialPageRoute(
+                                  builder: (_) => CardSearchScreen(initialQuery: card.name, pickerMode: true)
+                               ));
+                               
+                               if (result != null && result is ApiCard) {
+                                  final db = ref.read(databaseProvider);
+                                  await db.into(db.cards).insertOnConflictUpdate(
+                                    CardsCompanion(
+                                      id: Value(result.id),
+                                      setId: Value(result.setId),
+                                      name: Value(result.name),
+                                      nameDe: Value(result.nameDe),
+                                      number: Value(result.number),
+                                      imageUrl: Value(result.smallImageUrl),
+                                      imageUrlDe: Value(result.imageUrlDe ?? result.smallImageUrl),
+                                      rarity: Value(result.rarity),
+                                    )
+                                  );
+                                  final dbCard = await (db.select(db.cards)..where((t)=>t.id.equals(result.id))).getSingle();
+                                  _loadCardDataAndShow(dbCard);
+                               }
+                            },
+                            icon: const Icon(Icons.search, size: 14),
+                            label: const Text("Falsches Pokémon? Suchen", style: TextStyle(fontSize: 11)),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              backgroundColor: Colors.blueAccent.withOpacity(0.1),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))
+                            ),
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 12),
+                        
+                        // Die hübsche Set-Box ganz unten
+                        if (_scannedSet != null)
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey[300]!)
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    if (_scannedSet!.logoUrl != null || _scannedSet!.logoUrlDe != null)
+                                      SizedBox(
+                                        height: 20, width: 40,
+                                        child: CachedNetworkImage(
+                                          imageUrl: _scannedSet!.logoUrlDe ?? _scannedSet!.logoUrl!,
+                                          fit: BoxFit.contain,
+                                          errorWidget: (_,__,___) => const SizedBox(),
+                                        )
+                                      ),
+                                    if (_scannedSet!.logoUrl != null || _scannedSet!.logoUrlDe != null)
+                                      const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _scannedSet!.nameDe ?? _scannedSet!.name, 
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      )
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: LinearProgressIndicator(
+                                          value: _scannedSetProgress,
+                                          backgroundColor: Colors.grey[300],
+                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[400]!),
+                                          minHeight: 6,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text("$_scannedSetOwned / $_scannedSetTotal", style: TextStyle(fontSize: 10, color: Colors.grey[700], fontWeight: FontWeight.bold)),
+                                  ],
+                                )
+                              ],
+                            ),
+                          )
+                      ],
+                    ),
                   ),
                 )
               ],
             ),
           ),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           
           // Die unteren Aktions-Buttons
           Row(
@@ -645,7 +733,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                 child: OutlinedButton.icon(
                   onPressed: _resumeScanning,
                   icon: const Icon(Icons.refresh),
-                  label: const Text("Falsch"),
+                  label: const Text("Erneut"), 
                   style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
                 ),
               ),
