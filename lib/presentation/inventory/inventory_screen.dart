@@ -354,7 +354,7 @@ class InventoryScreen extends ConsumerWidget {
 
   Widget _buildGrid(List<InventoryItem> items) {
     return GridView.builder(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.only(left: 10, top: 10, right: 10, bottom: 100),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
         childAspectRatio: 0.70, 

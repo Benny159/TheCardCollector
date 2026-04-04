@@ -294,7 +294,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
             // 4. BESITZ BOX
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              padding: const EdgeInsets.only(left: 12, top: 12, right: 12, bottom: 100),
               child: inventoryAsync.when(
                 data: (items) => _buildCollectionBox(context, ref, items, historyAsync.valueOrNull as Map<String, dynamic>?),
                 loading: () => const SizedBox.shrink(),

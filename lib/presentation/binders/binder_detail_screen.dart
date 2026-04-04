@@ -180,7 +180,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
 
                 return Center(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 20.0), 
+                    padding: const EdgeInsets.only(left: 0, top: 20, right: 0, bottom: 100), 
                     child: AspectRatio(
                       aspectRatio: 0.65, 
                       child: PageView(
@@ -599,7 +599,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.only(left: 20, top: 20, right: 20, bottom: 100),
         child: _BinderStatsContent(binderId: widget.binder.id, currentState: state, onDelete: () {
            Navigator.pop(ctx);
            _confirmDelete(context);

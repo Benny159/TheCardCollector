@@ -288,7 +288,7 @@ class _DashboardView extends ConsumerWidget {
     final double totalValue = inventoryAsync.valueOrNull?.fold(0.0, (sum, i) => sum! + i.totalValue) ?? 0.0;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.only(left: 16, top: 16, right: 16, bottom: 100),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -848,7 +848,7 @@ class _SearchResultsView extends ConsumerWidget {
   Widget _buildGrid(List<ApiCard> cards, BuildContext context, WidgetRef ref, bool isPicker) {
     return GridView.builder(
       cacheExtent: 100, 
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.only(left: 10, top: 10, right: 10, bottom: 100),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
         childAspectRatio: 0.70,

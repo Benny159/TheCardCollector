@@ -116,7 +116,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                 child: visibleCards.isEmpty 
                   ? const Center(child: Text("Keine Karten für diesen Filter."))
                   : GridView.builder(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.only(left: 8, top: 8, right: 8, bottom: 100),
                     cacheExtent: 500, 
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 3,

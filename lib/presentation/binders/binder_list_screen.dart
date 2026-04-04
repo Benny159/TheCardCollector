@@ -172,7 +172,7 @@ class BinderListScreen extends ConsumerWidget {
                   child: binders.isEmpty 
                     ? const Center(child: Text("Nichts gefunden.", style: TextStyle(color: Colors.grey)))
                     : GridView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        padding: const EdgeInsets.only(left: 12, top: 12, right: 12, bottom: 100),
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           childAspectRatio: 0.8,
