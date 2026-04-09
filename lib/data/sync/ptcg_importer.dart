@@ -61,24 +61,44 @@ class PtcgImporter {
   Future<void> _importPtcgSet(String tcgdexId, String ptcgId, String? cmCode, Map<String, Map<String, dynamic>> latestCmPrices, Map<String, Map<String, dynamic>> latestTcgPrices) async {
     
     final existingSet = await (db.select(db.cardSets)..where((t) => t.id.equals(tcgdexId))).getSingleOrNull();
-    if (existingSet == null) {
+    
+    // Wir brauchen die PTCG API, wenn das Set fehlt ODER wenn das Logo fehlt!
+    bool needsSetInsert = existingSet == null;
+    bool needsLogoUpdate = existingSet != null && !existingSet.hasManualImages && (existingSet.logoUrl == null || existingSet.logoUrl!.isEmpty);
+
+    if (needsSetInsert || needsLogoUpdate) {
        final setUrl = Uri.parse('https://api.pokemontcg.io/v2/sets/$ptcgId');
        final setRes = await http.get(setUrl, headers: {'X-Api-Key': apiKey});
+       
        if (setRes.statusCode == 200) {
           final setData = jsonDecode(setRes.body)['data'];
-          await db.into(db.cardSets).insert(CardSetsCompanion.insert(
-            id: tcgdexId,
-            name: setData['name'] ?? ptcgId,
-            series: setData['series'] ?? 'Unknown',
-            printedTotal: Value(setData['printedTotal']),
-            total: Value(setData['total']),
-            releaseDate: Value(setData['releaseDate']),
-            updatedAt: DateTime.now().toIso8601String(),
-            logoUrl: Value(setData['images']?['logo']),
-            symbolUrl: Value(setData['images']?['symbol']),
-          ));
-       } else {
-         return; 
+          final fetchedLogo = setData['images']?['logo'];
+          final fetchedSymbol = setData['images']?['symbol'];
+
+          if (needsSetInsert) {
+            // Set komplett neu anlegen
+            await db.into(db.cardSets).insert(CardSetsCompanion.insert(
+              id: tcgdexId,
+              name: setData['name'] ?? ptcgId,
+              series: setData['series'] ?? 'Unknown',
+              printedTotal: Value(setData['printedTotal']),
+              total: Value(setData['total']),
+              releaseDate: Value(setData['releaseDate']),
+              updatedAt: DateTime.now().toIso8601String(),
+              logoUrl: Value(fetchedLogo),
+              symbolUrl: Value(fetchedSymbol),
+            ));
+          } else if (needsLogoUpdate) {
+            // Lückenfüller: Nur das fehlende Logo & Symbol updaten!
+            await (db.update(db.cardSets)..where((t) => t.id.equals(tcgdexId))).write(
+              CardSetsCompanion(
+                logoUrl: Value(fetchedLogo),
+                symbolUrl: (existingSet.symbolUrl == null || existingSet.symbolUrl!.isEmpty) ? Value(fetchedSymbol) : const Value.absent(),
+              )
+            );
+          }
+       } else if (needsSetInsert) {
+         return; // Abbruch, wenn das Set komplett neu wäre, aber die API fehlschlägt
        }
     }
 
@@ -197,25 +217,24 @@ class PtcgImporter {
         ));
       }
 
-      // --- PREISE ---
+      // --- PREISE (STRENGER LÜCKENFÜLLER) ---
       if (ptcgCard['cardmarket'] != null) {
         final cm = ptcgCard['cardmarket']['prices'];
         if (cm != null) {
-          double? newTrend = (cm['trendPrice'] as num?)?.toDouble();
-          double? newRevTrend = (cm['reverseHoloTrend'] as num?)?.toDouble();
-
           final oldCm = latestCmPrices[finalCardId];
-          if (oldCm == null || oldCm['trend'] != newTrend || oldCm['trendReverse'] != newRevTrend) {
+          
+          // FIX: Er greift NUR ein, wenn es noch absolut gar keinen Preis (oldCm == null) gibt!
+          if (oldCm == null) {
             cmCompanions.add(CardMarketPricesCompanion.insert(
               cardId: finalCardId,
               fetchedAt: now,
               average: Value((cm['averageSellPrice'] as num?)?.toDouble()),
               low: Value((cm['lowPrice'] as num?)?.toDouble()),
-              trend: Value(newTrend),
+              trend: Value((cm['trendPrice'] as num?)?.toDouble()),
               avg1: Value((cm['avg1'] as num?)?.toDouble()),
               avg7: Value((cm['avg7'] as num?)?.toDouble()),
               avg30: Value((cm['avg30'] as num?)?.toDouble()),
-              trendReverse: Value(newRevTrend),
+              trendReverse: Value((cm['reverseHoloTrend'] as num?)?.toDouble()),
               url: Value(ptcgCard['cardmarket']['url']), 
             ));
           }
@@ -225,28 +244,26 @@ class PtcgImporter {
       if (ptcgCard['tcgplayer'] != null) {
         final tcg = ptcgCard['tcgplayer']['prices'];
         if (tcg != null) {
-          final norm = tcg['normal'];
-          final holo = tcg['holofoil'];
-          final rev = tcg['reverseHolofoil'];
-
-          final double? newNormMarket = (norm?['market'] as num?)?.toDouble();
-          final double? newHoloMarket = (holo?['market'] as num?)?.toDouble();
-          final double? newRevMarket = (rev?['market'] as num?)?.toDouble();
-
           final oldTcg = latestTcgPrices[finalCardId];
-          if (oldTcg == null || oldTcg['normalMarket'] != newNormMarket || oldTcg['holoMarket'] != newHoloMarket || oldTcg['reverseMarket'] != newRevMarket) {
+          
+          // FIX: Auch hier: TCGPlayer Preise von PTCG nur nehmen, wenn TCGdex versagt hat!
+          if (oldTcg == null) {
+            final norm = tcg['normal'];
+            final holo = tcg['holofoil'];
+            final rev = tcg['reverseHolofoil'];
+
             tcgCompanions.add(TcgPlayerPricesCompanion.insert(
               cardId: finalCardId,
               fetchedAt: now,
-              normalMarket: Value(newNormMarket),
+              normalMarket: Value((norm?['market'] as num?)?.toDouble()),
               normalLow: Value((norm?['low'] as num?)?.toDouble()),
               normalMid: Value((norm?['mid'] as num?)?.toDouble()),
               normalDirectLow: Value((norm?['directLow'] as num?)?.toDouble()),
-              holoMarket: Value(newHoloMarket),
+              holoMarket: Value((holo?['market'] as num?)?.toDouble()),
               holoLow: Value((holo?['low'] as num?)?.toDouble()),
               holoMid: Value((holo?['mid'] as num?)?.toDouble()),
               holoDirectLow: Value((holo?['directLow'] as num?)?.toDouble()),
-              reverseMarket: Value(newRevMarket),
+              reverseMarket: Value((rev?['market'] as num?)?.toDouble()),
               reverseLow: Value((rev?['low'] as num?)?.toDouble()),
               reverseMid: Value((rev?['mid'] as num?)?.toDouble()),
               reverseDirectLow: Value((rev?['directLow'] as num?)?.toDouble()),

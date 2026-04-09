@@ -172,6 +172,7 @@ class DatabaseInitializer {
       {"tcgdexId": "2018sm", "ptcgId": "mcd18", "cmCode": ""}, // TCGdex: Macdonald's Collection 2018 | PTCG: McDonald's Collection 2018
       {"tcgdexId": "2019sm", "ptcgId": "mcd19", "cmCode": ""}, // TCGdex: Macdonald's Collection 2019 | PTCG: McDonald's Collection 2019
       {"tcgdexId": "2021swsh", "ptcgId": "mcd21", "cmCode": ""}, // TCGdex: Macdonald's Collection 2021 | PTCG: McDonald's Collection 2021
+      {"tcgdexId": "2022swsh", "ptcgId": "mcd22", "cmCode": ""}, // NUR BEI PTCG: McDonald's Collection 2022
       {"tcgdexId": "fut2020", "ptcgId": "fut20", "cmCode": "FUT20"}, // TCGdex: Pokémon Futsal 2020 | PTCG: Pokémon Futsal Collection
       {"tcgdexId": "tk-ex-latia", "ptcgId": "tk1a", "cmCode": ""}, // TCGdex: EX trainer Kit (Latias) | PTCG: EX Trainer Kit Latias
       {"tcgdexId": "tk-ex-latio", "ptcgId": "tk1b", "cmCode": ""}, // TCGdex: EX trainer Kit (Latios) | PTCG: EX Trainer Kit Latios
@@ -208,7 +209,6 @@ class DatabaseInitializer {
       {"tcgdexId": "swsh10tg", "ptcgId": "swsh10tg", "cmCode": "ASR"}, // NUR BEI PTCG: Astral Radiance Trainer Gallery
       {"tcgdexId": "swsh11tg", "ptcgId": "swsh11tg", "cmCode": "LOR"}, // NUR BEI PTCG: Lost Origin Trainer Gallery
       {"tcgdexId": "swsh12tg", "ptcgId": "swsh12tg", "cmCode": "SIT"}, // NUR BEI PTCG: Silver Tempest Trainer Gallery
-      {"tcgdexId": "mcd22", "ptcgId": "mcd22", "cmCode": ""}, // NUR BEI PTCG: McDonald's Collection 2022
       {"tcgdexId": "swsh12pt5gg", "ptcgId": "swsh12pt5gg", "cmCode": "CRZ"}, // NUR BEI PTCG: Crown Zenith Galarian Gallery
       {"tcgdexId": "sve", "ptcgId": "sve", "cmCode": "SVE"}, // NUR BEI PTCG: Scarlet & Violet Energies
       {"tcgdexId": "me03", "ptcgId": "me3", "cmCode": "POR"}, // NUR BEI PTCG: Perfect Order
@@ -229,5 +229,52 @@ class DatabaseInitializer {
     });
 
     print('✅ Set-Mappings erfolgreich synchronisiert!');
+  }
+
+  /// Löscht alte, falsche Sets und deren Karten restlos aus der Datenbank
+  Future<void> cleanUpOldSets(List<String> oldSetIds) async {
+    print('🧹 Räume alte, falsche Sets auf...');
+
+    for (var oldId in oldSetIds) {
+      // 1. Finde alle Karten dieses alten Sets
+      final cardsToTrash = await (db.select(db.cards)..where((t) => t.setId.equals(oldId))).get();
+      final cardIds = cardsToTrash.map((c) => c.id).toList();
+
+      if (cardIds.isNotEmpty) {
+        await db.batch((batch) {
+          // 2. Abhängige Preise restlos löschen
+          batch.deleteWhere(db.cardMarketPrices, (t) => t.cardId.isIn(cardIds));
+          batch.deleteWhere(db.tcgPlayerPrices, (t) => t.cardId.isIn(cardIds));
+          batch.deleteWhere(db.customCardPrices, (t) => t.cardId.isIn(cardIds));
+
+          // 3. Aus dem Inventar löschen
+          batch.deleteWhere(db.userCards, (t) => t.cardId.isIn(cardIds));
+
+          // 4. Binder-Slots reparieren! 
+          // (Wir löschen den Slot nicht, sondern machen ihn wieder zu einem leeren Platzhalter)
+          batch.update(
+            db.binderCards,
+            const BinderCardsCompanion(
+              isPlaceholder: Value(true),
+              cardId: Value.absent(),
+              userCardId: Value.absent(),
+              variant: Value.absent()
+            ),
+            where: (t) => t.cardId.isIn(cardIds),
+          );
+
+          // 5. Die Karten selbst löschen
+          batch.deleteWhere(db.cards, (t) => t.setId.equals(oldId));
+        });
+      }
+
+      // 6. Das Set selbst löschen
+      await (db.delete(db.cardSets)..where((t) => t.id.equals(oldId))).go();
+
+      // 7. Eventuell übrig gebliebene alte Mappings löschen
+      await (db.delete(db.setMappings)..where((t) => t.tcgdexId.equals(oldId))).go();
+    }
+
+    print('✅ Aufräumen beendet!');
   }
 }

@@ -27,6 +27,8 @@ void main() async {
   // bricht die Funktion (dank unserer Prüfung) sofort ab und kostet keine Zeit.
   final initializer = DatabaseInitializer(database);
   await initializer.seedInitialMappings();
+  //alte sets löschen nach neuen referenzen 
+  //await initializer.cleanUpOldSets(['mcd22']);
   // -------------------------------------------------------
 
   runApp(
