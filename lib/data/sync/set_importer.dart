@@ -323,6 +323,7 @@ class SetImporter {
     drift.Value<bool> dbHasRev = drift.Value(v['reverse'] == true);
     drift.Value<bool> dbHasPromo = drift.Value(v['wPromo'] == true);
 
+    // --- FLAGS für die Smart-Update-Logik (Schutzschilde) ---
     drift.Value<bool> dbHasManualTranslationsCard = const drift.Value.absent();
     drift.Value<bool> dbHasManualImagesCard = const drift.Value.absent();
     drift.Value<bool> dbHasManualStatsCard = const drift.Value.absent();
@@ -333,11 +334,12 @@ class SetImporter {
         bool apiHasRealTranslation = nameDeApi != null && nameDeApi.isNotEmpty && nameDeApi.toLowerCase() != nameEn.toLowerCase();
         if (apiHasRealTranslation) {
            dbNameDe = drift.Value(nameDeApi);
-           dbHasManualTranslationsCard = const drift.Value(false);
+           dbHasManualTranslationsCard = const drift.Value(false); // API hat geliefert -> Schutzschild fällt!
         } else {
-           dbNameDe = const drift.Value.absent();
+           dbNameDe = drift.Value(existingCard.nameDe); // <--- FIX: Alten Wert übergeben!
         }
       }
+      
       // 2. Smarte Karten-Bilder
       if (existingCard.hasManualImages) {
         bool apiHasRealImage = finalImageEn.isNotEmpty;
@@ -346,10 +348,11 @@ class SetImporter {
            dbImgDe = drift.Value(finalImageDe);
            dbHasManualImagesCard = const drift.Value(false);
         } else {
-           dbImgEn = const drift.Value.absent();
-           dbImgDe = const drift.Value.absent();
+           dbImgEn = drift.Value(existingCard.imageUrl); // <--- FIX: Alten Wert übergeben! (Hier crashte es!)
+           dbImgDe = drift.Value(existingCard.imageUrlDe);
         }
       }
+      
       // 3. Smarte Stats (Künstler, Rarity etc.)
       if (existingCard.hasManualStats) {
         bool apiHasRealArtist = artistApi != null && artistApi.isNotEmpty && artistApi.toLowerCase() != 'unknown' && artistApi.toLowerCase() != 'illustrator';
@@ -357,20 +360,21 @@ class SetImporter {
            dbArtist = drift.Value(artistApi);
            dbHasManualStatsCard = const drift.Value(false);
         } else {
-           dbArtist = const drift.Value.absent();
-           dbRarity = const drift.Value.absent();
-           dbHp = const drift.Value.absent();
-           dbCardType = const drift.Value.absent();
-           dbNumber = const drift.Value.absent();
+           dbArtist = drift.Value(existingCard.artist);
+           dbRarity = drift.Value(existingCard.rarity);
+           dbHp = drift.Value(existingCard.hp);
+           dbCardType = drift.Value(existingCard.cardType);
+           dbNumber = drift.Value(existingCard.number); // <--- FIX: Alten Wert übergeben! (Hier crashte es auch)
         }
       }
-      // 4. Varianten bleiben hart gesperrt, bis man sie manuell auflöst
+      
+      // 4. Varianten
       if (existingCard.hasManualVariants) {
-        dbHas1st = const drift.Value.absent();
-        dbHasNormal = const drift.Value.absent();
-        dbHasHolo = const drift.Value.absent();
-        dbHasRev = const drift.Value.absent();
-        dbHasPromo = const drift.Value.absent();
+        dbHas1st = drift.Value(existingCard.hasFirstEdition);
+        dbHasNormal = drift.Value(existingCard.hasNormal);
+        dbHasHolo = drift.Value(existingCard.hasHolo);
+        dbHasRev = drift.Value(existingCard.hasReverse);
+        dbHasPromo = drift.Value(existingCard.hasWPromo);
       }
     }
 

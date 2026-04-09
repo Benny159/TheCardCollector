@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart'; 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../../data/database/app_database.dart' as db; 
 import '../../data/database/database_provider.dart';
@@ -425,18 +427,23 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           padding: const EdgeInsets.all(16),
           color: Colors.white,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch, // Zieht Buttons auf volle Breite
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _isLoadingEditor ? null : _loadMissingImages, 
-                      icon: const Icon(Icons.broken_image), 
-                      label: const Text("Fehlende EN-Bilder laden (Max 100)"),
-                      style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple),
-                    ),
-                  ),
-                ],
+              // --- NEUER SYNC BUTTON ---
+              FilledButton.icon(
+                onPressed: _isLoadingEditor ? null : _syncApiDatabaseFromPC, 
+                icon: const Icon(Icons.sync), 
+                label: const Text("API-Datenbank vom PC importieren (.sqlite)"),
+                style: FilledButton.styleFrom(backgroundColor: Colors.blue),
+              ),
+              const SizedBox(height: 12),
+              
+              // --- ALTER BILDER BUTTON ---
+              FilledButton.icon(
+                onPressed: _isLoadingEditor ? null : _loadMissingImages, 
+                icon: const Icon(Icons.broken_image), 
+                label: const Text("Fehlende EN-Bilder laden (Max 100)"),
+                style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple),
               ),
               const SizedBox(height: 12),
               Row(
@@ -639,5 +646,88 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         ),
       ),
     );
+  }
+
+  // ==========================================
+  // API DATENBANK VOM PC SYNCHRONISIEREN
+  // ==========================================
+  Future<void> _syncApiDatabaseFromPC() async {
+    try {
+      // 1. Datei-Picker öffnen
+      final result = await FilePicker.platform.pickFiles(type: FileType.any);
+      if (result == null || result.files.single.path == null) return;
+
+      final file = File(result.files.single.path!);
+
+      // 2. Warn-Dialog & Bestätigung
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text("API-Datenbank synchronisieren?"),
+          content: const Text(
+            "WICHTIG: Erstelle VORHER ein JSON-Backup deiner Nutzerdaten über das Seitenmenü!\n\n"
+            "Diese Aktion kopiert alle Karten, Sets und Preise aus der gewählten PC-Datei in deine App.\n"
+            "Deine Sammlung bleibt erhalten, aber manuelle Änderungen an Karten (Bilder, Namen) werden durch den PC-Stand überschrieben. Lade danach einfach dein JSON-Backup, um diese manuellen Änderungen wiederherzustellen!"
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Abbrechen")),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.blue),
+              onPressed: () => Navigator.pop(ctx, true), 
+              child: const Text("Sync starten")
+            ),
+          ],
+        )
+      );
+
+      if (confirm != true) return;
+
+      setState(() { _isLoadingEditor = true; _statusTranslator = "Synchronisiere Datenbank..."; });
+      final dbase = ref.read(databaseProvider);
+
+      // --- DIE SQLITE MAGIC ---
+      
+      // A) Foreign Keys kurz aus, damit beim REPLACE von Karten nicht aus Versehen Inventar gelöscht wird!
+      await dbase.customStatement('PRAGMA foreign_keys = OFF;');
+
+      // B) PC Datenbank ankoppeln
+      await dbase.customStatement("ATTACH DATABASE '${file.path}' AS pc_db;");
+
+      // C) Tabellen in einem Rutsch auf C++ Ebene kopieren (Dauert Millisekunden!)
+      await dbase.transaction(() async {
+         await dbase.customStatement("REPLACE INTO card_sets SELECT * FROM pc_db.card_sets;");
+         await dbase.customStatement("REPLACE INTO cards SELECT * FROM pc_db.cards;");
+         await dbase.customStatement("REPLACE INTO pokedex SELECT * FROM pc_db.pokedex;");
+         await dbase.customStatement("REPLACE INTO set_mappings SELECT * FROM pc_db.set_mappings;");
+         
+         // Bei Preisen löschen wir die alten restlos, da die PC-DB die aktuellsten hat
+         await dbase.customStatement("DELETE FROM card_market_prices;");
+         await dbase.customStatement("INSERT INTO card_market_prices SELECT * FROM pc_db.card_market_prices;");
+         
+         await dbase.customStatement("DELETE FROM tcg_player_prices;");
+         await dbase.customStatement("INSERT INTO tcg_player_prices SELECT * FROM pc_db.tcg_player_prices;");
+      });
+
+      // D) Datenbank abkoppeln und Foreign Keys wieder an
+      await dbase.customStatement("DETACH DATABASE pc_db;");
+      await dbase.customStatement('PRAGMA foreign_keys = ON;');
+
+      if (context.mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("✅ Datenbank erfolgreich vom PC synchronisiert!"), backgroundColor: Colors.green)
+         );
+      }
+    } catch (e) {
+      // Fallback: Sicherstellen, dass die DB bei einem Fehler wieder abgekoppelt wird
+      try {
+         final dbase = ref.read(databaseProvider);
+         await dbase.customStatement("DETACH DATABASE pc_db;");
+         await dbase.customStatement('PRAGMA foreign_keys = ON;');
+      } catch (_) {}
+      
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("❌ Fehler beim Sync: $e"), backgroundColor: Colors.red));
+    } finally {
+      setState(() => _isLoadingEditor = false);
+    }
   }
 }
