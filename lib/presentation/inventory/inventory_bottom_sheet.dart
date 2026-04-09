@@ -98,7 +98,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
     final safeBinderId = idExists ? selectedBinderId : -1;
 
     return Container(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomPadding),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 120 + bottomPadding),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),

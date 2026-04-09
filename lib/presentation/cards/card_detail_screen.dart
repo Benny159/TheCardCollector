@@ -153,18 +153,21 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            builder: (context) => InventoryBottomSheet(card: widget.card),
-          ).then((_) => _forceRefresh());
-        },
-        icon: const Icon(Icons.add_card, size: 24),
-        label: const Text("Hinzufügen", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        backgroundColor: Colors.blue[800],
-        foregroundColor: Colors.white,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 100.0),
+        child: FloatingActionButton.extended(
+          onPressed: () {
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              builder: (context) => InventoryBottomSheet(card: widget.card),
+            ).then((_) => _forceRefresh());
+          },
+          icon: const Icon(Icons.add_card, size: 24),
+          label: const Text("Hinzufügen", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          backgroundColor: Colors.blue[800],
+          foregroundColor: Colors.white,
+        ),
       ),
       body: SingleChildScrollView(
         child: Column(
