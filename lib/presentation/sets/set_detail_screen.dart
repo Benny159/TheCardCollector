@@ -185,6 +185,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                   height: 45, width: 80,
                   child: CachedNetworkImage(
                     imageUrl: logoUrl, 
+                    memCacheHeight: 200,
                     fit: BoxFit.contain,
                     placeholder: (_,__) => const SizedBox(), 
                     errorWidget: (_,__,___) => const SizedBox(),
@@ -443,7 +444,8 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                   );
                 },
                 child: CachedNetworkImage(
-                  imageUrl: imageUrl, 
+                  imageUrl: imageUrl,
+                  memCacheHeight: 200, 
                   width: 160, 
                   placeholder: (context, url) => Container(color: Colors.grey[200]), 
                   errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image, color: Colors.grey)),

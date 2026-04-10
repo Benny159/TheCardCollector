@@ -539,7 +539,8 @@ Future<void> _saveToInventory() async {
                                 Text("Neu ($_variant)", style: const TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 4),
                                 CachedNetworkImage(
-                                  imageUrl: widget.card.displayImage, 
+                                  imageUrl: widget.card.displayImage,
+                                  memCacheHeight: 200, 
                                   height: 110,
                                   placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
                                   errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),
@@ -597,6 +598,7 @@ Future<void> _saveToInventory() async {
                                 if (oldCard != null)
                                   CachedNetworkImage(
                                     imageUrl: oldCard.imageUrl, 
+                                    memCacheHeight: 200,
                                     height: 110,
                                     placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
                                     errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),
@@ -617,6 +619,7 @@ Future<void> _saveToInventory() async {
                                 const SizedBox(height: 4),
                                 CachedNetworkImage(
                                   imageUrl: widget.card.displayImage, 
+                                  memCacheHeight: 200,
                                   height: 110,
                                   placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
                                   errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),

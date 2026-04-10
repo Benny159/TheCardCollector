@@ -476,7 +476,7 @@ class _DashboardView extends ConsumerWidget {
                             tag: "top10_${showPerformance ? 'perf' : 'val'}_${item.card.id}_$index",
                             child: CachedNetworkImage(
                               imageUrl: displayImage,
-                              memCacheWidth: 300, 
+                              memCacheWidth: 200, 
                               fadeOutDuration: const Duration(milliseconds: 100), 
                               fadeInDuration: const Duration(milliseconds: 100),
                               placeholder: (context, url) => Container(color: Colors.grey[200]),

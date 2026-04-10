@@ -181,6 +181,7 @@ class BinderHistory extends Table {
 }
 
 @DataClassName('BinderCard')
+@TableIndex(name: 'binder_cards_binder_idx', columns: {#binderId})
 class BinderCards extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get binderId => integer().references(Binders, #id, onDelete: KeyAction.cascade)();

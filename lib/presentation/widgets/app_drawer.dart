@@ -168,7 +168,7 @@ class AppDrawer extends ConsumerWidget {
         else if (val is bool) await prefs.setBool(entry.key, val);
       }
 
-      // 2. Datenbank Modelle parsen
+      // 2. Datenbank Modelle parsen (Noch ungefiltert)
       final editedCards = (data['editedCards'] as List?)?.map((e) => db_models.Card.fromJson(e)).toList() ?? [];
       final userCards = (data['userCards'] as List?)?.map((e) => UserCard.fromJson(e)).toList() ?? [];
       final binderCards = (data['binderCards'] as List?)?.map((e) => BinderCard.fromJson(e)).toList() ?? [];
@@ -179,9 +179,37 @@ class AppDrawer extends ConsumerWidget {
 
       final db = ref.read(databaseProvider);
 
-      // 3. Batch Insert (Striktur nach Reihenfolge wegen Foreign Keys!)
+      // --- NEU: DER SCHMUTZFILTER (Behebt den Foreign Key Error!) ---
+      // Wir holen uns blitzschnell alle existierenden Karten-IDs aus der Datenbank
+      final validCardIdsQuery = await db.customSelect('SELECT id FROM cards').get();
+      final validCardIds = validCardIdsQuery.map((row) => row.read<String>('id')).toSet();
+
+      // Wir filtern das Inventar: Nur Karten behalten, die auch wirklich noch existieren
+      final safeUserCards = userCards.where((c) => validCardIds.contains(c.cardId)).toList();
+      final safeCustomPrices = customPrices.where((c) => validCardIds.contains(c.cardId)).toList();
+      final safeEditedCards = editedCards.where((c) => validCardIds.contains(c.id)).toList();
+
+      // Binder-Karten reparieren (Wenn eine Karte gelöscht wurde, wird der Slot wieder leer!)
+      final safeBinderCards = binderCards.map((c) {
+        if (c.cardId != null && !validCardIds.contains(c.cardId)) {
+          // Geisterkarte entdeckt -> Verwandle Slot in leeren Platzhalter
+          return BinderCard(
+            id: c.id,
+            binderId: c.binderId,
+            pageIndex: c.pageIndex,
+            slotIndex: c.slotIndex,
+            isPlaceholder: true, // Wieder leer!
+            cardId: null,
+            userCardId: null,
+            variant: null,
+          );
+        }
+        return c;
+      }).toList();
+      // -------------------------------------------------------------
+
+      // 3. Batch Insert (Jetzt mit den SAFE-Listen!)
       await db.batch((batch) {
-        // Erst Kinder löschen, dann Eltern
         batch.deleteAll(db.binderCards);
         batch.deleteAll(db.binderHistory); 
         batch.deleteAll(db.binders);       
@@ -189,13 +217,12 @@ class AppDrawer extends ConsumerWidget {
         batch.deleteAll(db.customCardPrices);
         batch.deleteAll(db.portfolioHistory);
 
-        // Dann Eltern einfügen, dann Kinder
-        batch.insertAllOnConflictUpdate(db.cards, editedCards); // Schreibt deine manuellen Bilder & custom Price Flags zurück!
-        batch.insertAll(db.userCards, userCards);
+        batch.insertAllOnConflictUpdate(db.cards, safeEditedCards); // <-- safeList
+        batch.insertAll(db.userCards, safeUserCards);               // <-- safeList
         batch.insertAll(db.binders, binders);     
-        batch.insertAll(db.binderCards, binderCards); 
+        batch.insertAll(db.binderCards, safeBinderCards);           // <-- safeList
         batch.insertAll(db.binderHistory, binderHistory);
-        batch.insertAll(db.customCardPrices, customPrices);
+        batch.insertAll(db.customCardPrices, safeCustomPrices);     // <-- safeList
         batch.insertAll(db.portfolioHistory, portfolioHistory);
       });
 

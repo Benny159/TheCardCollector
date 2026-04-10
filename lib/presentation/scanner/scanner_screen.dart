@@ -548,6 +548,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                     borderRadius: BorderRadius.circular(8),
                     child: CachedNetworkImage(
                       imageUrl: card.imageUrlDe ?? card.imageUrl,
+                      memCacheHeight: 200,
                       fit: BoxFit.cover,
                       placeholder: (_,__) => Container(color: Colors.grey[200]),
                       errorWidget: (c, e, s) => const Icon(Icons.broken_image, size: 50, color: Colors.grey),
@@ -609,6 +610,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                    child: ClipRRect(
                                      borderRadius: BorderRadius.circular(6),
                                      child: CachedNetworkImage(
+                                       memCacheHeight: 200,
                                        imageUrl: alt.imageUrlDe ?? alt.imageUrl, 
                                        width: 45, height: 63, fit: BoxFit.cover, // Etwas größer, da Shop-Links weg sind
                                        placeholder: (_,__) => Container(width: 45, height: 63, color: Colors.grey[300]),
@@ -679,6 +681,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                         height: 20, width: 40,
                                         child: CachedNetworkImage(
                                           imageUrl: _scannedSet!.logoUrlDe ?? _scannedSet!.logoUrl!,
+                                          memCacheHeight: 200,
                                           fit: BoxFit.contain,
                                           errorWidget: (_,__,___) => const SizedBox(),
                                         )

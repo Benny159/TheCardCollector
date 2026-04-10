@@ -380,6 +380,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
                               const SizedBox(height: 4),
                               CachedNetworkImage(
                                 imageUrl: widget.card.displayImage, 
+                                memCacheHeight: 200,
                                 height: 110,
                                 placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
                                 errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),
@@ -436,7 +437,8 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
                               const SizedBox(height: 4),
                               if (oldCard != null)
                                 CachedNetworkImage(
-                                  imageUrl: oldCard.imageUrl, 
+                                  imageUrl: oldCard.imageUrl,
+                                  memCacheHeight: 200, 
                                   height: 110,
                                   placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
                                   errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),
@@ -457,6 +459,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
                               const SizedBox(height: 4),
                               CachedNetworkImage(
                                 imageUrl: widget.card.displayImage, 
+                                memCacheHeight: 200,
                                 height: 110,
                                 placeholder: (_,__) => const SizedBox(height: 110, child: Center(child: CircularProgressIndicator())),
                                 errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50),

@@ -191,6 +191,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
               child: card != null 
                 ? CachedNetworkImage(
                     imageUrl: card.imageUrl,
+                    memCacheHeight: 200,
                     fit: BoxFit.contain,
                     placeholder: (context, url) => const SizedBox(),
                     errorWidget: (context, url, error) => const Icon(Icons.broken_image, size: 20, color: Colors.grey),

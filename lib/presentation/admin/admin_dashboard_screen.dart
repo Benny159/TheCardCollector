@@ -530,6 +530,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                                       borderRadius: BorderRadius.circular(4),
                                       child: CachedNetworkImage(
                                         imageUrl: value.text,
+                                        memCacheHeight: 200,
                                         fit: BoxFit.cover,
                                         errorWidget: (_,__,___) => const Icon(Icons.broken_image, color: Colors.red),
                                       ),

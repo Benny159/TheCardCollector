@@ -203,6 +203,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                                 borderRadius: BorderRadius.circular(12),
                                 child: CachedNetworkImage(
                                   imageUrl: displayImage,
+                                  memCacheHeight: 400,
                                   fit: BoxFit.contain,
                                   placeholder: (_, __) => const AspectRatio(aspectRatio: 0.7, child: Center(child: CircularProgressIndicator())),
                                   errorWidget: (_, __, ___) => const AspectRatio(aspectRatio: 0.7, child: Icon(Icons.broken_image, color: Colors.grey)),
@@ -552,7 +553,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         decoration: BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
         child: Row(
           children: [
-            if (logo != null) SizedBox(height: 40, width: 80, child: CachedNetworkImage(imageUrl: logo, fit: BoxFit.contain, errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 24))),
+            if (logo != null) SizedBox(height: 40, width: 80, child: CachedNetworkImage(imageUrl: logo, memCacheHeight: 400,fit: BoxFit.contain, errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 24))),
             const SizedBox(width: 16),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(set.nameDe ?? set.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), // Vergrößert
@@ -1306,7 +1307,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   }
 
   void _openFullscreenImage(BuildContext context, String imageUrl) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (ctx) => Scaffold(backgroundColor: Colors.black, appBar: AppBar(backgroundColor: Colors.black, iconTheme: const IconThemeData(color: Colors.white)), body: Center(child: InteractiveViewer(child: CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.contain, errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50, color: Colors.grey)))))));
+    Navigator.of(context).push(MaterialPageRoute(builder: (ctx) => Scaffold(backgroundColor: Colors.black, appBar: AppBar(backgroundColor: Colors.black, iconTheme: const IconThemeData(color: Colors.white)), body: Center(child: InteractiveViewer(child: CachedNetworkImage(imageUrl: imageUrl,fit: BoxFit.contain,errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 50, color: Colors.grey)))))));
   }
 
   Future<void> _launchURL(String urlString) async {

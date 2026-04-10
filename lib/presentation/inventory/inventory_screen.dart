@@ -397,6 +397,7 @@ class InventoryScreen extends ConsumerWidget {
               child: apiSet.logoUrl != null 
                 ? CachedNetworkImage(
                     imageUrl: apiSet.logoUrl!, 
+                    memCacheHeight: 200,
                     fit: BoxFit.contain,
                     placeholder: (_,__) => const SizedBox(),
                     errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 20, color: Colors.grey),
@@ -554,6 +555,7 @@ class _InventoryCardTile extends ConsumerWidget {
               builder: (context) {
                 Widget imageWidget = CachedNetworkImage(
                   imageUrl: displayImage,
+                  memCacheHeight: 200,
                   fit: BoxFit.contain,
                   placeholder: (context, url) => Container(color: Colors.grey[200]),
                   errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
