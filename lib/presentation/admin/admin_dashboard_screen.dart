@@ -69,6 +69,36 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   bool _isLoadingEditor = false;
   List<CardEditorItem> _editorItems = [];
   final TextEditingController _searchCtrl = TextEditingController();
+  final TextEditingController _newNumberCtrl = TextEditingController();
+  final TextEditingController _newNameEnCtrl = TextEditingController();
+  final TextEditingController _newNameDeCtrl = TextEditingController();
+  final TextEditingController _newImgCtrl = TextEditingController();
+  final TextEditingController _newArtistCtrl = TextEditingController();
+  String? _newSelectedSetId;
+  List<dynamic> _availableSets = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMissingImages();
+    // Falls du den Namen-Gruppierer aus der letzten Nachricht nutzt:
+    // _loadMissingTranslations(); 
+    _loadSetsForDropdown(); // <--- NEU
+  }
+
+  Future<void> _loadSetsForDropdown() async {
+    final dbase = ref.read(databaseProvider);
+    // Lade alle Sets sortiert nach Release-Datum (Neueste zuerst)
+    final sets = await (dbase.select(dbase.cardSets)
+      ..orderBy([(t) => drift.OrderingTerm(expression: t.releaseDate, mode: drift.OrderingMode.desc)])
+    ).get();
+    
+    if (mounted) {
+      setState(() {
+        _availableSets = sets;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -312,7 +342,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         backgroundColor: Colors.grey[100],
         appBar: AppBar(
@@ -326,6 +356,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             tabs: [
               Tab(icon: Icon(Icons.translate), text: "Übersetzer"),
               Tab(icon: Icon(Icons.image_search), text: "Bilder & Daten"),
+              Tab(icon: Icon(Icons.add_card), text: "Neue Karte")
             ],
           ),
         ),
@@ -333,6 +364,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           children: [
             _buildTranslatorTab(),
             _buildImageManagerTab(),
+            _buildCreateCardTab(),
           ],
         ),
       ),
@@ -649,6 +681,79 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
+  Widget _buildCreateCardTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text("Neue Karte manuell anlegen", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const Text("Ideal für Promo-Karten. Verwende die exakte Karten-Nummer (z.B. '030' oder '151'), damit sie später nahtlos mit API-Updates verschmilzt!", style: TextStyle(color: Colors.grey)),
+          const SizedBox(height: 20),
+
+          // SET DROPDOWN
+          DropdownButtonFormField<String>(
+            value: _newSelectedSetId,
+            decoration: const InputDecoration(labelText: 'Set auswählen (Pflicht)', border: OutlineInputBorder()),
+            isExpanded: true,
+            items: _availableSets.map((set) {
+              return DropdownMenuItem<String>(
+                value: set.id,
+                child: Text("${set.name} (${set.id})", overflow: TextOverflow.ellipsis),
+              );
+            }).toList(),
+            onChanged: (val) => setState(() => _newSelectedSetId = val),
+          ),
+          const SizedBox(height: 16),
+
+          // KARTEN NUMMER
+          TextField(
+            controller: _newNumberCtrl,
+            decoration: const InputDecoration(labelText: 'Karten-Nummer (z.B. 030 oder 151)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.tag)),
+          ),
+          const SizedBox(height: 16),
+
+          // ENGLISCHER NAME
+          TextField(
+            controller: _newNameEnCtrl,
+            decoration: const InputDecoration(labelText: 'Name (Englisch) (Pflicht)', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 16),
+
+          // DEUTSCHER NAME
+          TextField(
+            controller: _newNameDeCtrl,
+            decoration: const InputDecoration(labelText: 'Name (Deutsch) (Optional)', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 16),
+
+          // BILD URL
+          TextField(
+            controller: _newImgCtrl,
+            decoration: const InputDecoration(labelText: 'Bild URL (.png/.jpg) (Optional aber empfohlen)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.image)),
+          ),
+          const SizedBox(height: 16),
+
+          // KÜNSTLER
+          TextField(
+            controller: _newArtistCtrl,
+            decoration: const InputDecoration(labelText: 'Künstler (Optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.brush)),
+          ),
+          const SizedBox(height: 24),
+
+          // SPEICHERN BUTTON
+          FilledButton.icon(
+            style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), backgroundColor: Colors.green),
+            onPressed: _createNewCard,
+            icon: const Icon(Icons.save),
+            label: const Text("Karte in Datenbank speichern", style: TextStyle(fontSize: 16)),
+          )
+        ],
+      ),
+    );
+  }
+
   // ==========================================
   // API DATENBANK VOM PC SYNCHRONISIEREN
   // ==========================================
@@ -729,6 +834,66 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("❌ Fehler beim Sync: $e"), backgroundColor: Colors.red));
     } finally {
       setState(() => _isLoadingEditor = false);
+    }
+  }
+
+  Future<void> _createNewCard() async {
+    final setId = _newSelectedSetId;
+    final number = _newNumberCtrl.text.trim();
+    final nameEn = _newNameEnCtrl.text.trim();
+    final nameDe = _newNameDeCtrl.text.trim();
+    final imgUrl = _newImgCtrl.text.trim();
+    final artist = _newArtistCtrl.text.trim();
+
+    if (setId == null || number.isEmpty || nameEn.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("❌ Set, Nummer und EN-Name sind Pflichtfelder!"), backgroundColor: Colors.red));
+      return;
+    }
+
+    // 1. Konstruiere die exakte TCGdex ID (z.B. "sve-017")
+    final String cardId = "$setId-$number".toLowerCase();
+
+    // --- NEU: Wir filtern alle Buchstaben raus, damit aus "017" die echte Zahl 17 wird! ---
+    int sortNum = int.tryParse(number.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+
+    final dbase = ref.read(databaseProvider);
+
+    try {
+      // 2. Karte in die Datenbank hämmern (JETZT MIT UPDATE-FUNKTION & SORTIERUNG)
+      await dbase.into(dbase.cards).insertOnConflictUpdate(
+        db.CardsCompanion.insert(
+          id: cardId,
+          setId: setId,
+          name: nameEn,
+          number: number,
+          sortNumber: drift.Value(sortNum), // <--- HIER IST DER FIX FÜR DIE REIHENFOLGE!
+          imageUrl: imgUrl,
+          nameDe: nameDe.isNotEmpty ? drift.Value(nameDe) : const drift.Value.absent(),
+          artist: artist.isNotEmpty ? drift.Value(artist) : const drift.Value.absent(),
+          hasNormal: const drift.Value(true),
+          hasHolo: const drift.Value(true),
+          hasReverse: const drift.Value(true),
+          hasWPromo: const drift.Value(true), 
+          hasManualImages: const drift.Value(true),
+          hasManualTranslations: const drift.Value(true),
+          hasManualStats: const drift.Value(true),
+          hasManualVariants: const drift.Value(true),
+        )
+      );
+
+      // 3. UI aufräumen
+      setState(() {
+        _newNumberCtrl.clear();
+        _newNameEnCtrl.clear();
+        _newNameDeCtrl.clear();
+        _newImgCtrl.clear();
+        _newArtistCtrl.clear();
+      });
+
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("✅ Karte $cardId erfolgreich gespeichert!"), backgroundColor: Colors.green));
+
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("❌ Fehler: $e"), backgroundColor: Colors.red));
     }
   }
 }
