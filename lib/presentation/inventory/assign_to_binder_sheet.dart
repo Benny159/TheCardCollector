@@ -245,18 +245,33 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
          return false;
       }
 
-      final cWordsDe = getCoreWords(cardNameDe);
-      final cWordsEn = getCoreWords(cardNameEn);
-
       final query = db.select(db.binderCards).join([
         drift.innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
       ]);
 
+      // --- PERFORMANCE OPTIMIERUNG: Grobe Vorfilterung in der Datenbank ---
+      final allCoreWords = {...getCoreWords(cardNameDe), ...getCoreWords(cardNameEn)}.where((w) => w.length > 1).toList();
+
+      drift.Expression<bool> baseWhere;
       if (selectedBinderId != -1) {
-        query.where(db.binderCards.binderId.equals(selectedBinderId));
+        baseWhere = db.binderCards.binderId.equals(selectedBinderId);
       } else {
-        query.where(db.binders.isFull.equals(false) & db.binders.rowsPerPage.isBiggerThanValue(0)); 
+        baseWhere = db.binders.isFull.equals(false) & db.binders.rowsPerPage.isBiggerThanValue(0); 
       }
+
+      if (allCoreWords.isNotEmpty) {
+        final placeholderConditions = allCoreWords
+            .map((word) => db.binderCards.placeholderLabel.lower().like('%$word%'))
+            .toList();
+        var combinedPlaceholderCondition = placeholderConditions.first;
+        for (var i = 1; i < placeholderConditions.length; i++) {
+            combinedPlaceholderCondition = combinedPlaceholderCondition | placeholderConditions[i];
+        }
+        query.where(baseWhere & combinedPlaceholderCondition);
+      } else {
+        query.where(baseWhere);
+      }
+      // --------------------------------------------------------------------
 
       final allJoined = await query.get();
       final allSlots = allJoined.map((row) => _SlotInfo(row.readTable(db.binderCards), row.readTable(db.binders))).toList();
@@ -275,6 +290,9 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
 
         if (isFormMismatch(pLabel)) return false;
         
+        final cWordsDe = getCoreWords(cardNameDe);
+        final cWordsEn = getCoreWords(cardNameEn);
+
         final pWords = getCoreWords(pLabel);
         if (pWords.isEmpty) return false;
 

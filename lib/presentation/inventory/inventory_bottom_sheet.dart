@@ -671,7 +671,7 @@ Future<void> _saveToInventory() async {
 
   // Hilfsmethode, um doppelten Code am Ende zu vermeiden
   void _closeAndShowSuccess(String binderMessage, bool showOrangeBanner) {
-      ref.invalidate(inventoryProvider); 
+      // ref.invalidate(inventoryProvider); 
       ref.invalidate(searchResultsProvider);
       ref.invalidate(cardsForSetProvider(widget.card.setId));
       ref.invalidate(setStatsProvider(widget.card.setId));

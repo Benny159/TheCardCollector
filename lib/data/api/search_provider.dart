@@ -338,14 +338,36 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
 
     final cardIds = rows.map((r) => r.readTable(db.userCards).cardId).toList();
     
-    // 2. Preise laden
-    final allCmPrices = await (db.select(db.cardMarketPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
-    final allTcgPrices = await (db.select(db.tcgPlayerPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
-    final allCustomPrices = await (db.select(db.customCardPrices)..where((tbl) => tbl.cardId.isIn(cardIds))).get();
+    // 2. Preise laden (WICHTIG: Direkt in SQL sortieren lassen!)
+    final allCmPrices = await (db.select(db.cardMarketPrices)
+      ..where((tbl) => tbl.cardId.isIn(cardIds))
+      ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)]) // SQL sortiert!
+    ).get();
+    
+    final allTcgPrices = await (db.select(db.tcgPlayerPrices)
+      ..where((tbl) => tbl.cardId.isIn(cardIds))
+      ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)]) // SQL sortiert!
+    ).get();
+    
+    final allCustomPrices = await (db.select(db.customCardPrices)
+      ..where((tbl) => tbl.cardId.isIn(cardIds))
+      ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)]) // SQL sortiert!
+    ).get();
     
     final cmPriceMap = _getLatestCmPrices(allCmPrices);
     final tcgPriceMap = _getLatestTcgPrices(allTcgPrices);
     final customPriceMap = _getLatestCustomPrices(allCustomPrices);
+
+    // --- PERFORMANCE OPTIMIERUNG: Keine Dart .sort() Aufrufe mehr! ---
+    final Map<String, List<CardMarketPrice>> cmHistoryMap = {};
+    for (var p in allCmPrices) { cmHistoryMap.putIfAbsent(p.cardId, () => []).add(p); }
+
+    final Map<String, List<TcgPlayerPrice>> tcgHistoryMap = {};
+    for (var p in allTcgPrices) { tcgHistoryMap.putIfAbsent(p.cardId, () => []).add(p); }
+
+    final Map<String, List<CustomCardPrice>> customHistoryMap = {};
+    for (var p in allCustomPrices) { customHistoryMap.putIfAbsent(p.cardId, () => []).add(p); }
+    // --------------------------------------------------------------------------
 
     // 3. ALLE Binder-Zuweisungen für die Karten des Users laden
     final binderCardsQuery = db.select(db.binderCards).join([
@@ -453,31 +475,32 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
          final targetDate = userCard.createdAt;
          
          if (usedSource == 'tcgplayer' && allTcgPrices.isNotEmpty) {
-            var closest = allTcgPrices.where((e) => e.cardId == dbCard.id && (e.fetchedAt.isBefore(targetDate) || e.fetchedAt.isAtSameMomentAs(targetDate))).toList();
-            if (closest.isEmpty) {
-              var fList = allTcgPrices.where((e) => e.cardId == dbCard.id).toList();
-              if (fList.isNotEmpty) { fList.sort((a,b) => a.fetchedAt.compareTo(b.fetchedAt)); closest = [fList.first]; }
-            }
-            if (closest.isNotEmpty) { 
-              closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt)); 
-              final p = closest.first;
+            final history = tcgHistoryMap[dbCard.id];
+            if (history != null && history.isNotEmpty) {
+              final index = history.lastIndexWhere((p) => !p.fetchedAt.isAfter(targetDate));
+              TcgPlayerPrice? p;
+              if (index != -1) {
+                p = history[index];
+              } else {
+                p = history.first;
+              }
               double hp = 0.0;
-              if (isReverse) {
-                hp = p.reverseMarket ?? 0.0;
-              } else if (isHolo) hp = p.holoMarket ?? 0.0;
-              else hp = p.normalMarket ?? 0.0;
-              if (hp == 0.0) hp = p.normalMarket ?? p.holoMarket ?? p.reverseMarket ?? 0.0;
+              if (isReverse) { hp = p.reverseMarket ?? 0.0; } 
+              else if (isHolo) { hp = p.holoMarket ?? 0.0; }
+              else { hp = p.normalMarket ?? 0.0; }
+              if (hp == 0.0) { hp = p.normalMarket ?? p.holoMarket ?? p.reverseMarket ?? 0.0; }
               purchasePrice = hp;
             }
          } else if (usedSource == 'cardmarket' && allCmPrices.isNotEmpty) {
-            var closest = allCmPrices.where((e) => e.cardId == dbCard.id && (e.fetchedAt.isBefore(targetDate) || e.fetchedAt.isAtSameMomentAs(targetDate))).toList();
-            if (closest.isEmpty) {
-              var fList = allCmPrices.where((e) => e.cardId == dbCard.id).toList();
-              if (fList.isNotEmpty) { fList.sort((a,b) => a.fetchedAt.compareTo(b.fetchedAt)); closest = [fList.first]; }
-            }
-            if (closest.isNotEmpty) { 
-              closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt)); 
-              final p = closest.first;
+            final history = cmHistoryMap[dbCard.id];
+            if (history != null && history.isNotEmpty) {
+              final index = history.lastIndexWhere((p) => !p.fetchedAt.isAfter(targetDate));
+              CardMarketPrice? p;
+              if (index != -1) {
+                p = history[index];
+              } else {
+                p = history.first;
+              }
               double hp = 0.0;
               if (dbCard.hasFirstEdition) {
                  hp = isFirstEd ? (isHolo ? p.trend ?? 0.0 : p.trendHolo ?? 0.0) : (isHolo ? p.trendHolo ?? 0.0 : p.trend ?? 0.0);
