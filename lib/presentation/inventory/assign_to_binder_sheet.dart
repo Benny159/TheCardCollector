@@ -8,7 +8,7 @@ import '../../data/database/app_database.dart';
 import '../../domain/models/api_card.dart';
 import '../../domain/logic/binder_service.dart';
 
-// Wir nutzen denselben Provider für die Vorauswahl wie beim Inventar
+import '../../data/api/search_provider.dart' show inventoryItemProvider, inventoryIdsProvider;
 import 'inventory_bottom_sheet.dart' show lastSelectedBinderProvider;
 
 class _SlotInfo {
@@ -204,6 +204,8 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
                ScaffoldMessenger.of(context).clearSnackBars();
                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('In die Bulk Box geworfen!'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
              }
+             ref.invalidate(inventoryItemProvider(_selectedUserCard!.id));
+             ref.invalidate(inventoryIdsProvider);
              return; 
           }
         }
@@ -499,7 +501,6 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
 
           if (userConfirmed == true) {
             await binderService.fillSlot(slot.id, widget.card.id, _selectedUserCard!.id, variant: _selectedUserCard!.variant);
-            binderService.recalculateBinderValue(slot.binderId);
             didFill = true;
             binderMessage = "\nund erfolgreich in Binder-Slot einsortiert!";
           }
@@ -527,6 +528,10 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
           )
         );
       }
+      
+      // Cache busten für genau diese Karte!
+      ref.invalidate(inventoryItemProvider(_selectedUserCard!.id));
+      ref.invalidate(inventoryIdsProvider);
 
     } catch (e) {
       if (mounted) {

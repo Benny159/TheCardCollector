@@ -353,14 +353,14 @@ Future<void> _saveToInventory() async {
                  ScaffoldMessenger.of(context).clearSnackBars();
                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diese Box ist als "Voll" markiert! Karte wurde nur ins Inventar gelegt.'), backgroundColor: Colors.orange, behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
                }
-               _closeAndShowSuccess("", true);
+               _closeAndShowSuccess("", true, targetUserCardId);
                return; 
             } else if (targetBinder.rowsPerPage == 0) {
                for (int i = 0; i < _quantity; i++) {
                  // --- FIX: targetUserCardId wird an die Bulk Box übergeben! ---
                  await binderService.addCardToBulkBox(selectedBinderId, widget.card.id, targetUserCardId, _variant);
                }
-               _closeAndShowSuccess("\nund in die Bulk Box geworfen!", false);
+               _closeAndShowSuccess("\nund in die Bulk Box geworfen!", false, targetUserCardId);
                return; 
             }
           }
@@ -645,7 +645,6 @@ Future<void> _saveToInventory() async {
               await binderService.fillSlot(slot.id, widget.card.id, targetUserCardId, variant: _variant);
               slotsFilled++;
               quantityLeft--;
-              binderService.recalculateBinderValue(slot.binderId);
             }
           }
           
@@ -662,7 +661,7 @@ Future<void> _saveToInventory() async {
       }
 
       // Zum Schluss aufrufen
-      _closeAndShowSuccess(binderMessage, showOrangeBanner);
+      _closeAndShowSuccess(binderMessage, showOrangeBanner, targetUserCardId);
 
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
@@ -670,8 +669,11 @@ Future<void> _saveToInventory() async {
   }
 
   // Hilfsmethode, um doppelten Code am Ende zu vermeiden
-  void _closeAndShowSuccess(String binderMessage, bool showOrangeBanner) {
-      // ref.invalidate(inventoryProvider); 
+  void _closeAndShowSuccess(String binderMessage, bool showOrangeBanner, int targetUserCardId) {
+      // Cache gezielt NUR für diese Karte löschen, damit das Inventar blitzschnell updatet!
+      ref.invalidate(inventoryItemProvider(targetUserCardId));
+      // ID Liste manuell neu anstoßen, da wir den automatischen Stream gestoppt haben
+      ref.invalidate(inventoryIdsProvider);
       ref.invalidate(searchResultsProvider);
       ref.invalidate(cardsForSetProvider(widget.card.setId));
       ref.invalidate(setStatsProvider(widget.card.setId));
