@@ -11,7 +11,7 @@ void main() async {
     final List<dynamic> sets = jsonDecode(response.body)['data'];
     
     print('✅ ${sets.length} Sets gefunden!\n');
-    print('ID'.padRight(15) + ' | ' + 'Cardmarket Code'.padRight(15) + ' | ' + 'Name');
+    print('${'ID'.padRight(15)} | ${'Cardmarket Code'.padRight(15)} | Name');
     print('-' * 70);
 
     // Wir sortieren sie alphabetisch nach dem Namen, damit du sie leichter findest

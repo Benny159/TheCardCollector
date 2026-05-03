@@ -283,8 +283,9 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
           if (recognizedHP != null && card.hp == recognizedHP) score += 20;
           if (recognizedCardNum != null && card.number.isNotEmpty) {
               String dbNum = card.number.replaceAll(RegExp(r'^0+'), '').toLowerCase();
-              if (dbNum == recognizedCardNum) score += 50; 
-              else if (int.tryParse(dbNum) != null && int.tryParse(recognizedCardNum) != null && int.parse(dbNum) == int.parse(recognizedCardNum)) score += 50; 
+              if (dbNum == recognizedCardNum) {
+                score += 50;
+              } else if (int.tryParse(dbNum) != null && int.tryParse(recognizedCardNum) != null && int.parse(dbNum) == int.parse(recognizedCardNum)) score += 50; 
           }
           if (recognizedMaxNum != null) {
               int? ocrMax = int.tryParse(recognizedMaxNum);

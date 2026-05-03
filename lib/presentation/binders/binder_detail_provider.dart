@@ -126,8 +126,9 @@ final pref = card.preferredPriceSource;
             // Hilfsfunktion: TCG Preis holen
             double getTcg() {
                double p = 0.0;
-               if (isReverse) p = tcgPrice?.reverseMarket ?? 0.0;
-               else if (isHolo) p = tcgPrice?.holoMarket ?? 0.0;
+               if (isReverse) {
+                 p = tcgPrice?.reverseMarket ?? 0.0;
+               } else if (isHolo) p = tcgPrice?.holoMarket ?? 0.0;
                else p = tcgPrice?.normalMarket ?? 0.0;
                if (p == 0.0) p = tcgPrice?.normalMarket ?? tcgPrice?.holoMarket ?? tcgPrice?.reverseMarket ?? 0.0;
                return p;
@@ -160,8 +161,9 @@ final pref = card.preferredPriceSource;
             } else if (pref == 'cardmarket' && cmCur > 0.0) {
                 price = cmCur;
             } else {
-                if (cmCur > 0.0) price = cmCur; 
-                else if (tcgCur > 0.0) price = tcgCur;
+                if (cmCur > 0.0) {
+                  price = cmCur;
+                } else if (tcgCur > 0.0) price = tcgCur;
                 else if (customPrice != null) price = customPrice;
             }
         }

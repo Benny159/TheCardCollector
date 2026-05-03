@@ -618,8 +618,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
        final tcg = widget.card.tcgplayer;
        if (tcg == null) return 0.0;
        double p = 0.0;
-       if (isReverse) p = tcg.prices?.reverseHolofoil?.market ?? 0.0;
-       else if (isHolo) p = tcg.prices?.holofoil?.market ?? 0.0;
+       if (isReverse) {
+         p = tcg.prices?.reverseHolofoil?.market ?? 0.0;
+       } else if (isHolo) p = tcg.prices?.holofoil?.market ?? 0.0;
        else p = tcg.prices?.normal?.market ?? 0.0;
        if (p == 0.0) p = tcg.prices?.normal?.market ?? tcg.prices?.holofoil?.market ?? tcg.prices?.reverseHolofoil?.market ?? 0.0;
        return p;
@@ -671,8 +672,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     double tcgCur = 0.0;
     if (widget.card.tcgplayer != null) {
        final tcg = widget.card.tcgplayer!;
-       if (isReverse) tcgCur = tcg.prices?.reverseHolofoil?.market ?? 0.0;
-       else if (isHolo) tcgCur = tcg.prices?.holofoil?.market ?? 0.0;
+       if (isReverse) {
+         tcgCur = tcg.prices?.reverseHolofoil?.market ?? 0.0;
+       } else if (isHolo) tcgCur = tcg.prices?.holofoil?.market ?? 0.0;
        else tcgCur = tcg.prices?.normal?.market ?? 0.0;
        if (tcgCur == 0.0) tcgCur = tcg.prices?.normal?.market ?? tcg.prices?.holofoil?.market ?? tcg.prices?.reverseHolofoil?.market ?? 0.0;
     }
@@ -691,12 +693,14 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     // Selbe Entscheidung treffen wie der Preisrechner
     String usedSource = pref;
     // --- FIX: Auch hier den Eigenen Preis berücksichtigen! ---
-    if (pref == 'custom' && _currentCustomPrice != null && _currentCustomPrice! > 0) usedSource = 'custom';
-    else if (pref == 'tcgplayer' && tcgCur > 0.0) usedSource = 'tcgplayer';
+    if (pref == 'custom' && _currentCustomPrice != null && _currentCustomPrice! > 0) {
+      usedSource = 'custom';
+    } else if (pref == 'tcgplayer' && tcgCur > 0.0) usedSource = 'tcgplayer';
     else if (pref == 'cardmarket' && cmCur > 0.0) usedSource = 'cardmarket';
     else {
-        if (cmCur > 0.0) usedSource = 'cardmarket';
-        else if (tcgCur > 0.0) usedSource = 'tcgplayer';
+        if (cmCur > 0.0) {
+          usedSource = 'cardmarket';
+        } else if (tcgCur > 0.0) usedSource = 'tcgplayer';
         else usedSource = 'custom';
     }
 
@@ -724,8 +728,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt));
         final p = closest.first;
         double hp = 0.0;
-        if (isReverse) hp = p.reverseMarket ?? 0.0;
-        else if (isHolo) hp = p.holoMarket ?? 0.0;
+        if (isReverse) {
+          hp = p.reverseMarket ?? 0.0;
+        } else if (isHolo) hp = p.holoMarket ?? 0.0;
         else hp = p.normalMarket ?? 0.0;
         if (hp == 0.0) hp = p.normalMarket ?? p.holoMarket ?? p.reverseMarket ?? 0.0;
         return hp;
@@ -742,8 +747,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         final p = closest.first;
         double hp = 0.0;
         if (widget.card.hasFirstEdition) {
-           if (isHolo) hp = isFirstEd ? (p.trend ?? 0.0) : (p.trendHolo ?? 0.0);
-           else hp = isFirstEd ? (p.trendHolo ?? 0.0) : (p.trend ?? 0.0);
+           if (isHolo) {
+             hp = isFirstEd ? (p.trend ?? 0.0) : (p.trendHolo ?? 0.0);
+           } else {
+             hp = isFirstEd ? (p.trendHolo ?? 0.0) : (p.trend ?? 0.0);
+           }
         } else if (isReverse) {
            hp = p.trendReverse ?? p.trendHolo ?? 0.0;
         } else if (isHolo && !baseIsHolo) {
@@ -1203,7 +1211,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         await (db.delete(db.userCards)..where((t) => t.id.equals(item.id))).go();
       } else {
         await (db.update(db.userCards)..where((t) => t.id.equals(item.id))).write(UserCardsCompanion(quantity: drift.Value(item.quantity - 1)));
-        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("-1"), behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("-1"), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
       }
       await _forceRefresh();
     } catch (e) {
@@ -1254,7 +1262,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     final dexApi = ref.read(tcgDexApiClientProvider);
     final importer = SetImporter(dexApi, dbInst);
     
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aktualisiere Daten...'), behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aktualisiere Daten...'), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
     
     try {
       final setCardsQuery = await (dbInst.select(dbInst.cards)..where((t) => t.setId.equals(widget.card.setId))).get();
@@ -1294,7 +1302,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Aktualisiert!'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500))
+          const SnackBar(content: Text('✅ Aktualisiert!'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500))
         );
       }
     } catch (e) {

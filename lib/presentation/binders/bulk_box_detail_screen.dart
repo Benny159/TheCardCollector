@@ -568,7 +568,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
           if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
         }
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
       }
     }
   }

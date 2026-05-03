@@ -299,8 +299,9 @@ class SetImporter {
 
     String? cardType;
     final cat = data['category']; 
-    if (cat == "Trainer") cardType = "Trainer";
-    else if (cat == "Energy") cardType = "Energy";
+    if (cat == "Trainer") {
+      cardType = "Trainer";
+    } else if (cat == "Energy") cardType = "Energy";
     else if (data['types'] != null && data['types'] is List && (data['types'] as List).isNotEmpty) {
       cardType = (data['types'] as List).first.toString(); 
     }
@@ -412,7 +413,7 @@ class SetImporter {
         final cm = pricing['cardmarket'];
         final double? newTrend = (cm['trend'] as num?)?.toDouble();
         final double? newTrendHolo = (cm['trend-holo'] as num?)?.toDouble();
-        final double? newTrendRev = null; 
+        const double? newTrendRev = null; 
 
         final oldCm = latestCmPrices[cardId];
         if (oldCm == null || oldCm['trend'] != newTrend || oldCm['trendHolo'] != newTrendHolo) {

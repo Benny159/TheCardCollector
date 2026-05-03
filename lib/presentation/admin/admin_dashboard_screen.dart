@@ -636,7 +636,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 onChanged: (val) {
                   setState(() {
                     bool targetState = (checkboxState == null) ? true : (val ?? false);
-                    for (var p in sectionProposals) p.isSelected = targetState;
+                    for (var p in sectionProposals) {
+                      p.isSelected = targetState;
+                    }
                   });
                 },
               ),
@@ -694,7 +696,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
           // SET DROPDOWN
           DropdownButtonFormField<String>(
-            value: _newSelectedSetId,
+            initialValue: _newSelectedSetId,
             decoration: const InputDecoration(labelText: 'Set auswählen (Pflicht)', border: OutlineInputBorder()),
             isExpanded: true,
             items: _availableSets.map((set) {

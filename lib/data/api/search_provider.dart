@@ -396,8 +396,9 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
       double getTcg(ApiTcgPlayer? tcg) {
          if (tcg == null) return 0.0;
          double p = 0.0;
-         if (isReverse) p = tcg.prices?.reverseHolofoil?.market ?? 0.0;
-         else if (isHolo) p = tcg.prices?.holofoil?.market ?? 0.0;
+         if (isReverse) {
+           p = tcg.prices?.reverseHolofoil?.market ?? 0.0;
+         } else if (isHolo) p = tcg.prices?.holofoil?.market ?? 0.0;
          else p = tcg.prices?.normal?.market ?? 0.0;
          if (p == 0.0) p = tcg.prices?.normal?.market ?? tcg.prices?.holofoil?.market ?? tcg.prices?.reverseHolofoil?.market ?? 0.0;
          return p;
@@ -461,8 +462,9 @@ final inventoryProvider = StreamProvider<List<InventoryItem>>((ref) {
               closest.sort((a,b) => b.fetchedAt.compareTo(a.fetchedAt)); 
               final p = closest.first;
               double hp = 0.0;
-              if (isReverse) hp = p.reverseMarket ?? 0.0;
-              else if (isHolo) hp = p.holoMarket ?? 0.0;
+              if (isReverse) {
+                hp = p.reverseMarket ?? 0.0;
+              } else if (isHolo) hp = p.holoMarket ?? 0.0;
               else hp = p.normalMarket ?? 0.0;
               if (hp == 0.0) hp = p.normalMarket ?? p.holoMarket ?? p.reverseMarket ?? 0.0;
               purchasePrice = hp;

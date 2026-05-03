@@ -622,8 +622,9 @@ class BinderService {
           // Hilfsfunktion: TCG Preis holen
           double getTcg() {
              double p = 0.0;
-             if (isReverse) p = tcgPrice?.reverseMarket ?? 0.0;
-             else if (isHolo) p = tcgPrice?.holoMarket ?? 0.0;
+             if (isReverse) {
+               p = tcgPrice?.reverseMarket ?? 0.0;
+             } else if (isHolo) p = tcgPrice?.holoMarket ?? 0.0;
              else p = tcgPrice?.normalMarket ?? 0.0;
              if (p == 0.0) p = tcgPrice?.normalMarket ?? tcgPrice?.holoMarket ?? tcgPrice?.reverseMarket ?? 0.0;
              return p;
@@ -656,8 +657,9 @@ class BinderService {
               singlePrice = cmCur;
           } else {
               // Harter Fallback auf den ersten gefundenen, gültigen Preis
-              if (cmCur > 0.0) singlePrice = cmCur; 
-              else if (tcgCur > 0.0) singlePrice = tcgCur;
+              if (cmCur > 0.0) {
+                singlePrice = cmCur;
+              } else if (tcgCur > 0.0) singlePrice = tcgCur;
               else if (customPrice != null) singlePrice = customPrice;
           }
       }

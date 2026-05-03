@@ -99,7 +99,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
           const SizedBox(height: 8),
           
           DropdownButtonFormField<UserCard>(
-            value: _selectedUserCard,
+            initialValue: _selectedUserCard,
             isDense: true,
             decoration: InputDecoration(
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),

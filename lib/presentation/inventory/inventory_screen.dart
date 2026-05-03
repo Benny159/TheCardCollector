@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
 import 'package:intl/intl.dart' hide TextDirection;
-import 'dart:math' as math; 
 
 import '../../data/api/search_provider.dart';
 import '../cards/card_detail_screen.dart';

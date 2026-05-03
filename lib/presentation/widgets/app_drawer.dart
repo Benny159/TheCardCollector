@@ -162,8 +162,9 @@ class AppDrawer extends ConsumerWidget {
       final prefs = await SharedPreferences.getInstance();
       for (var entry in settings.entries) {
         final val = entry.value;
-        if (val is String) await prefs.setString(entry.key, val);
-        else if (val is int) await prefs.setInt(entry.key, val);
+        if (val is String) {
+          await prefs.setString(entry.key, val);
+        } else if (val is int) await prefs.setInt(entry.key, val);
         else if (val is double) await prefs.setDouble(entry.key, val);
         else if (val is bool) await prefs.setBool(entry.key, val);
       }
