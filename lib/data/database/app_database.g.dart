@@ -6175,6 +6175,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       'CREATE INDEX idx_cmprices_cardid ON card_market_prices (card_id)');
   late final Index idxTcgpricesCardid = Index('idx_tcgprices_cardid',
       'CREATE INDEX idx_tcgprices_cardid ON tcg_player_prices (card_id)');
+  late final Index binderCardsBinderIdx = Index('binder_cards_binder_idx',
+      'CREATE INDEX binder_cards_binder_idx ON binder_cards (binder_id)');
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6195,7 +6197,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         idxCardsSetid,
         idxUsercardsCardid,
         idxCmpricesCardid,
-        idxTcgpricesCardid
+        idxTcgpricesCardid,
+        binderCardsBinderIdx
       ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules(
