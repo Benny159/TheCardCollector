@@ -804,7 +804,22 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       // C) Tabellen in einem Rutsch auf C++ Ebene kopieren (Dauert Millisekunden!)
       await dbase.transaction(() async {
          await dbase.customStatement("REPLACE INTO card_sets SELECT * FROM pc_db.card_sets;");
-         await dbase.customStatement("REPLACE INTO cards SELECT * FROM pc_db.cards;");
+         
+         // --- NEU: Explizites Spalten-Mapping für die cards Tabelle! ---
+         await dbase.customStatement("""
+           REPLACE INTO cards (
+             id, set_id, name, number, sort_number, image_url, name_de, artist, 
+             has_normal, has_holo, has_reverse, has_w_promo, has_first_edition, 
+             has_manual_images, has_manual_translations, has_manual_stats, has_manual_variants
+           ) 
+           SELECT 
+             id, set_id, name, number, sort_number, image_url, name_de, artist, 
+             has_normal, has_holo, has_reverse, has_w_promo, has_first_edition, 
+             has_manual_images, has_manual_translations, has_manual_stats, has_manual_variants 
+           FROM pc_db.cards;
+         """);
+         // ---------------------------------------------------------------
+
          await dbase.customStatement("REPLACE INTO pokedex SELECT * FROM pc_db.pokedex;");
          await dbase.customStatement("REPLACE INTO set_mappings SELECT * FROM pc_db.set_mappings;");
          
