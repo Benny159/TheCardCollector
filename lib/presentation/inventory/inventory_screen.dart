@@ -11,6 +11,10 @@ import 'inventory_bottom_sheet.dart';
 
 final inventorySearchProvider = StateProvider<String>((ref) => '');
 
+// Speichert die IDs/Namen der aktuell aufgeklappten Sets & Binder
+final expandedSetsProvider = StateProvider<Set<String>>((ref) => {});
+final expandedBindersProvider = StateProvider<Set<String>>((ref) => {});
+
 // --- NEU: DIESER PROVIDER ÜBERNIMMT DIE RECHENARBEIT ---
 final processedInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref) {
   // 1. Wir überwachen alle Ausgangsdaten und Filter-Zustände
@@ -159,7 +163,7 @@ class InventoryScreen extends ConsumerWidget {
               Expanded(
                 child: sortedItems.isEmpty 
                   ? const Center(child: Text("Keine Ergebnisse für deine Suche."))
-                  : _buildContent(sortedItems, groupMode),
+                  : _buildContent(sortedItems, groupMode, ref),
               ),
             ],
           );
@@ -170,9 +174,9 @@ class InventoryScreen extends ConsumerWidget {
 
   // --- WIDGETS ---
 
-  Widget _buildContent(List<InventoryItem> items, InventoryGroupMode mode) {
-    if (mode == InventoryGroupMode.bySet) return _buildGroupedBySet(items);
-    if (mode == InventoryGroupMode.byBinder) return _buildGroupedByBinder(items);
+  Widget _buildContent(List<InventoryItem> items, InventoryGroupMode mode, WidgetRef ref) {
+    if (mode == InventoryGroupMode.bySet) return _buildGroupedBySet(items, ref);
+    if (mode == InventoryGroupMode.byBinder) return _buildGroupedByBinder(items, ref);
     return _buildGrid(items); 
   }
 
@@ -370,8 +374,9 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildGroupedBySet(List<InventoryItem> items) {
+  Widget _buildGroupedBySet(List<InventoryItem> items, WidgetRef ref) {
     final grouped = groupBy(items, (item) => item.set.id);
+    final expandedSets = ref.watch(expandedSetsProvider);
     
     final sortedKeys = grouped.keys.toList()..sort((a, b) {
       final dateA = grouped[a]!.first.set.releaseDate;
@@ -379,63 +384,86 @@ class InventoryScreen extends ConsumerWidget {
       return dateB.compareTo(dateA); 
     });
 
-    return ListView.builder(
-      itemCount: sortedKeys.length,
-      padding: const EdgeInsets.only(bottom: 20),
-      itemBuilder: (context, index) {
-        final setId = sortedKeys[index];
-        final setCards = grouped[setId]!;
-        final apiSet = setCards.first.set;
+    return CustomScrollView(
+      slivers: [
+        const SliverPadding(padding: EdgeInsets.only(top: 8)),
+        // .expand() erlaubt es uns, pro Set entweder nur den Header (1 Widget)
+        // oder Header + Grid (2 Widgets) zurückzugeben.
+        ...sortedKeys.expand((setId) {
+          final setCards = grouped[setId]!;
+          final apiSet = setCards.first.set;
+          final isExpanded = expandedSets.contains(setId);
 
-        final setTotalCount = setCards.fold(0, (sum, i) => sum + i.quantity);
-        final setTotalValue = setCards.fold(0.0, (sum, i) => sum + i.totalValue);
+          final setTotalCount = setCards.fold(0, (sum, i) => sum + i.quantity);
+          final setTotalValue = setCards.fold(0.0, (sum, i) => sum + i.totalValue);
 
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          elevation: 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ExpansionTile(
-            leading: SizedBox(
-              width: 50, 
-              height: 30,
-              child: apiSet.logoUrl != null 
-                ? CachedNetworkImage(
-                    imageUrl: apiSet.logoUrl!, 
-                    memCacheHeight: 200,
-                    fit: BoxFit.contain,
-                    placeholder: (_,__) => const SizedBox(),
-                    errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 20, color: Colors.grey),
-                  )
-                : const Icon(Icons.image_not_supported, color: Colors.grey),
-            ),
-            title: Text(apiSet.nameDe ?? apiSet.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            subtitle: Text("$setTotalCount Karten • ${setTotalValue.toStringAsFixed(2)} €", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-            childrenPadding: const EdgeInsets.only(bottom: 12),
-            children: [
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  childAspectRatio: 0.70,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
+          return [
+            // 1. Der Header (ersetzt den Kopf des ExpansionTiles)
+            SliverToBoxAdapter(
+              child: Card(
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                elevation: 1,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    // Auf- und Zuklappen togglen
+                    final current = ref.read(expandedSetsProvider);
+                    if (isExpanded) {
+                      ref.read(expandedSetsProvider.notifier).state = {...current}..remove(setId);
+                    } else {
+                      ref.read(expandedSetsProvider.notifier).state = {...current, setId};
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: ListTile(
+                      leading: SizedBox(
+                        width: 50, height: 30,
+                        child: apiSet.logoUrl != null 
+                          ? CachedNetworkImage(
+                              imageUrl: apiSet.logoUrl!, memCacheHeight: 200, fit: BoxFit.contain,
+                              placeholder: (_,__) => const SizedBox(),
+                              errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 20, color: Colors.grey),
+                            )
+                          : const Icon(Icons.image_not_supported, color: Colors.grey),
+                      ),
+                      title: Text(apiSet.nameDe ?? apiSet.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      subtitle: Text("$setTotalCount Karten • ${setTotalValue.toStringAsFixed(2)} €", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      trailing: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                    ),
+                  ),
                 ),
-                itemCount: setCards.length,
-                itemBuilder: (context, cardIndex) {
-                  return _InventoryCardTile(item: setCards[cardIndex]);
-                },
               ),
-            ],
-          ),
-        );
-      },
+            ),
+            
+            // 2. Das Grid (wird NUR gerendert, wenn aufgeklappt - und absolut Lazy!)
+            if (isExpanded)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: 0.70,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, cardIndex) => _InventoryCardTile(item: setCards[cardIndex]),
+                    childCount: setCards.length,
+                  ),
+                ),
+              ),
+          ];
+        }),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
     );
   }
 
-  Widget _buildGroupedByBinder(List<InventoryItem> items) {
+  Widget _buildGroupedByBinder(List<InventoryItem> items, WidgetRef ref) {
     final grouped = groupBy(items, (item) => item.binderName ?? "Nicht im Binder");
+    final expandedBinders = ref.watch(expandedBindersProvider);
     
     final sortedKeys = grouped.keys.toList()..sort((a, b) {
       if (a == "Nicht im Binder") return 1;
@@ -443,59 +471,79 @@ class InventoryScreen extends ConsumerWidget {
       return a.compareTo(b);
     });
 
-    return ListView.builder(
-      itemCount: sortedKeys.length,
-      padding: const EdgeInsets.only(bottom: 20),
-      itemBuilder: (context, index) {
-        final binderName = sortedKeys[index];
-        final binderCards = grouped[binderName]!;
+    return CustomScrollView(
+      slivers: [
+        const SliverPadding(padding: EdgeInsets.only(top: 8)),
+        ...sortedKeys.expand((binderName) {
+          final binderCards = grouped[binderName]!;
+          final isLoose = binderName == "Nicht im Binder";
+          
+          // "Nicht im Binder" soll standardmäßig offen sein, Binder standardmäßig zu (außer sie wurden angeklickt)
+          final isExpanded = isLoose ? !expandedBinders.contains(binderName) : expandedBinders.contains(binderName);
 
-        final totalCount = binderCards.fold(0, (sum, i) => sum + i.quantity);
-        final totalValue = binderCards.fold(0.0, (sum, i) => sum + i.totalValue);
-        
-        final isLoose = binderName == "Nicht im Binder";
+          final totalCount = binderCards.fold(0, (sum, i) => sum + i.quantity);
+          final totalValue = binderCards.fold(0.0, (sum, i) => sum + i.totalValue);
 
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          elevation: isLoose ? 0 : 2, 
-          color: isLoose ? Colors.grey[50] : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: isLoose ? BorderSide(color: Colors.grey[300]!) : BorderSide.none,
-          ),
-          child: ExpansionTile(
-            initiallyExpanded: !isLoose, 
-            leading: CircleAvatar(
-              backgroundColor: isLoose ? Colors.grey[300] : Colors.blueAccent.withOpacity(0.2),
-              child: Icon(
-                isLoose ? Icons.inventory_2 : Icons.menu_book, 
-                color: isLoose ? Colors.grey[600] : Colors.blueAccent,
-                size: 20,
+          return [
+            SliverToBoxAdapter(
+              child: Card(
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                elevation: isLoose ? 0 : 2, 
+                color: isLoose ? Colors.grey[50] : Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: isLoose ? BorderSide(color: Colors.grey[300]!) : BorderSide.none,
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    final current = ref.read(expandedBindersProvider);
+                    if (expandedBinders.contains(binderName)) {
+                      ref.read(expandedBindersProvider.notifier).state = {...current}..remove(binderName);
+                    } else {
+                      ref.read(expandedBindersProvider.notifier).state = {...current, binderName};
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: isLoose ? Colors.grey[300] : Colors.blueAccent.withOpacity(0.2),
+                        child: Icon(
+                          isLoose ? Icons.inventory_2 : Icons.menu_book, 
+                          color: isLoose ? Colors.grey[600] : Colors.blueAccent,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(binderName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      subtitle: Text("$totalCount Karten • ${totalValue.toStringAsFixed(2)} €", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      trailing: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                    ),
+                  ),
+                ),
               ),
             ),
-            title: Text(binderName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            subtitle: Text("$totalCount Karten • ${totalValue.toStringAsFixed(2)} €", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-            childrenPadding: const EdgeInsets.only(bottom: 12),
-            children: [
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  childAspectRatio: 0.70,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
+            
+            if (isExpanded)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: 0.70,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, cardIndex) => _InventoryCardTile(item: binderCards[cardIndex]),
+                    childCount: binderCards.length,
+                  ),
                 ),
-                itemCount: binderCards.length,
-                itemBuilder: (context, cardIndex) {
-                  return _InventoryCardTile(item: binderCards[cardIndex]);
-                },
               ),
-            ],
-          ),
-        );
-      },
+          ];
+        }),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
     );
   }
 }
