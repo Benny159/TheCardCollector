@@ -11,6 +11,104 @@ import 'inventory_bottom_sheet.dart';
 
 final inventorySearchProvider = StateProvider<String>((ref) => '');
 
+// --- NEU: DIESER PROVIDER ÜBERNIMMT DIE RECHENARBEIT ---
+final processedInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref) {
+  // 1. Wir überwachen alle Ausgangsdaten und Filter-Zustände
+  final inventoryAsync = ref.watch(inventoryProvider);
+  final searchText = ref.watch(inventorySearchProvider);
+  final groupMode = ref.watch(inventoryGroupModeProvider);
+  final sortMode = ref.watch(inventorySortProvider);
+  final isAscending = ref.watch(inventorySortAscendingProvider);
+
+  // 2. Wir führen die schwere Logik nur aus, wenn die Daten fertig geladen sind
+  return inventoryAsync.whenData((allItems) {
+    if (allItems.isEmpty) return [];
+
+    // --- A. FILTERN (Suche) ---
+    var filteredItems = allItems;
+    if (searchText.isNotEmpty) {
+      filteredItems = allItems.where((item) {
+        final nameMatch = item.card.name.toLowerCase().contains(searchText.toLowerCase());
+        final nameDeMatch = item.card.nameDe?.toLowerCase().contains(searchText.toLowerCase()) ?? false;
+        final setMatch = item.set.name.toLowerCase().contains(searchText.toLowerCase());
+        final binderMatch = (item.binderName ?? '').toLowerCase().contains(searchText.toLowerCase());
+        
+        return nameMatch || nameDeMatch || setMatch || binderMatch;
+      }).toList();
+    }
+
+    // --- B. KARTEN ZUSAMMENFASSEN ---
+    if (groupMode != InventoryGroupMode.byBinder) {
+      final Map<String, InventoryItem> mergedMap = {};
+      
+      for (final item in filteredItems) {
+        final company = item.userCard.gradingCompany ?? 'none';
+        final score = item.userCard.gradingScore ?? 'none';
+        final cPrice = item.userCard.customPrice?.toStringAsFixed(2) ?? 'none';
+        
+        final key = "${item.card.id}_${item.variant}_${company}_${score}_$cPrice";
+        
+        if (mergedMap.containsKey(key)) {
+          final existing = mergedMap[key]!;
+          mergedMap[key] = InventoryItem(
+            card: existing.card, set: existing.set,
+            quantity: existing.quantity + item.quantity,
+            variant: existing.variant,
+            totalValue: existing.totalValue + item.totalValue,
+            binderName: null, userCard: existing.userCard, 
+            performance: existing.performance + item.performance, 
+          );
+        } else {
+          mergedMap[key] = InventoryItem(
+            card: item.card, set: item.set,
+            quantity: item.quantity, variant: item.variant,
+            totalValue: item.totalValue, binderName: null, 
+            userCard: item.userCard, performance: item.performance, 
+          );
+        }
+      }
+      filteredItems = mergedMap.values.toList();
+    }
+
+    // --- C. SORTIEREN ---
+    final sortedItems = List<InventoryItem>.from(filteredItems);
+    
+    sortedItems.sort((a, b) {
+      int comp = 0;
+      switch (sortMode) {
+        case InventorySort.value:
+          final singleValA = a.totalValue / (a.quantity > 0 ? a.quantity : 1);
+          final singleValB = b.totalValue / (b.quantity > 0 ? b.quantity : 1);
+          comp = singleValA.compareTo(singleValB);
+          break;
+        case InventorySort.performance:
+          final singlePerfA = a.performance / (a.quantity > 0 ? a.quantity : 1);
+          final singlePerfB = b.performance / (b.quantity > 0 ? b.quantity : 1);
+          comp = singlePerfA.compareTo(singlePerfB);
+          break;
+        case InventorySort.dateAdded:
+          comp = a.userCard.createdAt.compareTo(b.userCard.createdAt);
+          break;
+        case InventorySort.name:
+          comp = (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
+          break;
+        case InventorySort.rarity:
+          comp = (a.card.rarity ?? '').compareTo(b.card.rarity ?? ''); 
+          break;
+        case InventorySort.type:
+          final tA = a.card.cardType ?? 'ZZZ'; 
+          final tB = b.card.cardType ?? 'ZZZ';
+          comp = tA.compareTo(tB);
+          if (comp == 0) comp = (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
+          break;
+      }
+      return isAscending ? comp : -comp;
+    });
+
+    return sortedItems;
+  });
+});
+
 enum InventoryGroupMode { none, bySet, byBinder }
 final inventoryGroupModeProvider = StateProvider<InventoryGroupMode>((ref) => InventoryGroupMode.none);
 
@@ -19,7 +117,9 @@ class InventoryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final inventoryAsync = ref.watch(inventoryProvider);
+    // 1. Wir hören JETZT auf den neuen, verarbeiteten Provider!
+    final processedInventoryAsync = ref.watch(processedInventoryProvider);
+    
     final sortMode = ref.watch(inventorySortProvider);
     final groupMode = ref.watch(inventoryGroupModeProvider); 
     final searchText = ref.watch(inventorySearchProvider);
@@ -28,12 +128,12 @@ class InventoryScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text("Mein Inventar"),
       ),
-      body: inventoryAsync.when(
+      body: processedInventoryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Fehler: $err')),
-        data: (allItems) {
+        data: (sortedItems) {
           
-          if (allItems.isEmpty) {
+          if (sortedItems.isEmpty && searchText.isEmpty) {
             return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -45,103 +145,8 @@ class InventoryScreen extends ConsumerWidget {
               ),
             );
           }
-
-          // 1. FILTERN (Suche)
-          var filteredItems = allItems;
-          if (searchText.isNotEmpty) {
-            filteredItems = allItems.where((item) {
-              final nameMatch = item.card.name.toLowerCase().contains(searchText.toLowerCase());
-              final nameDeMatch = item.card.nameDe?.toLowerCase().contains(searchText.toLowerCase()) ?? false;
-              final setMatch = item.set.name.toLowerCase().contains(searchText.toLowerCase());
-              final binderMatch = (item.binderName ?? '').toLowerCase().contains(searchText.toLowerCase());
-              
-              return nameMatch || nameDeMatch || setMatch || binderMatch;
-            }).toList();
-          }
-
-          // 2. KARTEN ZUSAMMENFASSEN
-          if (groupMode != InventoryGroupMode.byBinder) {
-            final Map<String, InventoryItem> mergedMap = {};
-            
-            for (final item in filteredItems) {
-              final company = item.userCard.gradingCompany ?? 'none';
-              final score = item.userCard.gradingScore ?? 'none';
-              final cPrice = item.userCard.customPrice?.toStringAsFixed(2) ?? 'none';
-              
-              final key = "${item.card.id}_${item.variant}_${company}_${score}_$cPrice";
-              
-              if (mergedMap.containsKey(key)) {
-                final existing = mergedMap[key]!;
-                mergedMap[key] = InventoryItem(
-                  card: existing.card,
-                  set: existing.set,
-                  quantity: existing.quantity + item.quantity,
-                  variant: existing.variant,
-                  totalValue: existing.totalValue + item.totalValue,
-                  binderName: null,
-                  userCard: existing.userCard, 
-                  // --- FIX: Performance addieren! ---
-                  performance: existing.performance + item.performance, 
-                );
-              } else {
-                mergedMap[key] = InventoryItem(
-                  card: item.card,
-                  set: item.set,
-                  quantity: item.quantity,
-                  variant: item.variant,
-                  totalValue: item.totalValue,
-                  binderName: null, 
-                  userCard: item.userCard,
-                  // --- FIX: Performance übernehmen! ---
-                  performance: item.performance, 
-                );
-              }
-            }
-            filteredItems = mergedMap.values.toList();
-          }
-
-          // 3. STATISTIK (Gesamt)
-          final int totalCards = filteredItems.fold(0, (sum, item) => sum + item.quantity);
-          final double totalValue = filteredItems.fold(0.0, (sum, item) => sum + item.totalValue);
-
-          // 4. SORTIEREN (Mit Aufsteigend/Absteigend Logik)
-          final isAscending = ref.watch(inventorySortAscendingProvider);
-          final sortedItems = List<InventoryItem>.from(filteredItems);
-          
-          sortedItems.sort((a, b) {
-            int comp = 0;
-            switch (sortMode) {
-              case InventorySort.value:
-                final singleValA = a.totalValue / (a.quantity > 0 ? a.quantity : 1);
-                final singleValB = b.totalValue / (b.quantity > 0 ? b.quantity : 1);
-                comp = singleValA.compareTo(singleValB);
-                break;
-              case InventorySort.performance:
-                final singlePerfA = a.performance / (a.quantity > 0 ? a.quantity : 1);
-                final singlePerfB = b.performance / (b.quantity > 0 ? b.quantity : 1);
-                comp = singlePerfA.compareTo(singlePerfB);
-                break;
-              case InventorySort.dateAdded:
-                comp = a.userCard.createdAt.compareTo(b.userCard.createdAt);
-                break;
-              case InventorySort.name:
-                comp = (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
-                break;
-              case InventorySort.rarity:
-                comp = (a.card.rarity ?? '').compareTo(b.card.rarity ?? ''); 
-                break;
-              case InventorySort.type:
-                final tA = a.card.cardType ?? 'ZZZ'; 
-                final tB = b.card.cardType ?? 'ZZZ';
-                comp = tA.compareTo(tB);
-                if (comp == 0) comp = (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
-                break;
-            }
-            
-            // Standardmäßig wollen wir das Beste/Neueste ganz oben sehen (Absteigend -> -comp).
-            // Wenn der Nutzer den Pfeil klickt, drehen wir es um (Aufsteigend -> comp).
-            return isAscending ? comp : -comp;
-          });
+          final int totalCards = sortedItems.fold(0, (sum, item) => sum + item.quantity);
+          final double totalValue = sortedItems.fold(0.0, (sum, item) => sum + item.totalValue);
 
           return Column(
             children: [
@@ -150,7 +155,7 @@ class InventoryScreen extends ConsumerWidget {
               _buildFilterBar(context, ref, sortMode, groupMode),
               const Divider(height: 1),
 
-              // 5. ANZEIGEN JE NACH MODUS
+              // ANZEIGEN JE NACH MODUS
               Expanded(
                 child: sortedItems.isEmpty 
                   ? const Center(child: Text("Keine Ergebnisse für deine Suche."))
