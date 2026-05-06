@@ -7,6 +7,7 @@ import '../../data/database/database_provider.dart';
 import '../../data/database/app_database.dart'; 
 import '../../domain/models/api_card.dart';
 import '../../domain/logic/binder_service.dart';
+import '../../data/api/search_provider.dart';
 
 import '../../data/api/search_provider.dart' show inventoryItemProvider, inventoryIdsProvider;
 import 'inventory_bottom_sheet.dart' show lastSelectedBinderProvider;
@@ -204,8 +205,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
                ScaffoldMessenger.of(context).clearSnackBars();
                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('In die Bulk Box geworfen!'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
              }
-             ref.invalidate(inventoryItemProvider(_selectedUserCard!.id));
-             ref.invalidate(inventoryIdsProvider);
+             ref.invalidate(inventoryProvider);
              return; 
           }
         }
@@ -530,8 +530,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
       }
       
       // Cache busten für genau diese Karte!
-      ref.invalidate(inventoryItemProvider(_selectedUserCard!.id));
-      ref.invalidate(inventoryIdsProvider);
+      ref.invalidate(inventoryProvider);
 
     } catch (e) {
       if (mounted) {

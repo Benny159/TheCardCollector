@@ -671,9 +671,7 @@ Future<void> _saveToInventory() async {
   // Hilfsmethode, um doppelten Code am Ende zu vermeiden
   void _closeAndShowSuccess(String binderMessage, bool showOrangeBanner, int targetUserCardId) {
       // Cache gezielt NUR für diese Karte löschen, damit das Inventar blitzschnell updatet!
-      ref.invalidate(inventoryItemProvider(targetUserCardId));
-      // ID Liste manuell neu anstoßen, da wir den automatischen Stream gestoppt haben
-      ref.invalidate(inventoryIdsProvider);
+      ref.invalidate(inventoryProvider);
       ref.invalidate(searchResultsProvider);
       ref.invalidate(cardsForSetProvider(widget.card.setId));
       ref.invalidate(setStatsProvider(widget.card.setId));

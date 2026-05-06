@@ -324,181 +324,200 @@ final inventorySortProvider = StateProvider<InventorySort>((ref) => InventorySor
 // false = Absteigend (Das Beste/Neueste zuerst), true = Aufsteigend (Das Schlechteste/Älteste zuerst)
 final inventorySortAscendingProvider = StateProvider<bool>((ref) => false);
 
-// --- SCHRITT 1: ID-Provider (Blitzschnell, beobachtet nur Veränderungen an der Menge) ---
-// PERFORMANCE FIX: Aus StreamProvider wird ein manueller FutureProvider.
-// Verhindert, dass SQLite bei jedem Insert die UI blockiert, während der Dialog lädt!
-final inventoryIdsProvider = FutureProvider<List<int>>((ref) async {
-  final db = ref.read(databaseProvider); // read() statt watch()
-  final rows = await db.select(db.userCards).get();
-  return rows.map((r) => r.id).toList();
-});
-
-// --- SCHRITT 2: Detail-Provider (Cacht die aufwändige Logik pro EINZELNER Karte) ---
-final inventoryItemProvider = FutureProvider.family<List<InventoryItem>, int>((ref, userCardId) async {
+// --- NEUER HIGH-PERFORMANCE INVENTORY PROVIDER ---
+final inventoryProvider = FutureProvider<List<InventoryItem>>((ref) async {
   final db = ref.watch(databaseProvider);
 
-  final row = await (db.select(db.userCards).join([
+  // 1. Hole ALLE UserCards inkl. Karten & Set-Infos auf EINEN SCHLAG
+  final rows = await (db.select(db.userCards).join([
     innerJoin(db.cards, db.cards.id.equalsExp(db.userCards.cardId)),
     innerJoin(db.cardSets, db.cardSets.id.equalsExp(db.cards.setId)),
-  ])..where(db.userCards.id.equals(userCardId))).getSingle();
+  ])).get();
 
-  final userCard = row.readTable(db.userCards);
-  final dbCard = row.readTable(db.cards);
-  final dbSet = row.readTable(db.cardSets);
-  final cardId = dbCard.id;
+  if (rows.isEmpty) return [];
 
-  // Preise NUR für diese eine Karte laden!
-  final allCmPrices = await (db.select(db.cardMarketPrices)..where((tbl) => tbl.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)])).get();
-  final allTcgPrices = await (db.select(db.tcgPlayerPrices)..where((tbl) => tbl.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)])).get();
-  final allCustomPrices = await (db.select(db.customCardPrices)..where((tbl) => tbl.cardId.equals(cardId))..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)])).get();
+  // 2. Sammle alle benötigten IDs für die Massenabfragen
+  final cardIds = rows.map((r) => r.readTable(db.cards).id).toSet().toList();
 
-  final latestCm = allCmPrices.isNotEmpty ? allCmPrices.last : null;
-  final latestTcg = allTcgPrices.isNotEmpty ? allTcgPrices.last : null;
-  final latestCustom = allCustomPrices.isNotEmpty ? allCustomPrices.last : null;
+  // 3. Hole alle Preise und Binder-Einträge für diese Karten PARALLEL
+  // Anstatt 4000x die DB anzufragen, machen wir hier nur exakt 4 Abfragen!
+  final allCmPrices = await (db.select(db.cardMarketPrices)
+    ..where((tbl) => tbl.cardId.isIn(cardIds))
+    ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)])
+  ).get();
 
-  final apiCard = _mapToApiCard(dbCard, dbSet.printedTotal ?? 0, true, latestCm, latestTcg, latestCustom);
-  final apiSet = ApiSet(
-    id: dbSet.id, name: dbSet.name, nameDe: dbSet.nameDe, series: dbSet.series,
-    printedTotal: dbSet.printedTotal ?? 0, total: dbSet.total ?? 0,
-    releaseDate: dbSet.releaseDate ?? '', updatedAt: dbSet.updatedAt,
-    logoUrl: dbSet.logoUrl, logoUrlDe: dbSet.logoUrlDe, symbolUrl: dbSet.symbolUrl,
-  );
+  final allTcgPrices = await (db.select(db.tcgPlayerPrices)
+    ..where((tbl) => tbl.cardId.isIn(cardIds))
+    ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)])
+  ).get();
 
-  // Preis-Logik
-  double singlePrice = 0.0;
-  double purchasePrice = 0.0;
-  bool baseIsHolo = !dbCard.hasNormal && dbCard.hasHolo;
-  final variant = userCard.variant;
-  final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
-  final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
-  final isReverse = variant == 'Reverse Holo';
-  final pref = dbCard.preferredPriceSource;
+  final allCustomPrices = await (db.select(db.customCardPrices)
+    ..where((tbl) => tbl.cardId.isIn(cardIds))
+    ..orderBy([(t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)])
+  ).get();
 
-  double getTcg(ApiTcgPlayer? tcg) {
-     if (tcg == null) return 0.0;
-     double p = 0.0;
-     if (isReverse) { p = tcg.prices?.reverseHolofoil?.market ?? 0.0; }
-     else if (isHolo) p = tcg.prices?.holofoil?.market ?? 0.0;
-     else p = tcg.prices?.normal?.market ?? 0.0;
-     if (p == 0.0) p = tcg.prices?.normal?.market ?? tcg.prices?.holofoil?.market ?? tcg.prices?.reverseHolofoil?.market ?? 0.0;
-     return p;
-  }
-
-  double getCm(ApiCardMarket? cm) {
-     if (cm == null) return 0.0;
-     double p = 0.0;
-     if (dbCard.hasFirstEdition) { p = isFirstEd ? (isHolo ? cm.trendPrice ?? 0.0 : cm.trendHolo ?? 0.0) : (isHolo ? cm.trendHolo ?? 0.0 : cm.trendPrice ?? 0.0); }
-     else if (isReverse) { p = cm.reverseHoloTrend ?? cm.trendHolo ?? 0.0; }
-     else if (isHolo && !baseIsHolo) { p = cm.trendHolo ?? 0.0; }
-     else { p = cm.trendPrice ?? 0.0; }
-     if (p == 0.0) p = cm.trendPrice ?? cm.trendHolo ?? 0.0;
-     return p;
-  }
-
-  String usedSource = pref;
-  if (userCard.customPrice != null && userCard.customPrice! > 0) {
-      singlePrice = userCard.customPrice!;
-      purchasePrice = singlePrice;
-      usedSource = 'custom';
-  } else {
-      double tcgCur = getTcg(apiCard.tcgplayer);
-      double cmCur = getCm(apiCard.cardmarket);
-      if (pref == 'custom' && apiCard.customPrice != null && apiCard.customPrice! > 0) {
-          singlePrice = apiCard.customPrice!;
-          usedSource = 'custom';
-          purchasePrice = singlePrice;
-      } else if (pref == 'tcgplayer' && tcgCur > 0.0) {
-          singlePrice = tcgCur; usedSource = 'tcgplayer';
-      } else if (pref == 'cardmarket' && cmCur > 0.0) {
-          singlePrice = cmCur; usedSource = 'cardmarket';
-      } else {
-          if (cmCur > 0.0) { singlePrice = cmCur; usedSource = 'cardmarket'; }
-          else if (tcgCur > 0.0) { singlePrice = tcgCur; usedSource = 'tcgplayer'; }
-          else if (apiCard.customPrice != null) { singlePrice = apiCard.customPrice!; usedSource = 'custom'; purchasePrice = singlePrice; }
-      }
-  }
-
-  if (usedSource != 'custom') {
-     final targetDate = userCard.createdAt;
-     if (usedSource == 'tcgplayer' && allTcgPrices.isNotEmpty) {
-        final index = allTcgPrices.lastIndexWhere((p) => !p.fetchedAt.isAfter(targetDate));
-        final p = (index != -1) ? allTcgPrices[index] : allTcgPrices.first;
-        double hp = 0.0;
-        if (isReverse) { hp = p.reverseMarket ?? 0.0; }
-        else if (isHolo) { hp = p.holoMarket ?? 0.0; }
-        else { hp = p.normalMarket ?? 0.0; }
-        if (hp == 0.0) { hp = p.normalMarket ?? p.holoMarket ?? p.reverseMarket ?? 0.0; }
-        purchasePrice = hp;
-     } else if (usedSource == 'cardmarket' && allCmPrices.isNotEmpty) {
-        final index = allCmPrices.lastIndexWhere((p) => !p.fetchedAt.isAfter(targetDate));
-        final p = (index != -1) ? allCmPrices[index] : allCmPrices.first;
-        double hp = 0.0;
-        if (dbCard.hasFirstEdition) { hp = isFirstEd ? (isHolo ? p.trend ?? 0.0 : p.trendHolo ?? 0.0) : (isHolo ? p.trendHolo ?? 0.0 : p.trend ?? 0.0); }
-        else if (isReverse) { hp = p.trendReverse ?? p.trendHolo ?? 0.0; }
-        else if (isHolo && !baseIsHolo) { hp = p.trendHolo ?? 0.0; }
-        else { hp = p.trend ?? 0.0; }
-        if (hp == 0.0) hp = p.trend ?? p.trendHolo ?? 0.0;
-        purchasePrice = hp;
-     }
-  }
-
-  if (purchasePrice == 0.0) purchasePrice = singlePrice;
-  final double itemPerformance = (singlePrice - purchasePrice);
-
-  // Binder-Zuweisungen NUR für diese eine Karte checken
-  final binderCardsQuery = db.select(db.binderCards).join([
+  final binderRows = await (db.select(db.binderCards).join([
     innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
-  ]);
-  binderCardsQuery.where((db.binderCards.userCardId.equals(userCardId) | (db.binderCards.cardId.equals(cardId) & db.binderCards.variant.equals(userCard.variant))) & db.binderCards.isPlaceholder.equals(false));
-  final binderRows = await binderCardsQuery.get();
+  ])..where(db.binderCards.cardId.isIn(cardIds) & db.binderCards.isPlaceholder.equals(false))).get();
 
-  final Map<String, int> bindersForThisCard = {};
-  for (final bRow in binderRows) {
-    final b = bRow.readTable(db.binders);
-    bindersForThisCard[b.name] = (bindersForThisCard[b.name] ?? 0) + 1;
+  // 4. Mappings bauen (für extrem schnellen Zugriff im RAM)
+  final Map<String, List<CardMarketPrice>> cmMap = {};
+  for (final p in allCmPrices) { cmMap.putIfAbsent(p.cardId, () => []).add(p); }
+
+  final Map<String, List<TcgPlayerPrice>> tcgMap = {};
+  for (final p in allTcgPrices) { tcgMap.putIfAbsent(p.cardId, () => []).add(p); }
+
+  final Map<String, List<CustomCardPrice>> customMap = {};
+  for (final p in allCustomPrices) { customMap.putIfAbsent(p.cardId, () => []).add(p); }
+
+  // Aktuellste Preise für das ApiCard Objekt
+  final latestCmPriceMap = _getLatestCmPrices(allCmPrices);
+  final latestTcgPriceMap = _getLatestTcgPrices(allTcgPrices);
+  final latestCustomPriceMap = _getLatestCustomPrices(allCustomPrices);
+
+  List<InventoryItem> inventoryItems = [];
+
+  // 5. In einer schnellen Schleife im Arbeitsspeicher alles zusammenbauen
+  for (final row in rows) {
+    final userCard = row.readTable(db.userCards);
+    final dbCard = row.readTable(db.cards);
+    final dbSet = row.readTable(db.cardSets);
+    final cardId = dbCard.id;
+
+    final cardCmPrices = cmMap[cardId] ?? [];
+    final cardTcgPrices = tcgMap[cardId] ?? [];
+    final cardCustomPrices = customMap[cardId] ?? [];
+
+    final latestCm = latestCmPriceMap[cardId];
+    final latestTcg = latestTcgPriceMap[cardId];
+    final latestCustom = latestCustomPriceMap[cardId];
+
+    final apiCard = _mapToApiCard(dbCard, dbSet.printedTotal ?? 0, true, latestCm, latestTcg, latestCustom);
+    final apiSet = ApiSet(
+      id: dbSet.id, name: dbSet.name, nameDe: dbSet.nameDe, series: dbSet.series,
+      printedTotal: dbSet.printedTotal ?? 0, total: dbSet.total ?? 0,
+      releaseDate: dbSet.releaseDate ?? '', updatedAt: dbSet.updatedAt,
+      logoUrl: dbSet.logoUrl, logoUrlDe: dbSet.logoUrlDe, symbolUrl: dbSet.symbolUrl,
+    );
+
+    // --- PREIS LOGIK (Aus dem RAM, ohne Datenbank-Aufruf!) ---
+    double singlePrice = 0.0;
+    double purchasePrice = 0.0;
+    bool baseIsHolo = !dbCard.hasNormal && dbCard.hasHolo;
+    final variant = userCard.variant;
+    final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
+    final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
+    final isReverse = variant == 'Reverse Holo';
+    final pref = dbCard.preferredPriceSource;
+
+    double getTcg(ApiTcgPlayer? tcg) {
+      if (tcg == null) return 0.0;
+      double p = 0.0;
+      if (isReverse) { p = tcg.prices?.reverseHolofoil?.market ?? 0.0; }
+      else if (isHolo) p = tcg.prices?.holofoil?.market ?? 0.0;
+      else p = tcg.prices?.normal?.market ?? 0.0;
+      if (p == 0.0) p = tcg.prices?.normal?.market ?? tcg.prices?.holofoil?.market ?? tcg.prices?.reverseHolofoil?.market ?? 0.0;
+      return p;
+    }
+
+    double getCm(ApiCardMarket? cm) {
+      if (cm == null) return 0.0;
+      double p = 0.0;
+      if (dbCard.hasFirstEdition) { p = isFirstEd ? (isHolo ? cm.trendPrice ?? 0.0 : cm.trendHolo ?? 0.0) : (isHolo ? cm.trendHolo ?? 0.0 : cm.trendPrice ?? 0.0); }
+      else if (isReverse) { p = cm.reverseHoloTrend ?? cm.trendHolo ?? 0.0; }
+      else if (isHolo && !baseIsHolo) { p = cm.trendHolo ?? 0.0; }
+      else { p = cm.trendPrice ?? 0.0; }
+      if (p == 0.0) p = cm.trendPrice ?? cm.trendHolo ?? 0.0;
+      return p;
+    }
+
+    String usedSource = pref;
+    if (userCard.customPrice != null && userCard.customPrice! > 0) {
+        singlePrice = userCard.customPrice!;
+        purchasePrice = singlePrice;
+        usedSource = 'custom';
+    } else {
+        double tcgCur = getTcg(apiCard.tcgplayer);
+        double cmCur = getCm(apiCard.cardmarket);
+        if (pref == 'custom' && apiCard.customPrice != null && apiCard.customPrice! > 0) {
+            singlePrice = apiCard.customPrice!;
+            usedSource = 'custom';
+            purchasePrice = singlePrice;
+        } else if (pref == 'tcgplayer' && tcgCur > 0.0) {
+            singlePrice = tcgCur; usedSource = 'tcgplayer';
+        } else if (pref == 'cardmarket' && cmCur > 0.0) {
+            singlePrice = cmCur; usedSource = 'cardmarket';
+        } else {
+            if (cmCur > 0.0) { singlePrice = cmCur; usedSource = 'cardmarket'; }
+            else if (tcgCur > 0.0) { singlePrice = tcgCur; usedSource = 'tcgplayer'; }
+            else if (apiCard.customPrice != null) { singlePrice = apiCard.customPrice!; usedSource = 'custom'; purchasePrice = singlePrice; }
+        }
+    }
+
+    if (usedSource != 'custom') {
+       final targetDate = userCard.createdAt;
+       if (usedSource == 'tcgplayer' && cardTcgPrices.isNotEmpty) {
+          final index = cardTcgPrices.lastIndexWhere((p) => !p.fetchedAt.isAfter(targetDate));
+          final p = (index != -1) ? cardTcgPrices[index] : cardTcgPrices.first;
+          double hp = 0.0;
+          if (isReverse) { hp = p.reverseMarket ?? 0.0; }
+          else if (isHolo) { hp = p.holoMarket ?? 0.0; }
+          else { hp = p.normalMarket ?? 0.0; }
+          if (hp == 0.0) { hp = p.normalMarket ?? p.holoMarket ?? p.reverseMarket ?? 0.0; }
+          purchasePrice = hp;
+       } else if (usedSource == 'cardmarket' && cardCmPrices.isNotEmpty) {
+          final index = cardCmPrices.lastIndexWhere((p) => !p.fetchedAt.isAfter(targetDate));
+          final p = (index != -1) ? cardCmPrices[index] : cardCmPrices.first;
+          double hp = 0.0;
+          if (dbCard.hasFirstEdition) { hp = isFirstEd ? (isHolo ? p.trend ?? 0.0 : p.trendHolo ?? 0.0) : (isHolo ? p.trendHolo ?? 0.0 : p.trend ?? 0.0); }
+          else if (isReverse) { hp = p.trendReverse ?? p.trendHolo ?? 0.0; }
+          else if (isHolo && !baseIsHolo) { hp = p.trendHolo ?? 0.0; }
+          else { hp = p.trend ?? 0.0; }
+          if (hp == 0.0) hp = p.trend ?? p.trendHolo ?? 0.0;
+          purchasePrice = hp;
+       }
+    }
+
+    if (purchasePrice == 0.0) purchasePrice = singlePrice;
+    final double itemPerformance = (singlePrice - purchasePrice);
+
+    // --- BINDER LOGIK (Aus dem RAM, ohne DB!) ---
+    final Map<String, int> bindersForThisCard = {};
+    for (final bRow in binderRows) {
+      final bc = bRow.readTable(db.binderCards);
+      final b = bRow.readTable(db.binders);
+      if (bc.userCardId == userCard.id || (bc.cardId == cardId && bc.variant == userCard.variant)) {
+        bindersForThisCard[b.name] = (bindersForThisCard[b.name] ?? 0) + 1;
+      }
+    }
+
+    int totalInBinders = 0;
+    for (final entry in bindersForThisCard.entries) {
+      final binderName = entry.key;
+      final qtyInBinder = entry.value;
+      int assignedQty = qtyInBinder;
+      if (totalInBinders + assignedQty > userCard.quantity) { assignedQty = userCard.quantity - totalInBinders; }
+      if (assignedQty <= 0) continue;
+      totalInBinders += assignedQty;
+      
+      inventoryItems.add(InventoryItem(
+        card: apiCard, set: apiSet, quantity: assignedQty, variant: userCard.variant,
+        totalValue: singlePrice * assignedQty, binderName: binderName, userCard: userCard,
+        performance: itemPerformance * assignedQty,
+      ));
+    }
+
+    final looseQty = userCard.quantity - totalInBinders;
+    if (looseQty > 0) {
+      inventoryItems.add(InventoryItem(
+        card: apiCard, set: apiSet, quantity: looseQty, variant: userCard.variant,
+        totalValue: singlePrice * looseQty, binderName: null, userCard: userCard,
+        performance: itemPerformance * looseQty,
+      ));
+    }
   }
 
-  List<InventoryItem> items = [];
-  int totalInBinders = 0;
-
-  for (final entry in bindersForThisCard.entries) {
-    final binderName = entry.key;
-    final qtyInBinder = entry.value;
-    int assignedQty = qtyInBinder;
-    if (totalInBinders + assignedQty > userCard.quantity) { assignedQty = userCard.quantity - totalInBinders; }
-    if (assignedQty <= 0) continue;
-    totalInBinders += assignedQty;
-    items.add(InventoryItem(
-      card: apiCard, set: apiSet, quantity: assignedQty, variant: userCard.variant,
-      totalValue: singlePrice * assignedQty, binderName: binderName, userCard: userCard,
-      performance: itemPerformance * assignedQty,
-    ));
-  }
-
-  final looseQty = userCard.quantity - totalInBinders;
-  if (looseQty > 0) {
-    items.add(InventoryItem(
-      card: apiCard, set: apiSet, quantity: looseQty, variant: userCard.variant,
-      totalValue: singlePrice * looseQty, binderName: null, userCard: userCard,
-      performance: itemPerformance * looseQty,
-    ));
-  }
-
-  return items;
-});
-
-// --- SCHRITT 3: Der Master-Provider (Sammelt alle gecachten Ergebnisse) ---
-final inventoryProvider = FutureProvider<List<InventoryItem>>((ref) async {
-  // 1. Liste der IDs überwachen
-  final ids = await ref.watch(inventoryIdsProvider.future);
-  if (ids.isEmpty) return [];
-
-  // 2. Paralleles Laden: Riverpod hat 99% davon sofort aus dem Cache abrufbereit!
-  final futures = ids.map((id) => ref.watch(inventoryItemProvider(id).future));
-  final results = await Future.wait(futures);
-
-  // 3. Flache Liste zusammenbauen
-  return results.expand((i) => i).toList();
+  return inventoryItems;
 });
 
 final top10CardsProvider = Provider<List<InventoryItem>>((ref) {
