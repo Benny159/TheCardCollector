@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,14 +10,13 @@ class TcgDexApiClient {
     connectTimeout: const Duration(seconds: 30),
     receiveTimeout: const Duration(seconds: 30),
   ));
-  static const String _baseUrl = 'https://api.tcgdex.net/v2';
 
   Future<Map<String, dynamic>?> fetchSet(String setId) async {
     try {
       final response = await _dio.get('/en/sets/$setId');
       return response.data as Map<String, dynamic>;
     } catch (e) {
-      print('Fehler beim Laden von Set-Details $setId: $e');
+      debugPrint('Fehler beim Laden von Set-Details $setId: $e');
       return null;
     }
   }

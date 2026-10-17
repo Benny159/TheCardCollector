@@ -319,8 +319,9 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
                     setState(() {
                       if (val) {
                         _selectedGens.add(gen);
-                      } else if (_selectedGens.length > 1)
+                      } else if (_selectedGens.length > 1) {
                         _selectedGens.remove(gen);
+                      }
                     });
                   },
                 );
@@ -356,23 +357,31 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
             if (_dexMegas || _dexGmax || _dexRegional) ...[
               const Text("Sortierung der Formen:",
                   style: TextStyle(fontWeight: FontWeight.bold)),
-              RadioListTile<DexSortStyle>(
-                title: const Text("Direkt hinter das Original-Pokémon",
-                    style: TextStyle(fontSize: 12)),
-                value: DexSortStyle.inline,
+              RadioGroup<DexSortStyle>(
                 groupValue: _dexSort,
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (val) => setState(() => _dexSort = val!),
-              ),
-              RadioListTile<DexSortStyle>(
-                title: const Text("Als eigener Bereich am Ende des Binders",
-                    style: TextStyle(fontSize: 12)),
-                value: DexSortStyle.appended,
-                groupValue: _dexSort,
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (val) => setState(() => _dexSort = val!),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() => _dexSort = val);
+                  }
+                },
+                child: const Column(
+                  children: [
+                    RadioListTile<DexSortStyle>(
+                      title: Text("Direkt hinter das Original-Pokémon",
+                          style: TextStyle(fontSize: 12)),
+                      value: DexSortStyle.inline,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    RadioListTile<DexSortStyle>(
+                      title: Text("Als eigener Bereich am Ende des Binders",
+                          style: TextStyle(fontSize: 12)),
+                      value: DexSortStyle.appended,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
               ),
             ]
           ],

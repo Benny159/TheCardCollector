@@ -164,9 +164,13 @@ class AppDrawer extends ConsumerWidget {
         final val = entry.value;
         if (val is String) {
           await prefs.setString(entry.key, val);
-        } else if (val is int) await prefs.setInt(entry.key, val);
-        else if (val is double) await prefs.setDouble(entry.key, val);
-        else if (val is bool) await prefs.setBool(entry.key, val);
+        } else if (val is int) {
+          await prefs.setInt(entry.key, val);
+        } else if (val is double) {
+          await prefs.setDouble(entry.key, val);
+        } else if (val is bool) {
+          await prefs.setBool(entry.key, val);
+        }
       }
 
       // 2. Datenbank Modelle parsen (Noch ungefiltert)

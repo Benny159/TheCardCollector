@@ -59,7 +59,9 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                   final db = ref.read(databaseProvider);
                   await BinderService(db)
                       .toggleBinderFullStatus(widget.binder.id, val);
-                  if (mounted) Navigator.pop(context);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
                 },
               ),
             ],
@@ -879,7 +881,9 @@ class _BinderStatsContent extends ConsumerWidget {
               change = last - prev;
               if (prev > 0) {
                 percent = (change / prev) * 100;
-              } else if (change > 0) percent = 100.0;
+              } else if (change > 0) {
+                percent = 100.0;
+              }
             }
 
             final isPositive = change >= -0.01;

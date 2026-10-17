@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'package:http/http.dart' as http;
 
@@ -50,7 +51,7 @@ class PtcgImporter {
       try {
         await _importPtcgSet(tcgdexId, ptcgId, cmCode, latestCmPrices, latestTcgPrices);
       } catch (e) {
-        print('⚠️ Fehler bei PTCG Set $ptcgId: $e');
+        debugPrint('⚠️ Fehler bei PTCG Set $ptcgId: $e');
       }
     }
 

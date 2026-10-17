@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart' as drift;
 import '../api/tcgdex_api_client.dart';
 import '../../domain/logic/binder_service.dart';
@@ -63,7 +64,7 @@ class SetImporter {
 
       if (serieId == 'jumbo' || setId == 'xya' || setId == 'sp') {
         skipped++;
-        print('⏩ Überspringe Pocket-Set: ${listSet['name']} ($setId)');
+        debugPrint('⏩ Überspringe Pocket-Set: ${listSet['name']} ($setId)');
         continue; 
       }
 
@@ -87,7 +88,7 @@ class SetImporter {
         try {
           await importCardsForSet(setId, latestCmPrices, latestTcgPrices);
         } catch (e) {
-          print('⚠️ Fehler bei Karten für $setId: $e');
+          debugPrint('⚠️ Fehler bei Karten für $setId: $e');
         }
       }
     }
@@ -203,7 +204,7 @@ class SetImporter {
         final fakeCards = duplicates.skip(1).toList();
 
         for (var fake in fakeCards) {
-          print("Führe zusammen: ${fake.id} (${fake.number}) -> ${officialCard.id} (${officialCard.number})");
+          debugPrint("Führe zusammen: ${fake.id} (${fake.number}) -> ${officialCard.id} (${officialCard.number})");
 
           // A: Inventar umschreiben (UserCards)
           await (database.update(database.userCards)..where((t) => t.cardId.equals(fake.id)))
@@ -301,13 +302,16 @@ class SetImporter {
     final cat = data['category']; 
     if (cat == "Trainer") {
       cardType = "Trainer";
-    } else if (cat == "Energy") cardType = "Energy";
-    else if (data['types'] != null && data['types'] is List && (data['types'] as List).isNotEmpty) {
+    } else if (cat == "Energy") {
+      cardType = "Energy";
+    } else if (data['types'] != null && data['types'] is List && (data['types'] as List).isNotEmpty) {
       cardType = (data['types'] as List).first.toString(); 
     }
 
     int? cardHp;
-    if (data['hp'] != null) cardHp = int.tryParse(data['hp'].toString()); 
+    if (data['hp'] != null) {
+      cardHp = int.tryParse(data['hp'].toString()); 
+    } 
 
     drift.Value<String?> dbNameDe = (nameDeApi != null && nameDeApi.isNotEmpty) ? drift.Value(nameDeApi) : const drift.Value.absent();
     drift.Value<String> dbImgEn = drift.Value(finalImageEn);
@@ -413,7 +417,6 @@ class SetImporter {
         final cm = pricing['cardmarket'];
         final double? newTrend = (cm['trend'] as num?)?.toDouble();
         final double? newTrendHolo = (cm['trend-holo'] as num?)?.toDouble();
-        const double? newTrendRev = null; 
 
         final oldCm = latestCmPrices[cardId];
         if (oldCm == null || oldCm['trend'] != newTrend || oldCm['trendHolo'] != newTrendHolo) {

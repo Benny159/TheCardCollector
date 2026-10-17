@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:drift/drift.dart';
 import '../database/app_database.dart';
@@ -14,11 +15,11 @@ class PokedexImporter {
     
     // Wenn wir schon viele Daten haben, brechen wir ab (spart Traffic)
     if (count > 1000) {
-      print("✅ Pokedex ist bereits gefüllt ($count Einträge).");
+      debugPrint("✅ Pokedex ist bereits gefüllt ($count Einträge).");
       return; 
     }
 
-    print("⏳ Lade Pokedex Liste von PokeAPI...");
+    debugPrint("⏳ Lade Pokedex Liste von PokeAPI...");
 
     try {
       // 2. API Abfragen (limit=2000 holt alle auf einmal)
@@ -62,14 +63,14 @@ class PokedexImporter {
           await db.batch((batch) {
             batch.insertAllOnConflictUpdate(db.pokedex, inserts);
           });
-          print("✅ ${inserts.length} Pokémon erfolgreich importiert!");
+          debugPrint("✅ ${inserts.length} Pokémon erfolgreich importiert!");
         }
         
       } else {
-        print("❌ API Fehler: ${response.statusCode}");
+        debugPrint("❌ API Fehler: ${response.statusCode}");
       }
     } catch (e) {
-      print("❌ Fehler beim Pokedex Import: $e");
+      debugPrint("❌ Fehler beim Pokedex Import: $e");
     }
   }
 
@@ -115,7 +116,7 @@ class PokedexImporter {
             }
           }
         } catch (e) {
-          print("Fehler bei ${pokemon.name}: $e");
+          debugPrint("Fehler bei ${pokemon.name}: $e");
         }
         return null;
       });

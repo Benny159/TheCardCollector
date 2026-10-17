@@ -8,7 +8,7 @@ import '../../data/api/search_provider.dart';
 import '../cards/card_detail_screen.dart';
 import 'inventory_bottom_sheet.dart';
 
-final inventorySearchProvider = StateProvider<String>((ref) => '');
+final inventorySearchProvider = StateProvider.autoDispose<String>((ref) => '');
 
 // Speichert die IDs/Namen der aktuell aufgeklappten Sets & Binder
 final expandedSetsProvider = StateProvider<Set<String>>((ref) => {});
@@ -112,7 +112,7 @@ final processedInventoryProvider =
               .compareTo(b.card.nameDe ?? b.card.name);
           break;
         case InventorySort.rarity:
-          comp = (a.card.rarity ?? '').compareTo(b.card.rarity ?? '');
+          comp = a.card.rarity.compareTo(b.card.rarity);
           break;
         case InventorySort.type:
           final tA = a.card.cardType ?? 'ZZZ';
@@ -134,7 +134,8 @@ final processedInventoryProvider =
 enum InventoryGroupMode { none, bySet, byBinder }
 
 final inventoryGroupModeProvider =
-    StateProvider<InventoryGroupMode>((ref) => InventoryGroupMode.none);
+    StateProvider.autoDispose<InventoryGroupMode>(
+        (ref) => InventoryGroupMode.none);
 
 class InventoryScreen extends ConsumerWidget {
   const InventoryScreen({super.key});
@@ -695,8 +696,9 @@ class _InventoryCardTile extends ConsumerWidget {
         _getConditionAbbreviation(item.userCard.condition);
     final Color conditionColor = _getConditionColor(item.userCard.condition);
 
-    return InkWell(
-      onTap: () {
+    return RepaintBoundary(
+      child: InkWell(
+        onTap: () {
         Navigator.push(
             context,
             MaterialPageRoute(
@@ -949,8 +951,9 @@ class _InventoryCardTile extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   // --- HILFSFUNKTIONEN FÜR ABKÜRZUNGEN UND FARBEN ---
 

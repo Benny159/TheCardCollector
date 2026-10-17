@@ -12,13 +12,14 @@ import '../../data/api/tcgdex_api_client.dart';
 // --- 1. CONFIG ---
 enum SearchMode { name, artist }
 
-final searchModeProvider = StateProvider<SearchMode>((ref) => SearchMode.name);
-final searchQueryProvider = StateProvider<String>((ref) => '');
+final searchModeProvider =
+    StateProvider.autoDispose<SearchMode>((ref) => SearchMode.name);
+final searchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
 final inventoryGroupBySetProvider = StateProvider<bool>((ref) => false);
 
 // --- 2. SETS PROVIDER ---
 final allSetsProvider = FutureProvider<List<ApiSet>>((ref) async {
-  final db = ref.read(databaseProvider);
+  final db = ref.watch(databaseProvider);
   final localSets = await db.select(db.cardSets).get();
 
   if (localSets.isNotEmpty) {
@@ -55,7 +56,8 @@ final allSetsProvider = FutureProvider<List<ApiSet>>((ref) async {
 });
 
 // --- 3. SEARCH PROVIDER ---
-final searchResultsProvider = FutureProvider<List<ApiCard>>((ref) async {
+final searchResultsProvider =
+    FutureProvider.autoDispose<List<ApiCard>>((ref) async {
   final queryText = ref.watch(searchQueryProvider);
   final mode = ref.watch(searchModeProvider);
 
@@ -126,7 +128,7 @@ final searchResultsProvider = FutureProvider<List<ApiCard>>((ref) async {
 // --- 4. SET LIST PROVIDER ---
 final cardsForSetProvider =
     FutureProvider.family<List<ApiCard>, String>((ref, setId) async {
-  final db = ref.read(databaseProvider);
+  final db = ref.watch(databaseProvider);
   final setInfo = await (db.select(db.cardSets)
         ..where((tbl) => tbl.id.equals(setId)))
       .getSingleOrNull();
@@ -139,17 +141,21 @@ final cardsForSetProvider =
   if (dbCards.isEmpty) return [];
 
   final cardIds = dbCards.map((c) => c.id).toList();
-  final ownedSet = await _fetchOwnedIds(db, cardIds);
 
-  final allCmPrices = await (db.select(db.cardMarketPrices)
-        ..where((tbl) => tbl.cardId.isIn(cardIds)))
-      .get();
-  final allTcgPrices = await (db.select(db.tcgPlayerPrices)
-        ..where((tbl) => tbl.cardId.isIn(cardIds)))
-      .get();
-  final allCustomPrices = await (db.select(db.customCardPrices)
-        ..where((tbl) => tbl.cardId.isIn(cardIds)))
-      .get();
+  final results = await Future.wait([
+    _fetchOwnedIds(db, cardIds),
+    (db.select(db.cardMarketPrices)..where((tbl) => tbl.cardId.isIn(cardIds)))
+        .get(),
+    (db.select(db.tcgPlayerPrices)..where((tbl) => tbl.cardId.isIn(cardIds)))
+        .get(),
+    (db.select(db.customCardPrices)..where((tbl) => tbl.cardId.isIn(cardIds)))
+        .get(),
+  ]);
+
+  final ownedSet = results[0] as Set<String>;
+  final allCmPrices = results[1] as List<CardMarketPrice>;
+  final allTcgPrices = results[2] as List<TcgPlayerPrice>;
+  final allCustomPrices = results[3] as List<CustomCardPrice>;
 
   final cmPriceMap = _getLatestCmPrices(allCmPrices);
   final tcgPriceMap = _getLatestTcgPrices(allTcgPrices);
@@ -178,17 +184,28 @@ final setByIdProvider =
   }
 });
 
-// --- STATS PROVIDER ---
+// --- ALL SET STATS PROVIDER (Anti-N+1 Batch Aggregation) ---
+final allSetStatsProvider = FutureProvider<Map<String, int>>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final query = db.customSelect(
+    'SELECT c.set_id, COUNT(DISTINCT uc.card_id) AS owned_count '
+    'FROM user_cards uc '
+    'INNER JOIN cards c ON c.id = uc.card_id '
+    'GROUP BY c.set_id',
+    readsFrom: {db.userCards, db.cards},
+  );
+  final rows = await query.get();
+  final Map<String, int> statsMap = {};
+  for (final row in rows) {
+    statsMap[row.read<String>('set_id')] = row.read<int>('owned_count');
+  }
+  return statsMap;
+});
+
+// --- SINGLE SET STATS PROVIDER ---
 final setStatsProvider = FutureProvider.family<int, String>((ref, setId) async {
-  final db = ref.read(databaseProvider);
-  final setCardsQuery = db.select(db.cards)
-    ..where((tbl) => tbl.setId.equals(setId));
-  final setCardIds = (await setCardsQuery.get()).map((c) => c.id).toList();
-  if (setCardIds.isEmpty) return 0;
-  final result = await (db.select(db.userCards)
-        ..where((tbl) => tbl.cardId.isIn(setCardIds)))
-      .get();
-  return result.map((e) => e.cardId).toSet().length;
+  final allStats = await ref.watch(allSetStatsProvider.future);
+  return allStats[setId] ?? 0;
 });
 
 // --- HELPER ---
@@ -366,37 +383,40 @@ final inventoryProvider = FutureProvider<List<InventoryItem>>((ref) async {
   // 2. Sammle alle benötigten IDs für die Massenabfragen
   final cardIds = rows.map((r) => r.readTable(db.cards).id).toSet().toList();
 
-  // 3. Hole alle Preise und Binder-Einträge für diese Karten PARALLEL
-  // Anstatt 4000x die DB anzufragen, machen wir hier nur exakt 4 Abfragen!
-  final allCmPrices = await (db.select(db.cardMarketPrices)
-        ..where((tbl) => tbl.cardId.isIn(cardIds))
-        ..orderBy([
-          (t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)
-        ]))
-      .get();
+  // 3. Batch-Abfragen parallel im Hintergrund ausführen
+  final results = await Future.wait([
+    (db.select(db.cardMarketPrices)
+          ..where((tbl) => tbl.cardId.isIn(cardIds))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)
+          ]))
+        .get(),
+    (db.select(db.tcgPlayerPrices)
+          ..where((tbl) => tbl.cardId.isIn(cardIds))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)
+          ]))
+        .get(),
+    (db.select(db.customCardPrices)
+          ..where((tbl) => tbl.cardId.isIn(cardIds))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)
+          ]))
+        .get(),
+    (db.select(db.binderCards).join([
+      innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
+    ])
+          ..where(db.binderCards.cardId.isIn(cardIds) &
+              db.binderCards.isPlaceholder.equals(false)))
+        .get(),
+  ]);
 
-  final allTcgPrices = await (db.select(db.tcgPlayerPrices)
-        ..where((tbl) => tbl.cardId.isIn(cardIds))
-        ..orderBy([
-          (t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)
-        ]))
-      .get();
+  final allCmPrices = results[0] as List<CardMarketPrice>;
+  final allTcgPrices = results[1] as List<TcgPlayerPrice>;
+  final allCustomPrices = results[2] as List<CustomCardPrice>;
+  final binderRows = results[3] as List<TypedResult>;
 
-  final allCustomPrices = await (db.select(db.customCardPrices)
-        ..where((tbl) => tbl.cardId.isIn(cardIds))
-        ..orderBy([
-          (t) => OrderingTerm(expression: t.fetchedAt, mode: OrderingMode.asc)
-        ]))
-      .get();
-
-  final binderRows = await (db.select(db.binderCards).join([
-    innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
-  ])
-        ..where(db.binderCards.cardId.isIn(cardIds) &
-            db.binderCards.isPlaceholder.equals(false)))
-      .get();
-
-  // 4. Mappings bauen (für extrem schnellen Zugriff im RAM)
+  // 4. Mappings bauen (für extrem schnellen O(1) RAM-Zugriff)
   final Map<String, List<CardMarketPrice>> cmMap = {};
   for (final p in allCmPrices) {
     cmMap.putIfAbsent(p.cardId, () => []).add(p);
@@ -428,7 +448,6 @@ final inventoryProvider = FutureProvider<List<InventoryItem>>((ref) async {
 
     final cardCmPrices = cmMap[cardId] ?? [];
     final cardTcgPrices = tcgMap[cardId] ?? [];
-    final cardCustomPrices = customMap[cardId] ?? [];
 
     final latestCm = latestCmPriceMap[cardId];
     final latestTcg = latestTcgPriceMap[cardId];
@@ -727,7 +746,7 @@ final top10LosersProvider = Provider<List<InventoryItem>>((ref) {
 
 final portfolioHistoryProvider =
     StreamProvider<List<PortfolioHistoryData>>((ref) {
-  final db = ref.read(databaseProvider);
+  final db = ref.watch(databaseProvider);
   return (db.select(db.portfolioHistory)
         ..orderBy([(t) => OrderingTerm(expression: t.date)]))
       .watch();
@@ -797,7 +816,7 @@ final cardPriceHistoryProvider =
 });
 
 final cardBinderLocationProvider =
-    StreamProvider.autoDispose.family<List<String>, String>((ref, cardId) {
+    FutureProvider.autoDispose.family<List<String>, String>((ref, cardId) async {
   final db = ref.watch(databaseProvider);
 
   final query = db.select(db.binderCards).join([
@@ -807,8 +826,7 @@ final cardBinderLocationProvider =
   query.where(db.binderCards.cardId.equals(cardId) &
       db.binderCards.isPlaceholder.equals(false));
 
-  return query.watch().map((rows) {
-    if (rows.isEmpty) return [];
-    return rows.map((r) => r.readTable(db.binders).name).toSet().toList();
-  });
+  final rows = await query.get();
+  if (rows.isEmpty) return [];
+  return rows.map((r) => r.readTable(db.binders).name).toSet().toList();
 });

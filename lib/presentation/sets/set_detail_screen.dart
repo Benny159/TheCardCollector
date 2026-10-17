@@ -54,8 +54,9 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Fehler: $err')),
         data: (rawCards) {
-          if (rawCards.isEmpty)
+          if (rawCards.isEmpty) {
             return const Center(child: Text("Keine Karten gefunden."));
+          }
 
           final List<ApiCard> allCards = rawCards;
 
@@ -120,7 +121,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     ? const Center(
                         child: Text("Keine Karten für diesen Filter."))
                     : GridView.builder(
-                        cacheExtent: 500,
                         padding: const EdgeInsets.only(
                             left: 8, top: 8, right: 8, bottom: 100),
                         gridDelegate:
@@ -376,7 +376,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                           padding: EdgeInsets.zero,
                           backgroundColor: isSelected
                               ? _getRarityColor(rarityName)
-                                  ?.withValues(alpha: 0.8)
+                                  .withValues(alpha: 0.8)
                               : _getRarityColor(rarityName),
                           side: isSelected
                               ? const BorderSide(
@@ -478,20 +478,21 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     final String imageUrl = card.displayImage;
     final bool hasImage = imageUrl.isNotEmpty;
 
-    return InkWell(
-      onTap: () {
-        Navigator.push(context,
-                MaterialPageRoute(builder: (_) => CardDetailScreen(card: card)))
-            .then((_) => ref.refresh(cardsForSetProvider(widget.set.id)));
-      },
-      onLongPress: () async {
-        await showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            builder: (_) => InventoryBottomSheet(card: card));
-        ref.invalidate(cardsForSetProvider(widget.set.id));
-        ref.invalidate(setStatsProvider(widget.set.id));
-      },
+    return RepaintBoundary(
+      child: InkWell(
+        onTap: () {
+          Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => CardDetailScreen(card: card)))
+              .then((_) => ref.invalidate(cardsForSetProvider(widget.set.id)));
+        },
+        onLongPress: () async {
+          await showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => InventoryBottomSheet(card: card));
+          ref.invalidate(cardsForSetProvider(widget.set.id));
+          ref.invalidate(allSetStatsProvider);
+        },
       child: Card(
         elevation: 2,
         clipBehavior: Clip.antiAlias,
@@ -589,8 +590,9 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   // --- Helper (lokal) ---
   int _getRarityWeight(String rarity) {
@@ -608,17 +610,26 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     return 50;
   }
 
-  Color? _getRarityColor(String rarity) {
+  Color _getRarityColor(String rarity) {
     final r = rarity.toLowerCase();
-    if (r.contains('secret') || r.contains('hyper'))
+    if (r.contains('secret') || r.contains('hyper')) {
       return Colors.amber.withValues(alpha: 0.4);
-    if (r.contains('illustration'))
+    }
+    if (r.contains('illustration')) {
       return Colors.pinkAccent.withValues(alpha: 0.2);
-    if (r.contains('ultra')) return Colors.cyan.withValues(alpha: 0.2);
-    if (r.contains('double')) return Colors.indigo.withValues(alpha: 0.2);
-    if (r.contains('rare')) return Colors.blue.withValues(alpha: 0.2);
-    if (r.contains('uncommon')) return Colors.grey.withValues(alpha: 0.3);
-    if (r.contains('common')) return Colors.grey.withValues(alpha: 0.1);
+    }
+    if (r.contains('ultra')) {
+      return Colors.cyan.withValues(alpha: 0.2);
+    }
+    if (r.contains('double')) {
+      return Colors.indigo.withValues(alpha: 0.2);
+    }
+    if (r.contains('rare')) {
+      return Colors.blue.withValues(alpha: 0.2);
+    }
+    if (r.contains('uncommon')) {
+      return Colors.grey.withValues(alpha: 0.3);
+    }
     return Colors.grey.withValues(alpha: 0.1);
   }
 

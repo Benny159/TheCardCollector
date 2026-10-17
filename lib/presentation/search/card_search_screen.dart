@@ -16,7 +16,7 @@ import 'dart:async';
 enum ChartFilter { week, month, year, all }
 
 final chartFilterProvider =
-    StateProvider<ChartFilter>((ref) => ChartFilter.week);
+    StateProvider.autoDispose<ChartFilter>((ref) => ChartFilter.week);
 
 class CardSearchScreen extends ConsumerStatefulWidget {
   final String? initialQuery;
@@ -122,11 +122,13 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                     focusNode: _focusNode,
                     optionsBuilder: (TextEditingValue textEditingValue) async {
                       final query = textEditingValue.text.trim();
-                      if (query.length < 2)
+                      if (query.length < 2) {
                         return const Iterable<String>.empty();
+                      }
 
-                      if (widget.onlyOwned)
+                      if (widget.onlyOwned) {
                         return const Iterable<String>.empty();
+                      }
 
                       final dbInst = ref.read(databaseProvider);
                       final mode = ref.read(searchModeProvider);
@@ -201,18 +203,24 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                               : null,
                         ),
                         onChanged: (val) {
-                          if (_debounce?.isActive ?? false) _debounce!.cancel();
+                          if (_debounce?.isActive ?? false) {
+                            _debounce!.cancel();
+                          }
                           _debounce =
                               Timer(const Duration(milliseconds: 500), () {
-                            if (mounted)
+                            if (mounted) {
                               ref.read(searchQueryProvider.notifier).state =
                                   val;
+                            }
                           });
                         },
                         onSubmitted: (val) {
-                          if (_debounce?.isActive ?? false) _debounce!.cancel();
-                          if (mounted)
+                          if (_debounce?.isActive ?? false) {
+                            _debounce!.cancel();
+                          }
+                          if (mounted) {
                             ref.read(searchQueryProvider.notifier).state = val;
+                          }
                           focusNode.unfocus();
                         },
                       );
@@ -298,7 +306,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
         if (val) {
           ref.read(searchModeProvider.notifier).state = mode;
           if (ref.read(searchQueryProvider).isNotEmpty) {
-            ref.refresh(searchResultsProvider);
+            ref.invalidate(searchResultsProvider);
           }
         }
       },
@@ -526,19 +534,20 @@ class _DashboardView extends ConsumerWidget {
           final item = items[index];
           final displayImage = item.card.displayImage;
 
-          return Container(
-            width: 160,
-            margin: const EdgeInsets.only(right: 12),
-            child: InkWell(
-              onTap: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => CardDetailScreen(card: item.card)));
-              },
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+          return RepaintBoundary(
+            child: Container(
+              width: 160,
+              margin: const EdgeInsets.only(right: 12),
+              child: InkWell(
+                onTap: () {
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => CardDetailScreen(card: item.card)));
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Expanded(
                     child: Card(
                       elevation: 4,
@@ -621,11 +630,12 @@ class _DashboardView extends ConsumerWidget {
                 ],
               ),
             ),
-          );
-        },
-      ),
-    );
-  }
+          ),
+        );
+      },
+    ),
+  );
+}
 }
 
 // =========================================================
@@ -748,7 +758,7 @@ class _PortfolioChart extends ConsumerWidget {
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 40,
-                interval: (maxY - minY) / 4,
+                interval: (maxY - minY) > 0 ? (maxY - minY) / 4 : 1.0,
                 getTitlesWidget: (value, meta) {
                   if (value < 0) return const SizedBox();
                   return Padding(
@@ -964,7 +974,6 @@ class _SearchResultsView extends ConsumerWidget {
   Widget _buildGrid(
       List<ApiCard> cards, BuildContext context, WidgetRef ref, bool isPicker) {
     return GridView.builder(
-      cacheExtent: 100,
       padding: const EdgeInsets.only(left: 10, top: 10, right: 10, bottom: 100),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
@@ -974,148 +983,163 @@ class _SearchResultsView extends ConsumerWidget {
       ),
       itemCount: cards.length,
       itemBuilder: (context, index) {
-        final card = cards[index];
-        final bool isOwned = card.isOwned;
+        return _SearchCardTile(
+          card: cards[index],
+          isPicker: isPicker,
+        );
+      },
+    );
+  }
+}
 
-        double? displayPrice = card.cardmarket?.trendPrice;
-        if (displayPrice == null || displayPrice == 0) {
-          displayPrice = card.tcgplayer?.prices?.normal?.market ??
-              card.tcgplayer?.prices?.holofoil?.market ??
-              card.tcgplayer?.prices?.reverseHolofoil?.market;
-        }
+class _SearchCardTile extends ConsumerWidget {
+  final ApiCard card;
+  final bool isPicker;
 
-        final displayImage = card.displayImage;
+  const _SearchCardTile({
+    required this.card,
+    required this.isPicker,
+  });
 
-        return Consumer(builder: (context, cardRef, child) {
-          final binderLocationsAsync =
-              cardRef.watch(cardBinderLocationProvider(card.id));
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bool isOwned = card.isOwned;
 
-          return InkWell(
-            onTap: () {
-              if (isPicker) {
-                Navigator.pop(context, card);
-              } else {
-                Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => CardDetailScreen(card: card)))
-                    .then((_) {
-                  ref.invalidate(searchResultsProvider);
-                  ref.invalidate(cardBinderLocationProvider(card.id));
-                });
-              }
-            },
-            onLongPress: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                builder: (context) => InventoryBottomSheet(card: card),
-              ).then((_) {
-                ref.invalidate(searchResultsProvider);
-                ref.invalidate(cardBinderLocationProvider(card.id));
-              });
-            },
-            child: Card(
-              elevation: 2,
-              clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  side: (isPicker && isOwned)
-                      ? const BorderSide(color: Colors.green, width: 2)
-                      : BorderSide.none),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedNetworkImage(
-                    imageUrl: displayImage,
-                    memCacheWidth: 200,
-                    placeholder: (context, url) =>
-                        Container(color: Colors.grey[200]),
-                    errorWidget: (context, url, error) =>
-                        const Icon(Icons.broken_image, color: Colors.grey),
-                    fadeInDuration: const Duration(milliseconds: 150),
-                  ),
-                  binderLocationsAsync.when(
-                    data: (binders) {
-                      if (binders.isEmpty) return const SizedBox();
+    double? displayPrice = card.cardmarket?.trendPrice;
+    if (displayPrice == null || displayPrice == 0) {
+      displayPrice = card.tcgplayer?.prices?.normal?.market ??
+          card.tcgplayer?.prices?.holofoil?.market ??
+          card.tcgplayer?.prices?.reverseHolofoil?.market;
+    }
 
-                      final badgeText = binders.length > 1
-                          ? "${binders.first} (+${binders.length - 1})"
-                          : binders.first;
+    final displayImage = card.displayImage;
+    final binderLocationsAsync = ref.watch(cardBinderLocationProvider(card.id));
 
-                      return Positioned(
-                        top: 4,
-                        left: 4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.blueAccent.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(4),
-                            boxShadow: [
-                              BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.3),
-                                  blurRadius: 2)
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.folder_special,
-                                  color: Colors.white, size: 10),
-                              const SizedBox(width: 3),
-                              Text(
-                                badgeText,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.bold),
-                                maxLines: 1,
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                    loading: () => const SizedBox(),
-                    error: (_, __) => const SizedBox(),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
+    return RepaintBoundary(
+      child: InkWell(
+        onTap: () {
+          if (isPicker) {
+            Navigator.pop(context, card);
+          } else {
+            Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => CardDetailScreen(card: card)))
+                .then((_) {
+              ref.invalidate(searchResultsProvider);
+              ref.invalidate(cardBinderLocationProvider(card.id));
+            });
+          }
+        },
+        onLongPress: () {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            builder: (context) => InventoryBottomSheet(card: card),
+          ).then((_) {
+            ref.invalidate(searchResultsProvider);
+            ref.invalidate(cardBinderLocationProvider(card.id));
+          });
+        },
+        child: Card(
+          elevation: 2,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+              side: (isPicker && isOwned)
+                  ? const BorderSide(color: Colors.green, width: 2)
+                  : BorderSide.none),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CachedNetworkImage(
+                imageUrl: displayImage,
+                memCacheWidth: 200,
+                placeholder: (context, url) =>
+                    Container(color: Colors.grey[200]),
+                errorWidget: (context, url, error) =>
+                    const Icon(Icons.broken_image, color: Colors.grey),
+                fadeInDuration: const Duration(milliseconds: 150),
+              ),
+              binderLocationsAsync.when(
+                data: (binders) {
+                  if (binders.isEmpty) return const SizedBox();
+
+                  final badgeText = binders.length > 1
+                      ? "${binders.first} (+${binders.length - 1})"
+                      : binders.first;
+
+                  return Positioned(
+                    top: 4,
+                    left: 4,
                     child: Container(
-                      color: Colors.black.withValues(alpha: 0.7),
                       padding: const EdgeInsets.symmetric(
-                          vertical: 2, horizontal: 4),
+                          horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blueAccent.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(4),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 2)
+                        ],
+                      ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
+                          const Icon(Icons.folder_special,
+                              color: Colors.white, size: 10),
+                          const SizedBox(width: 3),
                           Text(
-                            card.number,
+                            badgeText,
                             style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 10,
+                                fontSize: 8,
                                 fontWeight: FontWeight.bold),
+                            maxLines: 1,
                           ),
-                          if (displayPrice != null && displayPrice > 0)
-                            Text(
-                              '${displayPrice.toStringAsFixed(2)}€',
-                              style: const TextStyle(
-                                  color: Colors.lightGreenAccent,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold),
-                            ),
                         ],
                       ),
                     ),
-                  ),
-                ],
+                  );
+                },
+                loading: () => const SizedBox(),
+                error: (_, __) => const SizedBox(),
               ),
-            ),
-          );
-        });
-      },
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.7),
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 2, horizontal: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        card.number,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold),
+                      ),
+                      if (displayPrice != null && displayPrice > 0)
+                        Text(
+                          '${displayPrice.toStringAsFixed(2)}€',
+                          style: const TextStyle(
+                              color: Colors.lightGreenAccent,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

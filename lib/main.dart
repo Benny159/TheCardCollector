@@ -55,7 +55,6 @@ class TcgCollectorApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
 
       // --- WICHTIG FÜR DEVICE PREVIEW ---
-      useInheritedMediaQuery: true, 
       locale: DevicePreview.locale(context), 
       builder: DevicePreview.appBuilder, 
       // ----------------------------------

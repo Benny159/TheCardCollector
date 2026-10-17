@@ -11,7 +11,7 @@ import '../../domain/models/api_set.dart';
 import 'set_detail_screen.dart';
 
 // Provider für den UI Such-State innerhalb der Set-Liste
-final setListSearchProvider = StateProvider<String>((ref) => '');
+final setListSearchProvider = StateProvider.autoDispose<String>((ref) => '');
 
 // ÄNDERUNG: Jetzt ConsumerStatefulWidget, um den Controller zu halten
 class SetListScreen extends ConsumerStatefulWidget {
@@ -240,14 +240,14 @@ class _SetListScreenState extends ConsumerState<SetListScreen> {
       if (syncType == 1 || syncType == 2) {
         // TCGdex Sync immer zuerst ausführen!
         await setImporter.syncAllData(
-          onProgress: (status) => print('TCGDEX SYNC: $status'),
+          onProgress: (status) => debugPrint('TCGDEX SYNC: $status'),
         );
       }
 
       if (syncType == 2) {
         // Danach den Lückenfüller drüberschicken!
         await ptcgImporter.syncMissingData(
-          onProgress: (status) => print('PTCG SYNC: $status'),
+          onProgress: (status) => debugPrint('PTCG SYNC: $status'),
         );
       }
 
@@ -267,7 +267,8 @@ class _SetListScreenState extends ConsumerState<SetListScreen> {
     } finally {
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
-        ref.refresh(allSetsProvider);
+        ref.invalidate(allSetsProvider);
+        ref.invalidate(allSetStatsProvider);
       }
     }
   }
@@ -284,21 +285,22 @@ class _SetTile extends ConsumerWidget {
     // Bild Logik: Nutze deutsches Logo wenn verfügbar, sonst Englisch
     final logoUrl = set.logoUrlDe ?? set.logoUrl;
 
-    return Card(
-      elevation: 3,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SetDetailScreen(set: set),
-            ),
-          ).then((_) {
-             // Statistiken beim Zurückkehren refreshen
-             ref.refresh(setStatsProvider(set.id));
-          });
-        },
+    return RepaintBoundary(
+      child: Card(
+        elevation: 3,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => SetDetailScreen(set: set),
+              ),
+            ).then((_) {
+              // Statistiken beim Zurückkehren refreshen
+              ref.invalidate(allSetStatsProvider);
+            });
+          },
         child: Stack(
           children: [
             Column(
@@ -404,8 +406,9 @@ class _SetTile extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   void _importCards(BuildContext context, WidgetRef ref, ApiSet set) async {
     final db = ref.read(databaseProvider);
@@ -456,7 +459,7 @@ class _SetTile extends ConsumerWidget {
       
       // Cache der Provider zurücksetzen, damit die UI die neuen Karten zeigt
       ref.invalidate(cardsForSetProvider(set.id));
-      ref.invalidate(setStatsProvider(set.id));
+      ref.invalidate(allSetStatsProvider);
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();

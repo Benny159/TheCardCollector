@@ -23,7 +23,7 @@ import 'price_history_chart.dart';
 // --- PROVIDER ---
 
 final cardInventoryProvider =
-    StreamProvider.family<List<UserCard>, String>((ref, cardId) {
+    StreamProvider.autoDispose.family<List<UserCard>, String>((ref, cardId) {
   final db = ref.watch(databaseProvider);
   return (db.select(db.userCards)..where((tbl) => tbl.cardId.equals(cardId)))
       .watch();
@@ -31,7 +31,7 @@ final cardInventoryProvider =
 
 // FIX: Provider gibt jetzt echte 'Binder' Objekte zurück, statt nur Namen, damit wir dorthin navigieren können!
 final cardBindersProvider =
-    StreamProvider.family<List<Binder>, String>((ref, cardId) {
+    StreamProvider.autoDispose.family<List<Binder>, String>((ref, cardId) {
   final db = ref.watch(databaseProvider);
 
   final query = db.select(db.binderCards).join([
@@ -65,7 +65,6 @@ class CardDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
-  int _refreshId = 0;
 
   late String _currentPreferredSource;
   late TextEditingController _customPriceController;
@@ -116,9 +115,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     ref.invalidate(setStatsProvider(widget.card.setId));
     ref.invalidate(inventoryProvider);
 
-    setState(() {
-      _refreshId++;
-    });
+    setState(() {});
   }
 
   Future<void> _updatePreferredSource(String source) async {
@@ -713,6 +710,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
             price: parsed,
           ));
 
+      if (!mounted) return;
+
       setState(() => _currentCustomPrice = parsed);
       _customPriceController.clear();
       FocusScope.of(context).unfocus();
@@ -761,10 +760,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       double p = 0.0;
       if (isReverse) {
         p = tcg.prices?.reverseHolofoil?.market ?? 0.0;
-      } else if (isHolo)
+      } else if (isHolo) {
         p = tcg.prices?.holofoil?.market ?? 0.0;
-      else
+      } else {
         p = tcg.prices?.normal?.market ?? 0.0;
+      }
       if (p == 0.0) {
         p = tcg.prices?.normal?.market ??
             tcg.prices?.holofoil?.market ??
@@ -789,7 +789,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       } else {
         p = cm.trendPrice ?? 0.0;
       }
-      if (p == 0.0) p = cm.trendPrice ?? cm.trendHolo ?? 0.0;
+      if (p == 0.0) {
+        p = cm.trendPrice ?? cm.trendHolo ?? 0.0;
+      }
       return p;
     }
 
@@ -834,10 +836,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       final tcg = widget.card.tcgplayer!;
       if (isReverse) {
         tcgCur = tcg.prices?.reverseHolofoil?.market ?? 0.0;
-      } else if (isHolo)
+      } else if (isHolo) {
         tcgCur = tcg.prices?.holofoil?.market ?? 0.0;
-      else
+      } else {
         tcgCur = tcg.prices?.normal?.market ?? 0.0;
+      }
       if (tcgCur == 0.0) {
         tcgCur = tcg.prices?.normal?.market ??
             tcg.prices?.holofoil?.market ??
@@ -853,13 +856,16 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         cmCur = isFirstEd
             ? (isHolo ? cm.trendPrice ?? 0.0 : cm.trendHolo ?? 0.0)
             : (isHolo ? cm.trendHolo ?? 0.0 : cm.trendPrice ?? 0.0);
-      } else if (isReverse)
+      } else if (isReverse) {
         cmCur = cm.reverseHoloTrend ?? cm.trendHolo ?? 0.0;
-      else if (isHolo && !baseIsHolo)
+      } else if (isHolo && !baseIsHolo) {
         cmCur = cm.trendHolo ?? 0.0;
-      else
+      } else {
         cmCur = cm.trendPrice ?? 0.0;
-      if (cmCur == 0.0) cmCur = cm.trendPrice ?? cm.trendHolo ?? 0.0;
+      }
+      if (cmCur == 0.0) {
+        cmCur = cm.trendPrice ?? cm.trendHolo ?? 0.0;
+      }
     }
 
     // Selbe Entscheidung treffen wie der Preisrechner
@@ -869,17 +875,18 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         _currentCustomPrice != null &&
         _currentCustomPrice! > 0) {
       usedSource = 'custom';
-    } else if (pref == 'tcgplayer' && tcgCur > 0.0)
+    } else if (pref == 'tcgplayer' && tcgCur > 0.0) {
       usedSource = 'tcgplayer';
-    else if (pref == 'cardmarket' && cmCur > 0.0)
+    } else if (pref == 'cardmarket' && cmCur > 0.0) {
       usedSource = 'cardmarket';
-    else {
+    } else {
       if (cmCur > 0.0) {
         usedSource = 'cardmarket';
-      } else if (tcgCur > 0.0)
+      } else if (tcgCur > 0.0) {
         usedSource = 'tcgplayer';
-      else
+      } else {
         usedSource = 'custom';
+      }
     }
 
     DateTime targetDate = item.createdAt;
@@ -916,10 +923,11 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         double hp = 0.0;
         if (isReverse) {
           hp = p.reverseMarket ?? 0.0;
-        } else if (isHolo)
+        } else if (isHolo) {
           hp = p.holoMarket ?? 0.0;
-        else
+        } else {
           hp = p.normalMarket ?? 0.0;
+        }
         if (hp == 0.0) {
           hp = p.normalMarket ?? p.holoMarket ?? p.reverseMarket ?? 0.0;
         }
@@ -1503,10 +1511,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
                   BinderService(db).recalculateBindersForCard(widget.card.id);
 
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                  }
                   if (mounted) {
                     ref.invalidate(cardInventoryProvider(widget.card.id));
                     ref.invalidate(inventoryProvider);
-                    Navigator.pop(ctx);
                   }
                 },
                 child: const Text("Speichern"),

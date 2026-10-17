@@ -11,9 +11,9 @@ import 'binder_detail_provider.dart';
 // --- STATE PROVIDER FÜR SUCHE & SORTIERUNG ---
 enum StorageSort { newest, name, value }
 
-final storageSearchProvider = StateProvider<String>((ref) => '');
+final storageSearchProvider = StateProvider.autoDispose<String>((ref) => '');
 final storageSortProvider =
-    StateProvider<StorageSort>((ref) => StorageSort.newest);
+    StateProvider.autoDispose<StorageSort>((ref) => StorageSort.newest);
 
 class BinderListScreen extends ConsumerWidget {
   const BinderListScreen({super.key});

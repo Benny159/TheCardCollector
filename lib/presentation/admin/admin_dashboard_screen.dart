@@ -416,6 +416,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       hasManualStats: const drift.Value(true),
     ));
 
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text("✅ Karte gespeichert!"),
         backgroundColor: Colors.green,
@@ -987,6 +989,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       // 1. Datei-Picker öffnen
       final result = await FilePicker.platform.pickFiles(type: FileType.any);
       if (result == null || result.files.single.path == null) return;
+      if (!mounted) return;
 
       final file = File(result.files.single.path!);
 
@@ -1064,7 +1067,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       await dbase.customStatement("DETACH DATABASE pc_db;");
       await dbase.customStatement('PRAGMA foreign_keys = ON;');
 
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text("✅ Datenbank erfolgreich vom PC synchronisiert!"),
             backgroundColor: Colors.green));
@@ -1077,13 +1080,15 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         await dbase.customStatement('PRAGMA foreign_keys = ON;');
       } catch (_) {}
 
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text("❌ Fehler beim Sync: $e"),
             backgroundColor: Colors.red));
       }
     } finally {
-      setState(() => _isLoadingEditor = false);
+      if (mounted) {
+        setState(() => _isLoadingEditor = false);
+      }
     }
   }
 

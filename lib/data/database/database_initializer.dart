@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'app_database.dart';
 
@@ -9,7 +10,7 @@ class DatabaseInitializer {
   /// Synchronisiert die Mapping-Tabelle.
   /// Neue Einträge werden hinzugefügt, bestehende werden aktualisiert.
   Future<void> seedInitialMappings() async {
-    print('🌱 Überprüfe/Aktualisiere Set-Mappings...');
+    debugPrint('🌱 Überprüfe/Aktualisiere Set-Mappings...');
 
     final List<Map<String, String?>> initialMappings = [
       // --- DIE AUTOMATISCHEN MATCHES ---
@@ -228,12 +229,12 @@ class DatabaseInitializer {
       );
     });
 
-    print('✅ Set-Mappings erfolgreich synchronisiert!');
+    debugPrint('✅ Set-Mappings erfolgreich synchronisiert!');
   }
 
   /// Löscht alte, falsche Sets und deren Karten restlos aus der Datenbank
   Future<void> cleanUpOldSets(List<String> oldSetIds) async {
-    print('🧹 Räume alte, falsche Sets auf...');
+    debugPrint('🧹 Räume alte, falsche Sets auf...');
 
     for (var oldId in oldSetIds) {
       // 1. Finde alle Karten dieses alten Sets
@@ -275,6 +276,6 @@ class DatabaseInitializer {
       await (db.delete(db.setMappings)..where((t) => t.tcgdexId.equals(oldId))).go();
     }
 
-    print('✅ Aufräumen beendet!');
+    debugPrint('✅ Aufräumen beendet!');
   }
 }

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart' hide Card;
@@ -310,15 +309,21 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
             score += 50;
           } else if (int.tryParse(dbNum) != null &&
               int.tryParse(recognizedCardNum) != null &&
-              int.parse(dbNum) == int.parse(recognizedCardNum)) score += 50;
+              int.parse(dbNum) == int.parse(recognizedCardNum)) {
+            score += 50;
+          }
         }
         if (recognizedMaxNum != null) {
           int? ocrMax = int.tryParse(recognizedMaxNum);
           int? dbMax = _setPrintedTotalMap[card.setId];
-          if (ocrMax != null && dbMax != null && ocrMax == dbMax) score += 40;
+          if (ocrMax != null && dbMax != null && ocrMax == dbMax) {
+            score += 40;
+          }
         }
         String setIdLower = card.setId.toLowerCase();
-        if (rawText.toLowerCase().contains(setIdLower)) score += 30;
+        if (rawText.toLowerCase().contains(setIdLower)) {
+          score += 30;
+        }
 
         if (score > bestScore) {
           bestScore = score;
@@ -469,11 +474,11 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
       smallImageUrl: card.imageUrl,
       largeImageUrl: card.imageUrl,
       imageUrlDe: card.imageUrlDe,
-      hasNormal: card.hasNormal ?? true,
-      hasReverse: card.hasReverse ?? false,
-      hasHolo: card.hasHolo ?? false,
-      hasFirstEdition: card.hasFirstEdition ?? false,
-      hasWPromo: card.hasWPromo ?? false,
+      hasNormal: card.hasNormal,
+      hasReverse: card.hasReverse,
+      hasHolo: card.hasHolo,
+      hasFirstEdition: card.hasFirstEdition,
+      hasWPromo: card.hasWPromo,
       isOwned: false,
     );
 
