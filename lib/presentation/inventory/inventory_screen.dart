@@ -11,6 +11,108 @@ import 'inventory_bottom_sheet.dart';
 
 final inventorySearchProvider = StateProvider<String>((ref) => '');
 
+// Speichert die IDs/Namen der aktuell aufgeklappten Sets & Binder
+final expandedSetsProvider = StateProvider<Set<String>>((ref) => {});
+final expandedBindersProvider = StateProvider<Set<String>>((ref) => {});
+
+// --- NEU: DIESER PROVIDER ÜBERNIMMT DIE RECHENARBEIT ---
+final processedInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref) {
+  // 1. Wir überwachen alle Ausgangsdaten und Filter-Zustände
+  final inventoryAsync = ref.watch(inventoryProvider);
+  final searchText = ref.watch(inventorySearchProvider);
+  final groupMode = ref.watch(inventoryGroupModeProvider);
+  final sortMode = ref.watch(inventorySortProvider);
+  final isAscending = ref.watch(inventorySortAscendingProvider);
+
+  // 2. Wir führen die schwere Logik nur aus, wenn die Daten fertig geladen sind
+  return inventoryAsync.whenData((allItems) {
+    if (allItems.isEmpty) return [];
+
+    // --- A. FILTERN (Suche) ---
+    var filteredItems = allItems;
+    if (searchText.isNotEmpty) {
+      filteredItems = allItems.where((item) {
+        final nameMatch = item.card.name.toLowerCase().contains(searchText.toLowerCase());
+        final nameDeMatch = item.card.nameDe?.toLowerCase().contains(searchText.toLowerCase()) ?? false;
+        final setMatch = item.set.name.toLowerCase().contains(searchText.toLowerCase());
+        final binderMatch = (item.binderName ?? '').toLowerCase().contains(searchText.toLowerCase());
+        
+        return nameMatch || nameDeMatch || setMatch || binderMatch;
+      }).toList();
+    }
+
+    // --- B. KARTEN ZUSAMMENFASSEN ---
+    if (groupMode != InventoryGroupMode.byBinder) {
+      final Map<String, InventoryItem> mergedMap = {};
+      
+      for (final item in filteredItems) {
+        final company = item.userCard.gradingCompany ?? 'none';
+        final score = item.userCard.gradingScore ?? 'none';
+        final cPrice = item.userCard.customPrice?.toStringAsFixed(2) ?? 'none';
+        
+        final key = "${item.card.id}_${item.variant}_${company}_${score}_$cPrice";
+        
+        if (mergedMap.containsKey(key)) {
+          final existing = mergedMap[key]!;
+          mergedMap[key] = InventoryItem(
+            card: existing.card, set: existing.set,
+            quantity: existing.quantity + item.quantity,
+            variant: existing.variant,
+            totalValue: existing.totalValue + item.totalValue,
+            binderName: null, userCard: existing.userCard, 
+            performance: existing.performance + item.performance, 
+          );
+        } else {
+          mergedMap[key] = InventoryItem(
+            card: item.card, set: item.set,
+            quantity: item.quantity, variant: item.variant,
+            totalValue: item.totalValue, binderName: null, 
+            userCard: item.userCard, performance: item.performance, 
+          );
+        }
+      }
+      filteredItems = mergedMap.values.toList();
+    }
+
+    // --- C. SORTIEREN ---
+    final sortedItems = List<InventoryItem>.from(filteredItems);
+    
+    sortedItems.sort((a, b) {
+      int comp = 0;
+      switch (sortMode) {
+        case InventorySort.value:
+          final singleValA = a.totalValue / (a.quantity > 0 ? a.quantity : 1);
+          final singleValB = b.totalValue / (b.quantity > 0 ? b.quantity : 1);
+          comp = singleValA.compareTo(singleValB);
+          break;
+        case InventorySort.performance:
+          final singlePerfA = a.performance / (a.quantity > 0 ? a.quantity : 1);
+          final singlePerfB = b.performance / (b.quantity > 0 ? b.quantity : 1);
+          comp = singlePerfA.compareTo(singlePerfB);
+          break;
+        case InventorySort.dateAdded:
+          comp = a.userCard.createdAt.compareTo(b.userCard.createdAt);
+          break;
+        case InventorySort.name:
+          comp = (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
+          break;
+        case InventorySort.rarity:
+          comp = (a.card.rarity ?? '').compareTo(b.card.rarity ?? ''); 
+          break;
+        case InventorySort.type:
+          final tA = a.card.cardType ?? 'ZZZ'; 
+          final tB = b.card.cardType ?? 'ZZZ';
+          comp = tA.compareTo(tB);
+          if (comp == 0) comp = (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
+          break;
+      }
+      return isAscending ? comp : -comp;
+    });
+
+    return sortedItems;
+  });
+});
+
 enum InventoryGroupMode { none, bySet, byBinder }
 final inventoryGroupModeProvider = StateProvider<InventoryGroupMode>((ref) => InventoryGroupMode.none);
 
@@ -19,7 +121,9 @@ class InventoryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final inventoryAsync = ref.watch(inventoryProvider);
+    // 1. Wir hören JETZT auf den neuen, verarbeiteten Provider!
+    final processedInventoryAsync = ref.watch(processedInventoryProvider);
+    
     final sortMode = ref.watch(inventorySortProvider);
     final groupMode = ref.watch(inventoryGroupModeProvider); 
     final searchText = ref.watch(inventorySearchProvider);
@@ -28,12 +132,12 @@ class InventoryScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text("Mein Inventar"),
       ),
-      body: inventoryAsync.when(
+      body: processedInventoryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Fehler: $err')),
-        data: (allItems) {
+        data: (sortedItems) {
           
-          if (allItems.isEmpty) {
+          if (sortedItems.isEmpty && searchText.isEmpty) {
             return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -45,103 +149,8 @@ class InventoryScreen extends ConsumerWidget {
               ),
             );
           }
-
-          // 1. FILTERN (Suche)
-          var filteredItems = allItems;
-          if (searchText.isNotEmpty) {
-            filteredItems = allItems.where((item) {
-              final nameMatch = item.card.name.toLowerCase().contains(searchText.toLowerCase());
-              final nameDeMatch = item.card.nameDe?.toLowerCase().contains(searchText.toLowerCase()) ?? false;
-              final setMatch = item.set.name.toLowerCase().contains(searchText.toLowerCase());
-              final binderMatch = (item.binderName ?? '').toLowerCase().contains(searchText.toLowerCase());
-              
-              return nameMatch || nameDeMatch || setMatch || binderMatch;
-            }).toList();
-          }
-
-          // 2. KARTEN ZUSAMMENFASSEN
-          if (groupMode != InventoryGroupMode.byBinder) {
-            final Map<String, InventoryItem> mergedMap = {};
-            
-            for (final item in filteredItems) {
-              final company = item.userCard.gradingCompany ?? 'none';
-              final score = item.userCard.gradingScore ?? 'none';
-              final cPrice = item.userCard.customPrice?.toStringAsFixed(2) ?? 'none';
-              
-              final key = "${item.card.id}_${item.variant}_${company}_${score}_$cPrice";
-              
-              if (mergedMap.containsKey(key)) {
-                final existing = mergedMap[key]!;
-                mergedMap[key] = InventoryItem(
-                  card: existing.card,
-                  set: existing.set,
-                  quantity: existing.quantity + item.quantity,
-                  variant: existing.variant,
-                  totalValue: existing.totalValue + item.totalValue,
-                  binderName: null,
-                  userCard: existing.userCard, 
-                  // --- FIX: Performance addieren! ---
-                  performance: existing.performance + item.performance, 
-                );
-              } else {
-                mergedMap[key] = InventoryItem(
-                  card: item.card,
-                  set: item.set,
-                  quantity: item.quantity,
-                  variant: item.variant,
-                  totalValue: item.totalValue,
-                  binderName: null, 
-                  userCard: item.userCard,
-                  // --- FIX: Performance übernehmen! ---
-                  performance: item.performance, 
-                );
-              }
-            }
-            filteredItems = mergedMap.values.toList();
-          }
-
-          // 3. STATISTIK (Gesamt)
-          final int totalCards = filteredItems.fold(0, (sum, item) => sum + item.quantity);
-          final double totalValue = filteredItems.fold(0.0, (sum, item) => sum + item.totalValue);
-
-          // 4. SORTIEREN (Mit Aufsteigend/Absteigend Logik)
-          final isAscending = ref.watch(inventorySortAscendingProvider);
-          final sortedItems = List<InventoryItem>.from(filteredItems);
-          
-          sortedItems.sort((a, b) {
-            int comp = 0;
-            switch (sortMode) {
-              case InventorySort.value:
-                final singleValA = a.totalValue / (a.quantity > 0 ? a.quantity : 1);
-                final singleValB = b.totalValue / (b.quantity > 0 ? b.quantity : 1);
-                comp = singleValA.compareTo(singleValB);
-                break;
-              case InventorySort.performance:
-                final singlePerfA = a.performance / (a.quantity > 0 ? a.quantity : 1);
-                final singlePerfB = b.performance / (b.quantity > 0 ? b.quantity : 1);
-                comp = singlePerfA.compareTo(singlePerfB);
-                break;
-              case InventorySort.dateAdded:
-                comp = a.userCard.createdAt.compareTo(b.userCard.createdAt);
-                break;
-              case InventorySort.name:
-                comp = (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
-                break;
-              case InventorySort.rarity:
-                comp = (a.card.rarity ?? '').compareTo(b.card.rarity ?? ''); 
-                break;
-              case InventorySort.type:
-                final tA = a.card.cardType ?? 'ZZZ'; 
-                final tB = b.card.cardType ?? 'ZZZ';
-                comp = tA.compareTo(tB);
-                if (comp == 0) comp = (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
-                break;
-            }
-            
-            // Standardmäßig wollen wir das Beste/Neueste ganz oben sehen (Absteigend -> -comp).
-            // Wenn der Nutzer den Pfeil klickt, drehen wir es um (Aufsteigend -> comp).
-            return isAscending ? comp : -comp;
-          });
+          final int totalCards = sortedItems.fold(0, (sum, item) => sum + item.quantity);
+          final double totalValue = sortedItems.fold(0.0, (sum, item) => sum + item.totalValue);
 
           return Column(
             children: [
@@ -150,11 +159,11 @@ class InventoryScreen extends ConsumerWidget {
               _buildFilterBar(context, ref, sortMode, groupMode),
               const Divider(height: 1),
 
-              // 5. ANZEIGEN JE NACH MODUS
+              // ANZEIGEN JE NACH MODUS
               Expanded(
                 child: sortedItems.isEmpty 
                   ? const Center(child: Text("Keine Ergebnisse für deine Suche."))
-                  : _buildContent(sortedItems, groupMode),
+                  : _buildContent(sortedItems, groupMode, ref),
               ),
             ],
           );
@@ -165,9 +174,9 @@ class InventoryScreen extends ConsumerWidget {
 
   // --- WIDGETS ---
 
-  Widget _buildContent(List<InventoryItem> items, InventoryGroupMode mode) {
-    if (mode == InventoryGroupMode.bySet) return _buildGroupedBySet(items);
-    if (mode == InventoryGroupMode.byBinder) return _buildGroupedByBinder(items);
+  Widget _buildContent(List<InventoryItem> items, InventoryGroupMode mode, WidgetRef ref) {
+    if (mode == InventoryGroupMode.bySet) return _buildGroupedBySet(items, ref);
+    if (mode == InventoryGroupMode.byBinder) return _buildGroupedByBinder(items, ref);
     return _buildGrid(items); 
   }
 
@@ -365,8 +374,9 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildGroupedBySet(List<InventoryItem> items) {
+  Widget _buildGroupedBySet(List<InventoryItem> items, WidgetRef ref) {
     final grouped = groupBy(items, (item) => item.set.id);
+    final expandedSets = ref.watch(expandedSetsProvider);
     
     final sortedKeys = grouped.keys.toList()..sort((a, b) {
       final dateA = grouped[a]!.first.set.releaseDate;
@@ -374,63 +384,86 @@ class InventoryScreen extends ConsumerWidget {
       return dateB.compareTo(dateA); 
     });
 
-    return ListView.builder(
-      itemCount: sortedKeys.length,
-      padding: const EdgeInsets.only(bottom: 20),
-      itemBuilder: (context, index) {
-        final setId = sortedKeys[index];
-        final setCards = grouped[setId]!;
-        final apiSet = setCards.first.set;
+    return CustomScrollView(
+      slivers: [
+        const SliverPadding(padding: EdgeInsets.only(top: 8)),
+        // .expand() erlaubt es uns, pro Set entweder nur den Header (1 Widget)
+        // oder Header + Grid (2 Widgets) zurückzugeben.
+        ...sortedKeys.expand((setId) {
+          final setCards = grouped[setId]!;
+          final apiSet = setCards.first.set;
+          final isExpanded = expandedSets.contains(setId);
 
-        final setTotalCount = setCards.fold(0, (sum, i) => sum + i.quantity);
-        final setTotalValue = setCards.fold(0.0, (sum, i) => sum + i.totalValue);
+          final setTotalCount = setCards.fold(0, (sum, i) => sum + i.quantity);
+          final setTotalValue = setCards.fold(0.0, (sum, i) => sum + i.totalValue);
 
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          elevation: 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ExpansionTile(
-            leading: SizedBox(
-              width: 50, 
-              height: 30,
-              child: apiSet.logoUrl != null 
-                ? CachedNetworkImage(
-                    imageUrl: apiSet.logoUrl!, 
-                    memCacheHeight: 200,
-                    fit: BoxFit.contain,
-                    placeholder: (_,__) => const SizedBox(),
-                    errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 20, color: Colors.grey),
-                  )
-                : const Icon(Icons.image_not_supported, color: Colors.grey),
-            ),
-            title: Text(apiSet.nameDe ?? apiSet.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            subtitle: Text("$setTotalCount Karten • ${setTotalValue.toStringAsFixed(2)} €", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-            childrenPadding: const EdgeInsets.only(bottom: 12),
-            children: [
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  childAspectRatio: 0.70,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
+          return [
+            // 1. Der Header (ersetzt den Kopf des ExpansionTiles)
+            SliverToBoxAdapter(
+              child: Card(
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                elevation: 1,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    // Auf- und Zuklappen togglen
+                    final current = ref.read(expandedSetsProvider);
+                    if (isExpanded) {
+                      ref.read(expandedSetsProvider.notifier).state = {...current}..remove(setId);
+                    } else {
+                      ref.read(expandedSetsProvider.notifier).state = {...current, setId};
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: ListTile(
+                      leading: SizedBox(
+                        width: 50, height: 30,
+                        child: apiSet.logoUrl != null 
+                          ? CachedNetworkImage(
+                              imageUrl: apiSet.logoUrl!, memCacheHeight: 200, fit: BoxFit.contain,
+                              placeholder: (_,__) => const SizedBox(),
+                              errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 20, color: Colors.grey),
+                            )
+                          : const Icon(Icons.image_not_supported, color: Colors.grey),
+                      ),
+                      title: Text(apiSet.nameDe ?? apiSet.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      subtitle: Text("$setTotalCount Karten • ${setTotalValue.toStringAsFixed(2)} €", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      trailing: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                    ),
+                  ),
                 ),
-                itemCount: setCards.length,
-                itemBuilder: (context, cardIndex) {
-                  return _InventoryCardTile(item: setCards[cardIndex]);
-                },
               ),
-            ],
-          ),
-        );
-      },
+            ),
+            
+            // 2. Das Grid (wird NUR gerendert, wenn aufgeklappt - und absolut Lazy!)
+            if (isExpanded)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: 0.70,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, cardIndex) => _InventoryCardTile(item: setCards[cardIndex]),
+                    childCount: setCards.length,
+                  ),
+                ),
+              ),
+          ];
+        }),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
     );
   }
 
-  Widget _buildGroupedByBinder(List<InventoryItem> items) {
+  Widget _buildGroupedByBinder(List<InventoryItem> items, WidgetRef ref) {
     final grouped = groupBy(items, (item) => item.binderName ?? "Nicht im Binder");
+    final expandedBinders = ref.watch(expandedBindersProvider);
     
     final sortedKeys = grouped.keys.toList()..sort((a, b) {
       if (a == "Nicht im Binder") return 1;
@@ -438,59 +471,79 @@ class InventoryScreen extends ConsumerWidget {
       return a.compareTo(b);
     });
 
-    return ListView.builder(
-      itemCount: sortedKeys.length,
-      padding: const EdgeInsets.only(bottom: 20),
-      itemBuilder: (context, index) {
-        final binderName = sortedKeys[index];
-        final binderCards = grouped[binderName]!;
+    return CustomScrollView(
+      slivers: [
+        const SliverPadding(padding: EdgeInsets.only(top: 8)),
+        ...sortedKeys.expand((binderName) {
+          final binderCards = grouped[binderName]!;
+          final isLoose = binderName == "Nicht im Binder";
+          
+          // "Nicht im Binder" soll standardmäßig offen sein, Binder standardmäßig zu (außer sie wurden angeklickt)
+          final isExpanded = isLoose ? !expandedBinders.contains(binderName) : expandedBinders.contains(binderName);
 
-        final totalCount = binderCards.fold(0, (sum, i) => sum + i.quantity);
-        final totalValue = binderCards.fold(0.0, (sum, i) => sum + i.totalValue);
-        
-        final isLoose = binderName == "Nicht im Binder";
+          final totalCount = binderCards.fold(0, (sum, i) => sum + i.quantity);
+          final totalValue = binderCards.fold(0.0, (sum, i) => sum + i.totalValue);
 
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          elevation: isLoose ? 0 : 2, 
-          color: isLoose ? Colors.grey[50] : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: isLoose ? BorderSide(color: Colors.grey[300]!) : BorderSide.none,
-          ),
-          child: ExpansionTile(
-            initiallyExpanded: !isLoose, 
-            leading: CircleAvatar(
-              backgroundColor: isLoose ? Colors.grey[300] : Colors.blueAccent.withOpacity(0.2),
-              child: Icon(
-                isLoose ? Icons.inventory_2 : Icons.menu_book, 
-                color: isLoose ? Colors.grey[600] : Colors.blueAccent,
-                size: 20,
+          return [
+            SliverToBoxAdapter(
+              child: Card(
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                elevation: isLoose ? 0 : 2, 
+                color: isLoose ? Colors.grey[50] : Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: isLoose ? BorderSide(color: Colors.grey[300]!) : BorderSide.none,
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    final current = ref.read(expandedBindersProvider);
+                    if (expandedBinders.contains(binderName)) {
+                      ref.read(expandedBindersProvider.notifier).state = {...current}..remove(binderName);
+                    } else {
+                      ref.read(expandedBindersProvider.notifier).state = {...current, binderName};
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: isLoose ? Colors.grey[300] : Colors.blueAccent.withOpacity(0.2),
+                        child: Icon(
+                          isLoose ? Icons.inventory_2 : Icons.menu_book, 
+                          color: isLoose ? Colors.grey[600] : Colors.blueAccent,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(binderName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      subtitle: Text("$totalCount Karten • ${totalValue.toStringAsFixed(2)} €", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      trailing: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                    ),
+                  ),
+                ),
               ),
             ),
-            title: Text(binderName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            subtitle: Text("$totalCount Karten • ${totalValue.toStringAsFixed(2)} €", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-            childrenPadding: const EdgeInsets.only(bottom: 12),
-            children: [
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  childAspectRatio: 0.70,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
+            
+            if (isExpanded)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: 0.70,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, cardIndex) => _InventoryCardTile(item: binderCards[cardIndex]),
+                    childCount: binderCards.length,
+                  ),
                 ),
-                itemCount: binderCards.length,
-                itemBuilder: (context, cardIndex) {
-                  return _InventoryCardTile(item: binderCards[cardIndex]);
-                },
               ),
-            ],
-          ),
-        );
-      },
+          ];
+        }),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
     );
   }
 }
