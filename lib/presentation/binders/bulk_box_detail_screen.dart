@@ -17,13 +17,14 @@ class BulkBoxDetailScreen extends ConsumerStatefulWidget {
   const BulkBoxDetailScreen({super.key, required this.binder});
 
   @override
-  ConsumerState<BulkBoxDetailScreen> createState() => _BulkBoxDetailScreenState();
+  ConsumerState<BulkBoxDetailScreen> createState() =>
+      _BulkBoxDetailScreenState();
 }
 
 class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
   final _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  
+
   bool _isSwapMode = false;
   BinderSlotData? _slotToSwap;
 
@@ -39,21 +40,25 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
     final asyncData = ref.watch(binderDetailProvider(widget.binder.id));
 
     return Scaffold(
-      backgroundColor: Colors.grey[100], 
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: Text(widget.binder.name),
-        backgroundColor: widget.binder.isFull ? Colors.grey[700] : Color(widget.binder.color),
+        backgroundColor: widget.binder.isFull
+            ? Colors.grey[700]
+            : Color(widget.binder.color),
         foregroundColor: Colors.white,
         actions: [
           Row(
             children: [
-              const Text("Voll", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              const Text("Voll",
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               Switch(
                 value: widget.binder.isFull,
                 activeThumbColor: Colors.redAccent,
                 onChanged: (val) async {
                   final db = ref.read(databaseProvider);
-                  await BinderService(db).toggleBinderFullStatus(widget.binder.id, val);
+                  await BinderService(db)
+                      .toggleBinderFullStatus(widget.binder.id, val);
                   if (mounted) Navigator.pop(context);
                 },
               ),
@@ -67,7 +72,8 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
           // --- SUCHEN ---
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () => _showSearchDialog(context, asyncData.asData?.value),
+            onPressed: () =>
+                _showSearchDialog(context, asyncData.asData?.value),
           ),
           // --- GRAPH / STATS ---
           IconButton(
@@ -78,7 +84,8 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddMenu(context),
-        backgroundColor: widget.binder.isFull ? Colors.grey : Color(widget.binder.color),
+        backgroundColor:
+            widget.binder.isFull ? Colors.grey : Color(widget.binder.color),
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: Column(
@@ -95,7 +102,10 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                   Expanded(
                     child: Text(
                       "Wähle das Ziel für '${_getSlotName(_slotToSwap!)}'...",
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12),
                     ),
                   ),
                   IconButton(
@@ -108,7 +118,6 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                 ],
               ),
             ),
-            
           Expanded(
             child: asyncData.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -116,9 +125,10 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
               data: (state) {
                 if (state.slots.isEmpty) {
                   return const Center(
-                    child: Text("Box ist leer.\nTippe auf + um Karten oder Trenner hinzuzufügen.", 
-                      textAlign: TextAlign.center, style: TextStyle(color: Colors.grey))
-                  );
+                      child: Text(
+                          "Box ist leer.\nTippe auf + um Karten oder Trenner hinzuzufügen.",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey)));
                 }
 
                 return ListView.builder(
@@ -127,8 +137,12 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                   itemCount: state.slots.length,
                   itemBuilder: (context, index) {
                     final slot = state.slots[index];
-                    final isDivider = slot.binderCard.isPlaceholder && (slot.binderCard.placeholderLabel?.startsWith("DIVIDER:") ?? false);
-                    final isHighlighted = _isSwapMode && _slotToSwap?.binderCard.id == slot.binderCard.id;
+                    final isDivider = slot.binderCard.isPlaceholder &&
+                        (slot.binderCard.placeholderLabel
+                                ?.startsWith("DIVIDER:") ??
+                            false);
+                    final isHighlighted = _isSwapMode &&
+                        _slotToSwap?.binderCard.id == slot.binderCard.id;
 
                     return _buildListItem(slot, isDivider, isHighlighted);
                   },
@@ -142,9 +156,11 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
   }
 
   // --- WIDGET FÜR EIN LISTEN-ELEMENT ---
-  Widget _buildListItem(BinderSlotData slot, bool isDivider, bool isHighlighted) {
+  Widget _buildListItem(
+      BinderSlotData slot, bool isDivider, bool isHighlighted) {
     if (isDivider) {
-      final title = slot.binderCard.placeholderLabel!.replaceAll("DIVIDER:", "");
+      final title =
+          slot.binderCard.placeholderLabel!.replaceAll("DIVIDER:", "");
       return GestureDetector(
         onTap: () => _handleItemTap(slot),
         onLongPress: () => _handleItemLongPress(slot),
@@ -152,18 +168,24 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
           decoration: BoxDecoration(
-            color: Color(widget.binder.color).withOpacity(0.2),
+            color: Color(widget.binder.color).withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isHighlighted ? Colors.redAccent : Color(widget.binder.color), 
-              width: isHighlighted ? 3 : 2
-            ),
+                color: isHighlighted
+                    ? Colors.redAccent
+                    : Color(widget.binder.color),
+                width: isHighlighted ? 3 : 2),
           ),
           child: Row(
             children: [
               Icon(Icons.label, color: Color(widget.binder.color)),
               const SizedBox(width: 8),
-              Expanded(child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.grey[800]))),
+              Expanded(
+                  child: Text(title,
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.grey[800]))),
             ],
           ),
         ),
@@ -180,46 +202,70 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: isHighlighted ? Border.all(color: Colors.redAccent, width: 3) : Border.all(color: Colors.grey[200]!),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
+          border: isHighlighted
+              ? Border.all(color: Colors.redAccent, width: 3)
+              : Border.all(color: Colors.grey[200]!),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2))
+          ],
         ),
         child: Row(
           children: [
             Container(
-              width: 50, height: 70,
-              decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
-              child: card != null 
-                ? CachedNetworkImage(
-                    imageUrl: card.imageUrl,
-                    memCacheHeight: 200,
-                    fit: BoxFit.contain,
-                    placeholder: (context, url) => const SizedBox(),
-                    errorWidget: (context, url, error) => const Icon(Icons.broken_image, size: 20, color: Colors.grey),
-                  )
-                : const Icon(Icons.credit_card, color: Colors.grey),
+              width: 50,
+              height: 70,
+              decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(4)),
+              child: card != null
+                  ? CachedNetworkImage(
+                      imageUrl: card.imageUrl,
+                      memCacheHeight: 200,
+                      fit: BoxFit.contain,
+                      placeholder: (context, url) => const SizedBox(),
+                      errorWidget: (context, url, error) => const Icon(
+                          Icons.broken_image,
+                          size: 20,
+                          color: Colors.grey),
+                    )
+                  : const Icon(Icons.credit_card, color: Colors.grey),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(card?.nameDe ?? card?.name ?? "Unbekannt", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(card?.nameDe ?? card?.name ?? "Unbekannt",
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 4),
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
-                        child: Text(slot.binderCard.variant ?? "Normal", style: TextStyle(fontSize: 10, color: Colors.grey[800])),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(4)),
+                        child: Text(slot.binderCard.variant ?? "Normal",
+                            style: TextStyle(
+                                fontSize: 10, color: Colors.grey[800])),
                       ),
                       const SizedBox(width: 8),
-                      Text(card?.number ?? "", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                      Text(card?.number ?? "",
+                          style: const TextStyle(
+                              fontSize: 10, color: Colors.grey)),
                     ],
                   ),
                 ],
               ),
             ),
-            Text("${slot.marketPrice.toStringAsFixed(2)} €", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+            Text("${slot.marketPrice.toStringAsFixed(2)} €",
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.green)),
           ],
         ),
       ),
@@ -227,7 +273,8 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
   }
 
   String _getSlotName(BinderSlotData slot) {
-    if (slot.binderCard.isPlaceholder && (slot.binderCard.placeholderLabel?.startsWith("DIVIDER:") ?? false)) {
+    if (slot.binderCard.isPlaceholder &&
+        (slot.binderCard.placeholderLabel?.startsWith("DIVIDER:") ?? false)) {
       return "Trenner: ${slot.binderCard.placeholderLabel!.replaceAll('DIVIDER:', '')}";
     }
     return slot.card?.nameDe ?? slot.card?.name ?? "Karte";
@@ -238,44 +285,67 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Box sortieren"),
-        content: const Text("Wie sollen die Karten (innerhalb ihrer Trenn-Kategorien) sortiert werden?"),
+        content: const Text(
+            "Wie sollen die Karten (innerhalb ihrer Trenn-Kategorien) sortiert werden?"),
         actions: [
           TextButton(
-            onPressed: () { Navigator.pop(ctx); _sortBox('type'); },
+            onPressed: () {
+              Navigator.pop(ctx);
+              _sortBox('type');
+            },
             child: const Text("Element / Typ"),
           ),
           TextButton(
-            onPressed: () { Navigator.pop(ctx); _sortBox('name'); },
+            onPressed: () {
+              Navigator.pop(ctx);
+              _sortBox('name');
+            },
             child: const Text("Name (A-Z)"),
           ),
           TextButton(
-            onPressed: () { Navigator.pop(ctx); _sortBox('number'); },
+            onPressed: () {
+              Navigator.pop(ctx);
+              _sortBox('number');
+            },
             child: const Text("Nummer"),
           ),
           // --- NEU ---
           TextButton(
-            onPressed: () { Navigator.pop(ctx); _sortBox('rarity'); },
+            onPressed: () {
+              Navigator.pop(ctx);
+              _sortBox('rarity');
+            },
             child: const Text("Seltenheit"),
           ),
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Abbrechen", style: TextStyle(color: Colors.red))),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child:
+                  const Text("Abbrechen", style: TextStyle(color: Colors.red))),
         ],
       ),
     );
   }
 
   Future<void> _sortBox(String mode) async {
-     final db = ref.read(databaseProvider);
-     await BinderService(db).sortBulkBox(widget.binder.id, mode);
-     if(mounted){
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Box erfolgreich sortiert!"), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
-        ref.invalidate(binderDetailProvider(widget.binder.id));
-     }
+    final db = ref.read(databaseProvider);
+    await BinderService(db).sortBulkBox(widget.binder.id, mode);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Box erfolgreich sortiert!"),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(milliseconds: 500)));
+      ref.invalidate(binderDetailProvider(widget.binder.id));
+    }
   }
 
   void _showAddMenu(BuildContext context) {
     if (widget.binder.isFull) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Die Box ist voll!"), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
-       return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Die Box ist voll!"),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(milliseconds: 500)));
+      return;
     }
 
     showModalBottomSheet(
@@ -284,10 +354,13 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const ListTile(title: Text("Hinzufügen", style: TextStyle(fontWeight: FontWeight.bold))),
+            const ListTile(
+                title: Text("Hinzufügen",
+                    style: TextStyle(fontWeight: FontWeight.bold))),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.add_photo_alternate, color: Colors.green),
+              leading:
+                  const Icon(Icons.add_photo_alternate, color: Colors.green),
               title: const Text("Karte hinzufügen"),
               onTap: () {
                 Navigator.pop(ctx);
@@ -314,17 +387,28 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Trenner Name"),
-        content: TextField(controller: tc, autofocus: true, decoration: const InputDecoration(hintText: "z.B. Holos, Bulk, Feuer Pokémon...")),
+        content: TextField(
+            controller: tc,
+            autofocus: true,
+            decoration: const InputDecoration(
+                hintText: "z.B. Holos, Bulk, Feuer Pokémon...")),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Abbrechen")),
-          FilledButton(onPressed: () async {
-            if (tc.text.isNotEmpty) {
-              final db = ref.read(databaseProvider);
-              await BinderService(db).addBulkDivider(widget.binder.id, tc.text);
-              if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
-            }
-            if (ctx.mounted) Navigator.pop(ctx);
-          }, child: const Text("Hinzufügen")),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Abbrechen")),
+          FilledButton(
+              onPressed: () async {
+                if (tc.text.isNotEmpty) {
+                  final db = ref.read(databaseProvider);
+                  await BinderService(db)
+                      .addBulkDivider(widget.binder.id, tc.text);
+                  if (mounted) {
+                    ref.invalidate(binderDetailProvider(widget.binder.id));
+                  }
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text("Hinzufügen")),
         ],
       ),
     );
@@ -332,22 +416,30 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
 
   void _handleItemTap(BinderSlotData slot) async {
     if (_isSwapMode && _slotToSwap != null) {
-       final db = ref.read(databaseProvider);
-       await BinderService(db).swapTwoSlots(widget.binder.id, _slotToSwap!.binderCard.id, slot.binderCard.id);
-       if (mounted) {
-         setState(() { _isSwapMode = false; _slotToSwap = null; });
-         ref.invalidate(binderDetailProvider(widget.binder.id));
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Erfolgreich getauscht!"), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
-       }
-       return;
+      final db = ref.read(databaseProvider);
+      await BinderService(db).swapTwoSlots(
+          widget.binder.id, _slotToSwap!.binderCard.id, slot.binderCard.id);
+      if (mounted) {
+        setState(() {
+          _isSwapMode = false;
+          _slotToSwap = null;
+        });
+        ref.invalidate(binderDetailProvider(widget.binder.id));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Erfolgreich getauscht!"),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(milliseconds: 500)));
+      }
+      return;
     }
     _handleItemLongPress(slot);
   }
 
   void _handleItemLongPress(BinderSlotData slot) {
     if (_isSwapMode) return;
-    
-    final isDivider = slot.binderCard.isPlaceholder && (slot.binderCard.placeholderLabel?.startsWith("DIVIDER:") ?? false);
+
+    final isDivider = slot.binderCard.isPlaceholder &&
+        (slot.binderCard.placeholderLabel?.startsWith("DIVIDER:") ?? false);
 
     showModalBottomSheet(
       context: context,
@@ -356,18 +448,22 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              title: Text(isDivider ? "Trenner bearbeiten" : "Karte bearbeiten", style: const TextStyle(fontWeight: FontWeight.bold)),
+              title: Text(isDivider ? "Trenner bearbeiten" : "Karte bearbeiten",
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Text(_getSlotName(slot)),
             ),
             const Divider(),
-            
+
             ListTile(
               leading: const Icon(Icons.swap_vert, color: Colors.orange),
               title: const Text("Tauschen / Verschieben"),
               subtitle: const Text("Tippe danach auf die Ziel-Position"),
               onTap: () {
                 Navigator.pop(ctx);
-                setState(() { _isSwapMode = true; _slotToSwap = slot; });
+                setState(() {
+                  _isSwapMode = true;
+                  _slotToSwap = slot;
+                });
               },
             ),
 
@@ -377,19 +473,25 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
               onTap: () async {
                 Navigator.pop(ctx);
                 final db = ref.read(databaseProvider);
-                await BinderService(db).moveSlotLeft(widget.binder.id, slot.binderCard.id); 
-                if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
+                await BinderService(db)
+                    .moveSlotLeft(widget.binder.id, slot.binderCard.id);
+                if (mounted) {
+                  ref.invalidate(binderDetailProvider(widget.binder.id));
+                }
               },
             ),
-            
+
             ListTile(
               leading: const Icon(Icons.arrow_downward, color: Colors.purple),
               title: const Text("Eins nach unten rücken"),
               onTap: () async {
                 Navigator.pop(ctx);
                 final db = ref.read(databaseProvider);
-                await BinderService(db).moveSlotRight(widget.binder.id, slot.binderCard.id); 
-                if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
+                await BinderService(db)
+                    .moveSlotRight(widget.binder.id, slot.binderCard.id);
+                if (mounted) {
+                  ref.invalidate(binderDetailProvider(widget.binder.id));
+                }
               },
             ),
 
@@ -397,12 +499,17 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
 
             ListTile(
               leading: const Icon(Icons.delete_forever, color: Colors.red),
-              title: const Text("Aus Box löschen", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              title: const Text("Aus Box löschen",
+                  style: TextStyle(
+                      color: Colors.red, fontWeight: FontWeight.bold)),
               onTap: () async {
                 Navigator.pop(ctx);
                 final db = ref.read(databaseProvider);
-                await BinderService(db).deleteSlotAndShift(widget.binder.id, slot.binderCard.id);
-                if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
+                await BinderService(db)
+                    .deleteSlotAndShift(widget.binder.id, slot.binderCard.id);
+                if (mounted) {
+                  ref.invalidate(binderDetailProvider(widget.binder.id));
+                }
               },
             ),
 
@@ -413,22 +520,30 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                 title: const Text("Karte im Detail anschauen"),
                 onTap: () async {
                   Navigator.pop(ctx);
-                  
+
                   if (slot.card != null) {
                     final db = ref.read(databaseProvider);
-                    
+
                     // --- PREISE KURZ AUS DER DB LADEN ---
                     final cmPrice = await (db.select(db.cardMarketPrices)
-                      ..where((t) => t.cardId.equals(slot.card!.id))
-                      ..orderBy([(t) => drift.OrderingTerm(expression: t.fetchedAt, mode: drift.OrderingMode.desc)])
-                      ..limit(1)
-                    ).getSingleOrNull();
+                          ..where((t) => t.cardId.equals(slot.card!.id))
+                          ..orderBy([
+                            (t) => drift.OrderingTerm(
+                                expression: t.fetchedAt,
+                                mode: drift.OrderingMode.desc)
+                          ])
+                          ..limit(1))
+                        .getSingleOrNull();
 
                     final tcgPrice = await (db.select(db.tcgPlayerPrices)
-                      ..where((t) => t.cardId.equals(slot.card!.id))
-                      ..orderBy([(t) => drift.OrderingTerm(expression: t.fetchedAt, mode: drift.OrderingMode.desc)])
-                      ..limit(1)
-                    ).getSingleOrNull();
+                          ..where((t) => t.cardId.equals(slot.card!.id))
+                          ..orderBy([
+                            (t) => drift.OrderingTerm(
+                                expression: t.fetchedAt,
+                                mode: drift.OrderingMode.desc)
+                          ])
+                          ..limit(1))
+                        .getSingleOrNull();
 
                     final apiCard = ApiCard(
                       id: slot.card!.id,
@@ -437,12 +552,12 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                       supertype: '', subtypes: [], types: [],
                       setId: slot.card!.setId,
                       number: slot.card!.number,
-                      setPrintedTotal: "0", 
+                      setPrintedTotal: "0",
                       artist: slot.card!.artist ?? '',
                       rarity: slot.card!.rarity ?? '',
                       flavorText: slot.card!.flavorText,
                       flavorTextDe: slot.card!.flavorTextDe,
-                      smallImageUrl: slot.card!.imageUrl, 
+                      smallImageUrl: slot.card!.imageUrl,
                       largeImageUrl: slot.card!.imageUrl,
                       imageUrlDe: slot.card!.imageUrlDe,
                       hasNormal: slot.card!.hasNormal,
@@ -452,36 +567,53 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                       hasFirstEdition: slot.card!.hasFirstEdition,
                       isOwned: true,
                       // --- PREISE ANHÄNGEN ---
-                      cardmarket: cmPrice != null ? ApiCardMarket(
-                        url: cmPrice.url ?? '',
-                        updatedAt: cmPrice.fetchedAt.toIso8601String(),
-                        trendPrice: cmPrice.trend,
-                        avg30: cmPrice.avg30,
-                        avg7: cmPrice.avg7,
-                        avg1: cmPrice.avg1,
-                        lowPrice: cmPrice.low,
-                        trendHolo: cmPrice.trendHolo,
-                        avg30Holo: cmPrice.avg30Holo,
-                        avg7Holo: cmPrice.avg7Holo,
-                        avg1Holo: cmPrice.avg1Holo,
-                        lowHolo: cmPrice.lowHolo,
-                        reverseHoloTrend: cmPrice.trendReverse,
-                      ) : null,
-                      tcgplayer: tcgPrice != null ? ApiTcgPlayer(
-                        url: tcgPrice.url ?? '',
-                        updatedAt: tcgPrice.fetchedAt.toIso8601String(),
-                        prices: ApiTcgPlayerPrices(
-                          normal: ApiPriceType(market: tcgPrice.normalMarket, low: tcgPrice.normalLow, mid: tcgPrice.normalMid, directLow: tcgPrice.normalDirectLow),
-                          holofoil: ApiPriceType(market: tcgPrice.holoMarket, low: tcgPrice.holoLow, mid: tcgPrice.holoMid, directLow: tcgPrice.holoDirectLow),
-                          reverseHolofoil: ApiPriceType(market: tcgPrice.reverseMarket, low: tcgPrice.reverseLow, mid: tcgPrice.reverseMid, directLow: tcgPrice.reverseDirectLow),
-                        )
-                      ) : null,
+                      cardmarket: cmPrice != null
+                          ? ApiCardMarket(
+                              url: cmPrice.url ?? '',
+                              updatedAt: cmPrice.fetchedAt.toIso8601String(),
+                              trendPrice: cmPrice.trend,
+                              avg30: cmPrice.avg30,
+                              avg7: cmPrice.avg7,
+                              avg1: cmPrice.avg1,
+                              lowPrice: cmPrice.low,
+                              trendHolo: cmPrice.trendHolo,
+                              avg30Holo: cmPrice.avg30Holo,
+                              avg7Holo: cmPrice.avg7Holo,
+                              avg1Holo: cmPrice.avg1Holo,
+                              lowHolo: cmPrice.lowHolo,
+                              reverseHoloTrend: cmPrice.trendReverse,
+                            )
+                          : null,
+                      tcgplayer: tcgPrice != null
+                          ? ApiTcgPlayer(
+                              url: tcgPrice.url ?? '',
+                              updatedAt: tcgPrice.fetchedAt.toIso8601String(),
+                              prices: ApiTcgPlayerPrices(
+                                normal: ApiPriceType(
+                                    market: tcgPrice.normalMarket,
+                                    low: tcgPrice.normalLow,
+                                    mid: tcgPrice.normalMid,
+                                    directLow: tcgPrice.normalDirectLow),
+                                holofoil: ApiPriceType(
+                                    market: tcgPrice.holoMarket,
+                                    low: tcgPrice.holoLow,
+                                    mid: tcgPrice.holoMid,
+                                    directLow: tcgPrice.holoDirectLow),
+                                reverseHolofoil: ApiPriceType(
+                                    market: tcgPrice.reverseMarket,
+                                    low: tcgPrice.reverseLow,
+                                    mid: tcgPrice.reverseMid,
+                                    directLow: tcgPrice.reverseDirectLow),
+                              ))
+                          : null,
                     );
 
                     if (mounted) {
-                      Navigator.push(context, MaterialPageRoute(
-                        builder: (context) => CardDetailScreen(card: apiCard)
-                      ));
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  CardDetailScreen(card: apiCard)));
                     }
                   }
                 },
@@ -497,34 +629,41 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
   Future<void> _pickCardForBulk({required bool onlyOwned}) async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => CardSearchScreen(initialQuery: "", pickerMode: true, onlyOwned: onlyOwned)),
+      MaterialPageRoute(
+          builder: (context) => CardSearchScreen(
+              initialQuery: "", pickerMode: true, onlyOwned: onlyOwned)),
     );
 
-    if (result != null && result is ApiCard) { 
+    if (result != null && result is ApiCard) {
       final ApiCard pickedCard = result;
       final db = ref.read(databaseProvider);
       final service = BinderService(db);
-      
+
       try {
-        await db.into(db.cards).insertOnConflictUpdate(
-          CardsCompanion(
-            id: drift.Value(pickedCard.id),
-            setId: drift.Value(pickedCard.setId),
-            name: drift.Value(pickedCard.name),
-            nameDe: drift.Value(pickedCard.nameDe),
-            number: drift.Value(pickedCard.number),
-            imageUrl: drift.Value(pickedCard.smallImageUrl),
-            imageUrlDe: drift.Value(pickedCard.imageUrlDe ?? pickedCard.smallImageUrl),
-            rarity: drift.Value(pickedCard.rarity),
-          )
-        );
+        await db.into(db.cards).insertOnConflictUpdate(CardsCompanion(
+              id: drift.Value(pickedCard.id),
+              setId: drift.Value(pickedCard.setId),
+              name: drift.Value(pickedCard.name),
+              nameDe: drift.Value(pickedCard.nameDe),
+              number: drift.Value(pickedCard.number),
+              imageUrl: drift.Value(pickedCard.smallImageUrl),
+              imageUrlDe: drift.Value(
+                  pickedCard.imageUrlDe ?? pickedCard.smallImageUrl),
+              rarity: drift.Value(pickedCard.rarity),
+            ));
 
         // Wir holen die kompletten UserCards, nicht nur Strings!
-        final availableCards = await service.getAvailableUserCards(pickedCard.id);
+        final availableCards =
+            await service.getAvailableUserCards(pickedCard.id);
 
         if (availableCards.isEmpty) {
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Keine freie Karte im Inventar."), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
-          return; 
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text("Keine freie Karte im Inventar."),
+                behavior: SnackBarBehavior.floating,
+                duration: Duration(milliseconds: 500)));
+          }
+          return;
         }
 
         UserCard? selectedCard;
@@ -540,42 +679,58 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: availableCards.map((uc) {
-                     String label = "${uc.variant} (${uc.condition} • ${uc.language})";
-                     if (uc.gradingCompany != null && uc.gradingCompany != 'Kein Grading') {
-                       label += "\n${uc.gradingCompany} ${uc.gradingScore ?? ''}";
-                     }
-                     if (uc.customPrice != null && uc.customPrice! > 0) {
-                       label += " • ${uc.customPrice!.toStringAsFixed(2)}€";
-                     }
+                    String label =
+                        "${uc.variant} (${uc.condition} • ${uc.language})";
+                    if (uc.gradingCompany != null &&
+                        uc.gradingCompany != 'Kein Grading') {
+                      label +=
+                          "\n${uc.gradingCompany} ${uc.gradingScore ?? ''}";
+                    }
+                    if (uc.customPrice != null && uc.customPrice! > 0) {
+                      label += " • ${uc.customPrice!.toStringAsFixed(2)}€";
+                    }
 
-                     return ListTile(
-                       leading: const Icon(Icons.style, color: Colors.blueAccent),
-                       title: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                       isThreeLine: uc.gradingCompany != null,
-                       onTap: () => Navigator.pop(ctx, uc),
-                     );
+                    return ListTile(
+                      leading:
+                          const Icon(Icons.style, color: Colors.blueAccent),
+                      title: Text(label,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 12)),
+                      isThreeLine: uc.gradingCompany != null,
+                      onTap: () => Navigator.pop(ctx, uc),
+                    );
                   }).toList(),
                 ),
               ),
-              actions: [TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text("Abbrechen"))],
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, null),
+                    child: const Text("Abbrechen"))
+              ],
             ),
           );
         }
 
         if (selectedCard != null) {
           // ID wird hier perfekt an die AddCardToBulkBox Methode übergeben!
-          await service.addCardToBulkBox(widget.binder.id, pickedCard.id, selectedCard.id, selectedCard.variant);
+          await service.addCardToBulkBox(widget.binder.id, pickedCard.id,
+              selectedCard.id, selectedCard.variant);
           if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));
         }
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), behavior: SnackBarBehavior.floating, duration: const Duration(milliseconds: 500)));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text("Fehler: $e"),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(milliseconds: 500)));
+        }
       }
     }
   }
 
   void _showSearchDialog(BuildContext context, BinderDetailState? state) {
     if (state == null) return;
-    _searchController.clear(); 
+    _searchController.clear();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -584,8 +739,8 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
           controller: _searchController,
           autofocus: true,
           onSubmitted: (query) {
-             _performSearch(query, state);
-             Navigator.pop(ctx);
+            _performSearch(query, state);
+            Navigator.pop(ctx);
           },
         ),
       ),
@@ -595,26 +750,34 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
   void _performSearch(String query, BinderDetailState state) async {
     if (query.isEmpty) return;
     final qLower = query.toLowerCase();
-    
+
     final index = state.slots.indexWhere((s) {
       final label = s.binderCard.placeholderLabel?.toLowerCase() ?? "";
       final cardName = s.card?.name.toLowerCase() ?? "";
       final cardNameDe = s.card?.nameDe?.toLowerCase() ?? "";
-      return label.contains(qLower) || cardName.contains(qLower) || cardNameDe.contains(qLower);
+      return label.contains(qLower) ||
+          cardName.contains(qLower) ||
+          cardNameDe.contains(qLower);
     });
 
     if (index != -1) {
       FocusScope.of(context).unfocus();
       if (mounted) {
-        _scrollController.animateTo(
-          index * 80.0, 
-          duration: const Duration(milliseconds: 500), 
-          curve: Curves.easeInOut
-        );
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gefunden!"), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
+        _scrollController.animateTo(index * 80.0,
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeInOut);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Gefunden!"),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(milliseconds: 500)));
       }
     } else {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nichts gefunden."), behavior: SnackBarBehavior.floating, duration: Duration(milliseconds: 500)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Nichts gefunden."),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(milliseconds: 500)));
+      }
     }
   }
 
@@ -623,19 +786,23 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
     ref.invalidate(binderHistoryProvider(widget.binder.id));
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, 
-      backgroundColor: Colors.transparent, 
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.65, 
+        height: MediaQuery.of(context).size.height * 0.65,
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.all(20),
-        child: _BinderStatsContent(binderId: widget.binder.id, currentState: state, isBulkBox: true, onDelete: () {
-           Navigator.pop(ctx);
-           _confirmDelete(context);
-        }),
+        child: _BinderStatsContent(
+            binderId: widget.binder.id,
+            currentState: state,
+            isBulkBox: true,
+            onDelete: () {
+              Navigator.pop(ctx);
+              _confirmDelete(context);
+            }),
       ),
     );
   }
@@ -647,18 +814,20 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
         title: const Text("Box löschen?"),
         content: Text("Möchtest du '${widget.binder.name}' wirklich löschen?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Abbrechen")),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Abbrechen")),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               final db = ref.read(databaseProvider);
               await BinderService(db).deleteBinder(widget.binder.id);
-              ref.invalidate(binderStatsProvider(widget.binder.id)); 
+              ref.invalidate(binderStatsProvider(widget.binder.id));
               if (ctx.mounted) {
-                Navigator.pop(ctx); 
-                Navigator.pop(context); 
+                Navigator.pop(ctx);
+                Navigator.pop(context);
               }
-            }, 
+            },
             child: const Text("Löschen"),
           ),
         ],
@@ -674,7 +843,11 @@ class _BinderStatsContent extends ConsumerWidget {
   final VoidCallback onDelete;
   final bool isBulkBox;
 
-  const _BinderStatsContent({required this.binderId, required this.currentState, required this.onDelete, this.isBulkBox = false});
+  const _BinderStatsContent(
+      {required this.binderId,
+      required this.currentState,
+      required this.onDelete,
+      this.isBulkBox = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -683,56 +856,68 @@ class _BinderStatsContent extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+        Center(
+            child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2)))),
         const SizedBox(height: 20),
-        
-        Text("Statistik & Verlauf", style: Theme.of(context).textTheme.headlineSmall),
+        Text("Statistik & Verlauf",
+            style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 5),
-        
         historyAsync.when(
           data: (history) {
-             double change = 0;
-             double percent = 0;
-             final current = currentState.totalValue;
-             
-             if (history.length >= 2) {
-                 final last = history.last.value;
-                 final prev = history[history.length - 2].value;
-                 change = last - prev;
-                 if (prev > 0) {
-                   percent = (change / prev) * 100;
-                 } else if (change > 0) percent = 100.0; 
-               }
+            double change = 0;
+            double percent = 0;
+            final current = currentState.totalValue;
 
-             final isPositive = change >= -0.01;
-             final color = isPositive ? Colors.green : Colors.red;
-             final sign = isPositive ? "+" : "";
+            if (history.length >= 2) {
+              final last = history.last.value;
+              final prev = history[history.length - 2].value;
+              change = last - prev;
+              if (prev > 0) {
+                percent = (change / prev) * 100;
+              } else if (change > 0) percent = 100.0;
+            }
 
-             return Row(
-               crossAxisAlignment: CrossAxisAlignment.end,
-               children: [
-                 Text("${current.toStringAsFixed(2)} €", style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-                 const SizedBox(width: 10),
-                 Padding(
-                   padding: const EdgeInsets.only(bottom: 6),
-                   child: Container(
-                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                     decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                     child: Text(
-                       "$sign${change.toStringAsFixed(2)}€ ($sign${percent.toStringAsFixed(1)}%)",
-                       style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
-                     ),
-                   ),
-                 ),
-               ],
-             );
+            final isPositive = change >= -0.01;
+            final color = isPositive ? Colors.green : Colors.red;
+            final sign = isPositive ? "+" : "";
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text("${current.toStringAsFixed(2)} €",
+                    style: const TextStyle(
+                        fontSize: 32, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 10),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4)),
+                    child: Text(
+                      "$sign${change.toStringAsFixed(2)}€ ($sign${percent.toStringAsFixed(1)}%)",
+                      style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13),
+                    ),
+                  ),
+                ),
+              ],
+            );
           },
-          loading: () => const Text("Lade Historie...", style: TextStyle(color: Colors.grey)),
+          loading: () => const Text("Lade Historie...",
+              style: TextStyle(color: Colors.grey)),
           error: (e, s) => const SizedBox(),
         ),
-
         const SizedBox(height: 20),
-
         Expanded(
           child: historyAsync.when(
             data: (history) {
@@ -742,7 +927,8 @@ class _BinderStatsContent extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.show_chart, size: 48, color: Colors.grey[300]),
-                      const Text("Zu wenig Daten für einen Graphen", style: TextStyle(color: Colors.grey)),
+                      const Text("Zu wenig Daten für einen Graphen",
+                          style: TextStyle(color: Colors.grey)),
                     ],
                   ),
                 );
@@ -750,22 +936,24 @@ class _BinderStatsContent extends ConsumerWidget {
               return _BinderHistoryChart(history: history);
             },
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e,s) => Center(child: Text("Fehler beim Laden: $e")),
+            error: (e, s) => Center(child: Text("Fehler beim Laden: $e")),
           ),
         ),
-
         const SizedBox(height: 20),
         const Divider(),
-
         ListTile(
-          leading: Icon(isBulkBox ? Icons.inventory_2 : Icons.pie_chart, color: Colors.blue),
+          leading: Icon(isBulkBox ? Icons.inventory_2 : Icons.pie_chart,
+              color: Colors.blue),
           title: Text(isBulkBox ? "Karten im Karton" : "Vervollständigung"),
-          trailing: Text(isBulkBox ? "${currentState.filledSlots}" : "${currentState.filledSlots} / ${currentState.totalSlots}"),
+          trailing: Text(isBulkBox
+              ? "${currentState.filledSlots}"
+              : "${currentState.filledSlots} / ${currentState.totalSlots}"),
         ),
-
         ListTile(
           leading: const Icon(Icons.delete_forever, color: Colors.red),
-          title: Text(isBulkBox ? "Ganze Box löschen" : "Binder löschen", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          title: Text(isBulkBox ? "Ganze Box löschen" : "Binder löschen",
+              style: const TextStyle(
+                  color: Colors.red, fontWeight: FontWeight.bold)),
           onTap: onDelete,
         ),
       ],
@@ -791,71 +979,106 @@ class _BinderHistoryChart extends StatelessWidget {
 
     if (spots.isEmpty) {
       final now = DateTime.now().millisecondsSinceEpoch.toDouble();
-      spots = [FlSpot(now - 86400000, 0), FlSpot(now, 0)]; 
+      spots = [FlSpot(now - 86400000, 0), FlSpot(now, 0)];
     } else if (spots.length == 1) {
       final alone = spots.first;
-      spots = [FlSpot(alone.x - 86400000, 0), alone]; 
+      spots = [FlSpot(alone.x - 86400000, 0), alone];
     }
 
     double minX = spots.first.x;
     double maxX = spots.last.x;
     if (minX == maxX) {
-      minX -= 86400000; 
-      maxX += 86400000; 
+      minX -= 86400000;
+      maxX += 86400000;
     }
 
     double minY = spots.map((e) => e.y).reduce((a, b) => a < b ? a : b);
     double maxY = spots.map((e) => e.y).reduce((a, b) => a > b ? a : b);
 
-    if (minY == maxY) { 
+    if (minY == maxY) {
       if (minY == 0) {
         maxY = 10;
-      } else { minY = minY * 0.8; maxY = maxY * 1.2; }
+      } else {
+        minY = minY * 0.8;
+        maxY = maxY * 1.2;
+      }
     }
-    
+
     final deltaY = maxY - minY;
     minY -= deltaY * 0.1;
     maxY += deltaY * 0.1;
     if (minY < 0) minY = 0;
 
     double xInterval = (maxX - minX) / 3;
-    if (xInterval <= 0) xInterval = 86400000; 
+    if (xInterval <= 0) xInterval = 86400000;
 
     double yInterval = (maxY - minY) / 4;
-    if (yInterval <= 0) yInterval = 1.0; 
+    if (yInterval <= 0) yInterval = 1.0;
 
     return LineChart(
       LineChartData(
-        gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (_) => FlLine(color: Colors.grey[200], strokeWidth: 1)),
+        gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            getDrawingHorizontalLine: (_) =>
+                FlLine(color: Colors.grey[200], strokeWidth: 1)),
         titlesData: FlTitlesData(
           show: true,
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
-              showTitles: true, reservedSize: 40, interval: yInterval, 
+              showTitles: true,
+              reservedSize: 40,
+              interval: yInterval,
               getTitlesWidget: (val, _) {
                 if (val < 0) return const SizedBox();
-                return Text("${val.toInt()}€", style: TextStyle(color: Colors.grey[400], fontSize: 10), textAlign: TextAlign.right);
+                return Text("${val.toInt()}€",
+                    style: TextStyle(color: Colors.grey[400], fontSize: 10),
+                    textAlign: TextAlign.right);
               },
             ),
           ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
-              showTitles: true, reservedSize: 22, interval: xInterval, 
+              showTitles: true,
+              reservedSize: 22,
+              interval: xInterval,
               getTitlesWidget: (val, _) {
                 final date = DateTime.fromMillisecondsSinceEpoch(val.toInt());
-                return Padding(padding: const EdgeInsets.only(top: 8.0), child: Text(DateFormat('dd.MM').format(date), style: TextStyle(color: Colors.grey[400], fontSize: 10)));
+                return Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(DateFormat('dd.MM').format(date),
+                        style:
+                            TextStyle(color: Colors.grey[400], fontSize: 10)));
               },
             ),
           ),
         ),
         borderData: FlBorderData(show: false),
-        minX: minX, maxX: maxX, minY: minY, maxY: maxY,
+        minX: minX,
+        maxX: maxX,
+        minY: minY,
+        maxY: maxY,
         lineBarsData: [
           LineChartBarData(
-            spots: spots, isCurved: true, color: Colors.blueAccent, barWidth: 3, isStrokeCapRound: true, dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(show: true, gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.blue.withOpacity(0.2), Colors.blue.withOpacity(0.0)])),
+            spots: spots,
+            isCurved: true,
+            color: Colors.blueAccent,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(
+                show: true,
+                gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.blue.withValues(alpha: 0.2),
+                      Colors.blue.withValues(alpha: 0.0)
+                    ])),
           ),
         ],
         lineTouchData: LineTouchData(
@@ -863,8 +1086,12 @@ class _BinderHistoryChart extends StatelessWidget {
             tooltipBgColor: Colors.blueGrey,
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
-                final date = DateTime.fromMillisecondsSinceEpoch(spot.x.toInt());
-                return LineTooltipItem("${DateFormat('dd.MM').format(date)}\n${spot.y.toStringAsFixed(2)} €", const TextStyle(color: Colors.white, fontWeight: FontWeight.bold));
+                final date =
+                    DateTime.fromMillisecondsSinceEpoch(spot.x.toInt());
+                return LineTooltipItem(
+                    "${DateFormat('dd.MM').format(date)}\n${spot.y.toStringAsFixed(2)} €",
+                    const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold));
               }).toList();
             },
           ),

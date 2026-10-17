@@ -19,8 +19,13 @@ class ScannerOverlayMask extends StatelessWidget {
         final top = (height - cardHeight) / 2;
         final cardRect = Rect.fromLTWH(left, top, cardWidth, cardHeight);
 
-        final topZoneRect = Rect.fromLTWH(left + 10, top + 10, cardWidth - 20, cardHeight * 0.15);
-        final bottomZoneRect = Rect.fromLTWH(left + 10, top + cardHeight - (cardHeight * 0.15) - 10, cardWidth - 20, cardHeight * 0.15);
+        final topZoneRect = Rect.fromLTWH(
+            left + 10, top + 10, cardWidth - 20, cardHeight * 0.15);
+        final bottomZoneRect = Rect.fromLTWH(
+            left + 10,
+            top + cardHeight - (cardHeight * 0.15) - 10,
+            cardWidth - 20,
+            cardHeight * 0.15);
 
         return Stack(
           children: [
@@ -32,20 +37,33 @@ class ScannerOverlayMask extends StatelessWidget {
                 bottomZoneRect: bottomZoneRect,
               ),
             ),
-            
             Positioned(
               top: topZoneRect.top + (topZoneRect.height / 2) - 10,
-              left: 0, right: 0,
+              left: 0,
+              right: 0,
               child: const Center(
-                child: Text("Name & KP", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold, shadows: [Shadow(color: Colors.black, blurRadius: 4)]))
-              ),
+                  child: Text("Name & KP",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          shadows: [
+                            Shadow(color: Colors.black, blurRadius: 4)
+                          ]))),
             ),
-             Positioned(
+            Positioned(
               top: bottomZoneRect.top + (bottomZoneRect.height / 2) - 10,
-              left: 0, right: 0,
+              left: 0,
+              right: 0,
               child: const Center(
-                child: Text("Nr. & Künstler", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold, shadows: [Shadow(color: Colors.black, blurRadius: 4)]))
-              ),
+                  child: Text("Nr. & Künstler",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          shadows: [
+                            Shadow(color: Colors.black, blurRadius: 4)
+                          ]))),
             ),
           ],
         );
@@ -59,12 +77,16 @@ class MaskPainter extends CustomPainter {
   final Rect topZoneRect;
   final Rect bottomZoneRect;
 
-  MaskPainter({required this.cardRect, required this.topZoneRect, required this.bottomZoneRect});
+  MaskPainter(
+      {required this.cardRect,
+      required this.topZoneRect,
+      required this.bottomZoneRect});
 
   @override
   void paint(Canvas canvas, Size size) {
     // 1. Sehr transparente Maske
-    final backgroundPaint = Paint()..color = Colors.black.withOpacity(0.4); 
+    final backgroundPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.4);
     final path = Path()
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
       ..addRRect(RRect.fromRectAndRadius(cardRect, const Radius.circular(12)))
@@ -73,25 +95,35 @@ class MaskPainter extends CustomPainter {
 
     // 2. Dünner Rahmen um die Karte
     final borderPaint = Paint()
-      ..color = Colors.white.withOpacity(0.7)
+      ..color = Colors.white.withValues(alpha: 0.7)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
-    canvas.drawRRect(RRect.fromRectAndRadius(cardRect, const Radius.circular(12)), borderPaint);
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(cardRect, const Radius.circular(12)),
+        borderPaint);
 
     // 3. Fast unsichtbare Fokus-Zonen INNERHALB der Karte
     final zonePaint = Paint()
-      ..color = Colors.white.withOpacity(0.1) 
+      ..color = Colors.white.withValues(alpha: 0.1)
       ..style = PaintingStyle.fill;
-    canvas.drawRRect(RRect.fromRectAndRadius(topZoneRect, const Radius.circular(8)), zonePaint);
-    canvas.drawRRect(RRect.fromRectAndRadius(bottomZoneRect, const Radius.circular(8)), zonePaint);
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(topZoneRect, const Radius.circular(8)),
+        zonePaint);
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(bottomZoneRect, const Radius.circular(8)),
+        zonePaint);
 
     // Dünner Rahmen um die Zonen
     final zoneBorderPaint = Paint()
-      ..color = Colors.white.withOpacity(0.3)
+      ..color = Colors.white.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
-    canvas.drawRRect(RRect.fromRectAndRadius(topZoneRect, const Radius.circular(8)), zoneBorderPaint);
-    canvas.drawRRect(RRect.fromRectAndRadius(bottomZoneRect, const Radius.circular(8)), zoneBorderPaint);
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(topZoneRect, const Radius.circular(8)),
+        zoneBorderPaint);
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(bottomZoneRect, const Radius.circular(8)),
+        zoneBorderPaint);
   }
 
   @override

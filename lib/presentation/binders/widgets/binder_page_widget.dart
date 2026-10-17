@@ -6,16 +6,16 @@ class BinderPageWidget extends StatelessWidget {
   final List<BinderSlotData> slots;
   final int rows;
   final int cols;
-  final int pageNumber; 
+  final int pageNumber;
   final int totalPages;
   final Function(BinderSlotData) onSlotTap;
-  final Function(BinderSlotData)? onSlotLongPress; 
+  final Function(BinderSlotData)? onSlotLongPress;
   final VoidCallback onNextPage;
   final VoidCallback onPrevPage;
-  
+
   final bool isSwapMode;
   final int? slotToSwapId;
-  
+
   // --- NEU: Toggle-Status durchreichen ---
   final bool showOverlays;
 
@@ -27,7 +27,7 @@ class BinderPageWidget extends StatelessWidget {
     required this.pageNumber,
     required this.totalPages,
     required this.onSlotTap,
-    this.onSlotLongPress, 
+    this.onSlotLongPress,
     required this.onNextPage,
     required this.onPrevPage,
     this.isSwapMode = false,
@@ -43,16 +43,14 @@ class BinderPageWidget extends StatelessWidget {
     });
 
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFFDFDFD),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 5,
-            offset: pageNumber % 2 == 0 ? const Offset(5, 0) : const Offset(-5, 0),
-          )
-        ]
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFFDFDFD), boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.05),
+          blurRadius: 5,
+          offset:
+              pageNumber % 2 == 0 ? const Offset(5, 0) : const Offset(-5, 0),
+        )
+      ]),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       child: Column(
         children: [
@@ -67,7 +65,7 @@ class BinderPageWidget extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: cols,
-                    childAspectRatio: ratio, 
+                    childAspectRatio: ratio,
                   ),
                   itemCount: slots.length,
                   itemBuilder: (context, index) {
@@ -75,18 +73,19 @@ class BinderPageWidget extends StatelessWidget {
                     return BinderSlotWidget(
                       slotData: slotData,
                       onTap: () => onSlotTap(slotData),
-                      onLongPress: onSlotLongPress != null ? () => onSlotLongPress!(slotData) : null, 
+                      onLongPress: onSlotLongPress != null
+                          ? () => onSlotLongPress!(slotData)
+                          : null,
                       isHighlighted: slotToSwapId == slotData.binderCard.id,
-                      showOverlay: showOverlays, // <--- NEU: Wird an den Slot gegeben!
+                      showOverlay:
+                          showOverlays, // <--- NEU: Wird an den Slot gegeben!
                     );
                   },
                 );
               },
             ),
           ),
-          
           const SizedBox(height: 8),
-          
           SizedBox(
             width: double.infinity,
             height: 30,
@@ -98,31 +97,48 @@ class BinderPageWidget extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (pageNumber > 0)
-                        IconButton(icon: const Icon(Icons.arrow_back_ios, size: 16, color: Colors.grey), onPressed: onPrevPage, padding: EdgeInsets.zero, constraints: const BoxConstraints())
+                        IconButton(
+                            icon: const Icon(Icons.arrow_back_ios,
+                                size: 16, color: Colors.grey),
+                            onPressed: onPrevPage,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints())
                       else
                         const SizedBox(width: 16),
-
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Text("- ${pageNumber + 1} -", style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.bold, fontSize: 12)),
+                        child: Text("- ${pageNumber + 1} -",
+                            style: TextStyle(
+                                color: Colors.grey[400],
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12)),
                       ),
-
                       if (pageNumber < totalPages - 1)
-                        IconButton(icon: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey), onPressed: onNextPage, padding: EdgeInsets.zero, constraints: const BoxConstraints())
+                        IconButton(
+                            icon: const Icon(Icons.arrow_forward_ios,
+                                size: 16, color: Colors.grey),
+                            onPressed: onNextPage,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints())
                       else
-                         const SizedBox(width: 16),
+                        const SizedBox(width: 16),
                     ],
                   ),
                 ),
-                
                 Align(
                   alignment: Alignment.centerRight,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.greenAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                        color: Colors.greenAccent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4)),
                     child: Text(
                       "${pageTotal.toStringAsFixed(2)} €",
-                      style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 10),
+                      style: const TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10),
                     ),
                   ),
                 ),

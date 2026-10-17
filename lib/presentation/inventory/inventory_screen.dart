@@ -8,7 +8,6 @@ import '../../data/api/search_provider.dart';
 import '../cards/card_detail_screen.dart';
 import 'inventory_bottom_sheet.dart';
 
-
 final inventorySearchProvider = StateProvider<String>((ref) => '');
 
 // Speichert die IDs/Namen der aktuell aufgeklappten Sets & Binder
@@ -16,7 +15,8 @@ final expandedSetsProvider = StateProvider<Set<String>>((ref) => {});
 final expandedBindersProvider = StateProvider<Set<String>>((ref) => {});
 
 // --- NEU: DIESER PROVIDER ÜBERNIMMT DIE RECHENARBEIT ---
-final processedInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref) {
+final processedInventoryProvider =
+    Provider<AsyncValue<List<InventoryItem>>>((ref) {
   // 1. Wir überwachen alle Ausgangsdaten und Filter-Zustände
   final inventoryAsync = ref.watch(inventoryProvider);
   final searchText = ref.watch(inventorySearchProvider);
@@ -32,11 +32,18 @@ final processedInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((re
     var filteredItems = allItems;
     if (searchText.isNotEmpty) {
       filteredItems = allItems.where((item) {
-        final nameMatch = item.card.name.toLowerCase().contains(searchText.toLowerCase());
-        final nameDeMatch = item.card.nameDe?.toLowerCase().contains(searchText.toLowerCase()) ?? false;
-        final setMatch = item.set.name.toLowerCase().contains(searchText.toLowerCase());
-        final binderMatch = (item.binderName ?? '').toLowerCase().contains(searchText.toLowerCase());
-        
+        final nameMatch =
+            item.card.name.toLowerCase().contains(searchText.toLowerCase());
+        final nameDeMatch = item.card.nameDe
+                ?.toLowerCase()
+                .contains(searchText.toLowerCase()) ??
+            false;
+        final setMatch =
+            item.set.name.toLowerCase().contains(searchText.toLowerCase());
+        final binderMatch = (item.binderName ?? '')
+            .toLowerCase()
+            .contains(searchText.toLowerCase());
+
         return nameMatch || nameDeMatch || setMatch || binderMatch;
       }).toList();
     }
@@ -44,30 +51,37 @@ final processedInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((re
     // --- B. KARTEN ZUSAMMENFASSEN ---
     if (groupMode != InventoryGroupMode.byBinder) {
       final Map<String, InventoryItem> mergedMap = {};
-      
+
       for (final item in filteredItems) {
         final company = item.userCard.gradingCompany ?? 'none';
         final score = item.userCard.gradingScore ?? 'none';
         final cPrice = item.userCard.customPrice?.toStringAsFixed(2) ?? 'none';
-        
-        final key = "${item.card.id}_${item.variant}_${company}_${score}_$cPrice";
-        
+
+        final key =
+            "${item.card.id}_${item.variant}_${company}_${score}_$cPrice";
+
         if (mergedMap.containsKey(key)) {
           final existing = mergedMap[key]!;
           mergedMap[key] = InventoryItem(
-            card: existing.card, set: existing.set,
+            card: existing.card,
+            set: existing.set,
             quantity: existing.quantity + item.quantity,
             variant: existing.variant,
             totalValue: existing.totalValue + item.totalValue,
-            binderName: null, userCard: existing.userCard, 
-            performance: existing.performance + item.performance, 
+            binderName: null,
+            userCard: existing.userCard,
+            performance: existing.performance + item.performance,
           );
         } else {
           mergedMap[key] = InventoryItem(
-            card: item.card, set: item.set,
-            quantity: item.quantity, variant: item.variant,
-            totalValue: item.totalValue, binderName: null, 
-            userCard: item.userCard, performance: item.performance, 
+            card: item.card,
+            set: item.set,
+            quantity: item.quantity,
+            variant: item.variant,
+            totalValue: item.totalValue,
+            binderName: null,
+            userCard: item.userCard,
+            performance: item.performance,
           );
         }
       }
@@ -76,7 +90,7 @@ final processedInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((re
 
     // --- C. SORTIEREN ---
     final sortedItems = List<InventoryItem>.from(filteredItems);
-    
+
     sortedItems.sort((a, b) {
       int comp = 0;
       switch (sortMode) {
@@ -94,16 +108,20 @@ final processedInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((re
           comp = a.userCard.createdAt.compareTo(b.userCard.createdAt);
           break;
         case InventorySort.name:
-          comp = (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
+          comp = (a.card.nameDe ?? a.card.name)
+              .compareTo(b.card.nameDe ?? b.card.name);
           break;
         case InventorySort.rarity:
-          comp = (a.card.rarity ?? '').compareTo(b.card.rarity ?? ''); 
+          comp = (a.card.rarity ?? '').compareTo(b.card.rarity ?? '');
           break;
         case InventorySort.type:
-          final tA = a.card.cardType ?? 'ZZZ'; 
+          final tA = a.card.cardType ?? 'ZZZ';
           final tB = b.card.cardType ?? 'ZZZ';
           comp = tA.compareTo(tB);
-          if (comp == 0) comp = (a.card.nameDe ?? a.card.name).compareTo(b.card.nameDe ?? b.card.name);
+          if (comp == 0) {
+            comp = (a.card.nameDe ?? a.card.name)
+                .compareTo(b.card.nameDe ?? b.card.name);
+          }
           break;
       }
       return isAscending ? comp : -comp;
@@ -114,7 +132,9 @@ final processedInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((re
 });
 
 enum InventoryGroupMode { none, bySet, byBinder }
-final inventoryGroupModeProvider = StateProvider<InventoryGroupMode>((ref) => InventoryGroupMode.none);
+
+final inventoryGroupModeProvider =
+    StateProvider<InventoryGroupMode>((ref) => InventoryGroupMode.none);
 
 class InventoryScreen extends ConsumerWidget {
   const InventoryScreen({super.key});
@@ -123,9 +143,9 @@ class InventoryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // 1. Wir hören JETZT auf den neuen, verarbeiteten Provider!
     final processedInventoryAsync = ref.watch(processedInventoryProvider);
-    
+
     final sortMode = ref.watch(inventorySortProvider);
-    final groupMode = ref.watch(inventoryGroupModeProvider); 
+    final groupMode = ref.watch(inventoryGroupModeProvider);
     final searchText = ref.watch(inventorySearchProvider);
 
     return Scaffold(
@@ -136,21 +156,24 @@ class InventoryScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Fehler: $err')),
         data: (sortedItems) {
-          
           if (sortedItems.isEmpty && searchText.isEmpty) {
             return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey),
+                  Icon(Icons.inventory_2_outlined,
+                      size: 64, color: Colors.grey),
                   SizedBox(height: 16),
-                  Text("Dein Inventar ist noch leer.", style: TextStyle(color: Colors.grey)),
+                  Text("Dein Inventar ist noch leer.",
+                      style: TextStyle(color: Colors.grey)),
                 ],
               ),
             );
           }
-          final int totalCards = sortedItems.fold(0, (sum, item) => sum + item.quantity);
-          final double totalValue = sortedItems.fold(0.0, (sum, item) => sum + item.totalValue);
+          final int totalCards =
+              sortedItems.fold(0, (sum, item) => sum + item.quantity);
+          final double totalValue =
+              sortedItems.fold(0.0, (sum, item) => sum + item.totalValue);
 
           return Column(
             children: [
@@ -161,9 +184,10 @@ class InventoryScreen extends ConsumerWidget {
 
               // ANZEIGEN JE NACH MODUS
               Expanded(
-                child: sortedItems.isEmpty 
-                  ? const Center(child: Text("Keine Ergebnisse für deine Suche."))
-                  : _buildContent(sortedItems, groupMode, ref),
+                child: sortedItems.isEmpty
+                    ? const Center(
+                        child: Text("Keine Ergebnisse für deine Suche."))
+                    : _buildContent(sortedItems, groupMode, ref),
               ),
             ],
           );
@@ -174,30 +198,42 @@ class InventoryScreen extends ConsumerWidget {
 
   // --- WIDGETS ---
 
-  Widget _buildContent(List<InventoryItem> items, InventoryGroupMode mode, WidgetRef ref) {
+  Widget _buildContent(
+      List<InventoryItem> items, InventoryGroupMode mode, WidgetRef ref) {
     if (mode == InventoryGroupMode.bySet) return _buildGroupedBySet(items, ref);
-    if (mode == InventoryGroupMode.byBinder) return _buildGroupedByBinder(items, ref);
-    return _buildGrid(items); 
+    if (mode == InventoryGroupMode.byBinder) {
+      return _buildGroupedByBinder(items, ref);
+    }
+    return _buildGrid(items);
   }
 
   Widget _buildHeaderStats(BuildContext context, int count, double value) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+      color:
+          Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           Column(
             children: [
-              const Text("Karten", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              Text("$count", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text("Karten",
+                  style: TextStyle(color: Colors.grey, fontSize: 12)),
+              Text("$count",
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold)),
             ],
           ),
           Container(width: 1, height: 30, color: Colors.grey[400]),
           Column(
             children: [
-              const Text("Gesamtwert", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              Text("${value.toStringAsFixed(2)} €", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green[700])),
+              const Text("Gesamtwert",
+                  style: TextStyle(color: Colors.grey, fontSize: 12)),
+              Text("${value.toStringAsFixed(2)} €",
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green[700])),
             ],
           ),
         ],
@@ -205,7 +241,8 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSearchBar(BuildContext context, WidgetRef ref, String currentText) {
+  Widget _buildSearchBar(
+      BuildContext context, WidgetRef ref, String currentText) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
       child: LayoutBuilder(
@@ -214,12 +251,13 @@ class InventoryScreen extends ConsumerWidget {
           optionsBuilder: (TextEditingValue textEditingValue) {
             final query = textEditingValue.text.trim().toLowerCase();
             if (query.length < 2) return const Iterable<String>.empty();
-            
+
             final inventory = ref.read(inventoryProvider).valueOrNull ?? [];
             final Set<String> results = {};
-            
+
             for (var item in inventory) {
-              if (item.card.nameDe != null && item.card.nameDe!.toLowerCase().contains(query)) {
+              if (item.card.nameDe != null &&
+                  item.card.nameDe!.toLowerCase().contains(query)) {
                 results.add(item.card.nameDe!);
               } else if (item.card.name.toLowerCase().contains(query)) {
                 results.add(item.card.name);
@@ -238,22 +276,24 @@ class InventoryScreen extends ConsumerWidget {
               decoration: InputDecoration(
                 hintText: 'Suche Karte in Inventar...',
                 prefixIcon: const Icon(Icons.search),
-                suffixIcon: controller.text.isNotEmpty 
-                  ? IconButton(
-                      icon: const Icon(Icons.clear), 
-                      onPressed: () {
-                         controller.clear();
-                         ref.read(inventorySearchProvider.notifier).state = '';
-                         focusNode.unfocus();
-                      }
-                    )
-                  : null,
+                suffixIcon: controller.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          controller.clear();
+                          ref.read(inventorySearchProvider.notifier).state = '';
+                          focusNode.unfocus();
+                        })
+                    : null,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                 filled: true,
                 fillColor: Colors.grey[100],
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none),
               ),
-              onChanged: (val) => ref.read(inventorySearchProvider.notifier).state = val,
+              onChanged: (val) =>
+                  ref.read(inventorySearchProvider.notifier).state = val,
               onSubmitted: (val) {
                 focusNode.unfocus();
               },
@@ -266,17 +306,22 @@ class InventoryScreen extends ConsumerWidget {
                 elevation: 6,
                 borderRadius: BorderRadius.circular(8),
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: 250, maxWidth: constraints.maxWidth),
+                  constraints: BoxConstraints(
+                      maxHeight: 250, maxWidth: constraints.maxWidth),
                   child: ListView.separated(
                     padding: EdgeInsets.zero,
                     shrinkWrap: true,
                     itemCount: options.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.black12),
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: Colors.black12),
                     itemBuilder: (context, index) {
                       final option = options.elementAt(index);
                       return ListTile(
-                        leading: const Icon(Icons.search, size: 18, color: Colors.grey),
-                        title: Text(option, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                        leading: const Icon(Icons.search,
+                            size: 18, color: Colors.grey),
+                        title: Text(option,
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.bold)),
                         visualDensity: VisualDensity.compact,
                         onTap: () => onSelected(option),
                       );
@@ -291,7 +336,8 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildFilterBar(BuildContext context, WidgetRef ref, InventorySort currentSort, InventoryGroupMode currentGroup) {
+  Widget _buildFilterBar(BuildContext context, WidgetRef ref,
+      InventorySort currentSort, InventoryGroupMode currentGroup) {
     final isAscending = ref.watch(inventorySortAscendingProvider);
 
     return Padding(
@@ -303,14 +349,21 @@ class InventoryScreen extends ConsumerWidget {
           DropdownButton<InventorySort>(
             value: currentSort,
             underline: const SizedBox(),
-            style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500, fontSize: 13),
+            style: const TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.w500,
+                fontSize: 13),
             items: const [
-              DropdownMenuItem(value: InventorySort.dateAdded, child: Text("Erhalten am")),
+              DropdownMenuItem(
+                  value: InventorySort.dateAdded, child: Text("Erhalten am")),
               DropdownMenuItem(value: InventorySort.value, child: Text("Wert")),
-              DropdownMenuItem(value: InventorySort.performance, child: Text("Performance")),
+              DropdownMenuItem(
+                  value: InventorySort.performance, child: Text("Performance")),
               DropdownMenuItem(value: InventorySort.name, child: Text("Name")),
-              DropdownMenuItem(value: InventorySort.rarity, child: Text("Seltenheit")),
-              DropdownMenuItem(value: InventorySort.type, child: Text("Element")),
+              DropdownMenuItem(
+                  value: InventorySort.rarity, child: Text("Seltenheit")),
+              DropdownMenuItem(
+                  value: InventorySort.type, child: Text("Element")),
             ],
             onChanged: (val) {
               if (val != null && val != currentSort) {
@@ -320,34 +373,41 @@ class InventoryScreen extends ConsumerWidget {
               }
             },
           ),
-          
+
           // --- DER NEUE PFEIL ZUM UMKEHREN DER SORTIERUNG ---
           InkWell(
             onTap: () {
               // Dreht true zu false und false zu true
-              ref.read(inventorySortAscendingProvider.notifier).state = !isAscending;
+              ref.read(inventorySortAscendingProvider.notifier).state =
+                  !isAscending;
             },
             borderRadius: BorderRadius.circular(4),
             child: Padding(
               padding: const EdgeInsets.all(4.0),
               child: Icon(
-                isAscending ? Icons.arrow_upward : Icons.arrow_downward, 
-                size: 16, 
-                color: Colors.blue[800]
-              ),
+                  isAscending ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 16,
+                  color: Colors.blue[800]),
             ),
           ),
-          
+
           const Spacer(),
           SegmentedButton<InventoryGroupMode>(
             segments: const [
-              ButtonSegment(value: InventoryGroupMode.none, icon: Icon(Icons.grid_view, size: 16)),
-              ButtonSegment(value: InventoryGroupMode.bySet, icon: Icon(Icons.layers, size: 16)),
-              ButtonSegment(value: InventoryGroupMode.byBinder, icon: Icon(Icons.folder_special, size: 16)),
+              ButtonSegment(
+                  value: InventoryGroupMode.none,
+                  icon: Icon(Icons.grid_view, size: 16)),
+              ButtonSegment(
+                  value: InventoryGroupMode.bySet,
+                  icon: Icon(Icons.layers, size: 16)),
+              ButtonSegment(
+                  value: InventoryGroupMode.byBinder,
+                  icon: Icon(Icons.folder_special, size: 16)),
             ],
             selected: {currentGroup},
             onSelectionChanged: (Set<InventoryGroupMode> newSelection) {
-              ref.read(inventoryGroupModeProvider.notifier).state = newSelection.first;
+              ref.read(inventoryGroupModeProvider.notifier).state =
+                  newSelection.first;
             },
             showSelectedIcon: false,
             style: const ButtonStyle(
@@ -365,7 +425,7 @@ class InventoryScreen extends ConsumerWidget {
       padding: const EdgeInsets.only(left: 10, top: 10, right: 10, bottom: 100),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        childAspectRatio: 0.70, 
+        childAspectRatio: 0.70,
         crossAxisSpacing: 8,
         mainAxisSpacing: 8,
       ),
@@ -377,12 +437,13 @@ class InventoryScreen extends ConsumerWidget {
   Widget _buildGroupedBySet(List<InventoryItem> items, WidgetRef ref) {
     final grouped = groupBy(items, (item) => item.set.id);
     final expandedSets = ref.watch(expandedSetsProvider);
-    
-    final sortedKeys = grouped.keys.toList()..sort((a, b) {
-      final dateA = grouped[a]!.first.set.releaseDate;
-      final dateB = grouped[b]!.first.set.releaseDate;
-      return dateB.compareTo(dateA); 
-    });
+
+    final sortedKeys = grouped.keys.toList()
+      ..sort((a, b) {
+        final dateA = grouped[a]!.first.set.releaseDate;
+        final dateB = grouped[b]!.first.set.releaseDate;
+        return dateB.compareTo(dateA);
+      });
 
     return CustomScrollView(
       slivers: [
@@ -395,7 +456,8 @@ class InventoryScreen extends ConsumerWidget {
           final isExpanded = expandedSets.contains(setId);
 
           final setTotalCount = setCards.fold(0, (sum, i) => sum + i.quantity);
-          final setTotalValue = setCards.fold(0.0, (sum, i) => sum + i.totalValue);
+          final setTotalValue =
+              setCards.fold(0.0, (sum, i) => sum + i.totalValue);
 
           return [
             // 1. Der Header (ersetzt den Kopf des ExpansionTiles)
@@ -403,44 +465,64 @@ class InventoryScreen extends ConsumerWidget {
               child: Card(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 elevation: 1,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () {
                     // Auf- und Zuklappen togglen
                     final current = ref.read(expandedSetsProvider);
                     if (isExpanded) {
-                      ref.read(expandedSetsProvider.notifier).state = {...current}..remove(setId);
+                      ref.read(expandedSetsProvider.notifier).state = {
+                        ...current
+                      }..remove(setId);
                     } else {
-                      ref.read(expandedSetsProvider.notifier).state = {...current, setId};
+                      ref.read(expandedSetsProvider.notifier).state = {
+                        ...current,
+                        setId
+                      };
                     }
                   },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: ListTile(
                       leading: SizedBox(
-                        width: 50, height: 30,
-                        child: apiSet.logoUrl != null 
-                          ? CachedNetworkImage(
-                              imageUrl: apiSet.logoUrl!, memCacheHeight: 200, fit: BoxFit.contain,
-                              placeholder: (_,__) => const SizedBox(),
-                              errorWidget: (_,__,___) => const Icon(Icons.broken_image, size: 20, color: Colors.grey),
-                            )
-                          : const Icon(Icons.image_not_supported, color: Colors.grey),
+                        width: 50,
+                        height: 30,
+                        child: apiSet.logoUrl != null
+                            ? CachedNetworkImage(
+                                imageUrl: apiSet.logoUrl!,
+                                memCacheHeight: 200,
+                                fit: BoxFit.contain,
+                                placeholder: (_, __) => const SizedBox(),
+                                errorWidget: (_, __, ___) => const Icon(
+                                    Icons.broken_image,
+                                    size: 20,
+                                    color: Colors.grey),
+                              )
+                            : const Icon(Icons.image_not_supported,
+                                color: Colors.grey),
                       ),
-                      title: Text(apiSet.nameDe ?? apiSet.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      subtitle: Text("$setTotalCount Karten • ${setTotalValue.toStringAsFixed(2)} €", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                      trailing: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                      title: Text(apiSet.nameDe ?? apiSet.name,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15)),
+                      subtitle: Text(
+                          "$setTotalCount Karten • ${setTotalValue.toStringAsFixed(2)} €",
+                          style:
+                              TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      trailing: Icon(
+                          isExpanded ? Icons.expand_less : Icons.expand_more),
                     ),
                   ),
                 ),
               ),
             ),
-            
+
             // 2. Das Grid (wird NUR gerendert, wenn aufgeklappt - und absolut Lazy!)
             if (isExpanded)
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 sliver: SliverGrid(
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,
@@ -449,7 +531,8 @@ class InventoryScreen extends ConsumerWidget {
                     mainAxisSpacing: 8,
                   ),
                   delegate: SliverChildBuilderDelegate(
-                    (context, cardIndex) => _InventoryCardTile(item: setCards[cardIndex]),
+                    (context, cardIndex) =>
+                        _InventoryCardTile(item: setCards[cardIndex]),
                     childCount: setCards.length,
                   ),
                 ),
@@ -462,14 +545,16 @@ class InventoryScreen extends ConsumerWidget {
   }
 
   Widget _buildGroupedByBinder(List<InventoryItem> items, WidgetRef ref) {
-    final grouped = groupBy(items, (item) => item.binderName ?? "Nicht im Binder");
+    final grouped =
+        groupBy(items, (item) => item.binderName ?? "Nicht im Binder");
     final expandedBinders = ref.watch(expandedBindersProvider);
-    
-    final sortedKeys = grouped.keys.toList()..sort((a, b) {
-      if (a == "Nicht im Binder") return 1;
-      if (b == "Nicht im Binder") return -1;
-      return a.compareTo(b);
-    });
+
+    final sortedKeys = grouped.keys.toList()
+      ..sort((a, b) {
+        if (a == "Nicht im Binder") return 1;
+        if (b == "Nicht im Binder") return -1;
+        return a.compareTo(b);
+      });
 
     return CustomScrollView(
       slivers: [
@@ -477,56 +562,74 @@ class InventoryScreen extends ConsumerWidget {
         ...sortedKeys.expand((binderName) {
           final binderCards = grouped[binderName]!;
           final isLoose = binderName == "Nicht im Binder";
-          
+
           // "Nicht im Binder" soll standardmäßig offen sein, Binder standardmäßig zu (außer sie wurden angeklickt)
-          final isExpanded = isLoose ? !expandedBinders.contains(binderName) : expandedBinders.contains(binderName);
+          final isExpanded = isLoose
+              ? !expandedBinders.contains(binderName)
+              : expandedBinders.contains(binderName);
 
           final totalCount = binderCards.fold(0, (sum, i) => sum + i.quantity);
-          final totalValue = binderCards.fold(0.0, (sum, i) => sum + i.totalValue);
+          final totalValue =
+              binderCards.fold(0.0, (sum, i) => sum + i.totalValue);
 
           return [
             SliverToBoxAdapter(
               child: Card(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                elevation: isLoose ? 0 : 2, 
+                elevation: isLoose ? 0 : 2,
                 color: isLoose ? Colors.grey[50] : Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: isLoose ? BorderSide(color: Colors.grey[300]!) : BorderSide.none,
+                  side: isLoose
+                      ? BorderSide(color: Colors.grey[300]!)
+                      : BorderSide.none,
                 ),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () {
                     final current = ref.read(expandedBindersProvider);
                     if (expandedBinders.contains(binderName)) {
-                      ref.read(expandedBindersProvider.notifier).state = {...current}..remove(binderName);
+                      ref.read(expandedBindersProvider.notifier).state = {
+                        ...current
+                      }..remove(binderName);
                     } else {
-                      ref.read(expandedBindersProvider.notifier).state = {...current, binderName};
+                      ref.read(expandedBindersProvider.notifier).state = {
+                        ...current,
+                        binderName
+                      };
                     }
                   },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: isLoose ? Colors.grey[300] : Colors.blueAccent.withOpacity(0.2),
+                        backgroundColor: isLoose
+                            ? Colors.grey[300]
+                            : Colors.blueAccent.withValues(alpha: 0.2),
                         child: Icon(
-                          isLoose ? Icons.inventory_2 : Icons.menu_book, 
+                          isLoose ? Icons.inventory_2 : Icons.menu_book,
                           color: isLoose ? Colors.grey[600] : Colors.blueAccent,
                           size: 20,
                         ),
                       ),
-                      title: Text(binderName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      subtitle: Text("$totalCount Karten • ${totalValue.toStringAsFixed(2)} €", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                      trailing: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                      title: Text(binderName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15)),
+                      subtitle: Text(
+                          "$totalCount Karten • ${totalValue.toStringAsFixed(2)} €",
+                          style:
+                              TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      trailing: Icon(
+                          isExpanded ? Icons.expand_less : Icons.expand_more),
                     ),
                   ),
                 ),
               ),
             ),
-            
             if (isExpanded)
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 sliver: SliverGrid(
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,
@@ -535,7 +638,8 @@ class InventoryScreen extends ConsumerWidget {
                     mainAxisSpacing: 8,
                   ),
                   delegate: SliverChildBuilderDelegate(
-                    (context, cardIndex) => _InventoryCardTile(item: binderCards[cardIndex]),
+                    (context, cardIndex) =>
+                        _InventoryCardTile(item: binderCards[cardIndex]),
                     childCount: binderCards.length,
                   ),
                 ),
@@ -560,45 +664,58 @@ class _InventoryCardTile extends ConsumerWidget {
     final bool isHolo = item.variant == 'Holo';
     final bool showEffect = isReverseHolo || isHolo;
 
-    final bool isGraded = item.userCard.gradingCompany != null && item.userCard.gradingCompany != 'Kein Grading';
+    final bool isGraded = item.userCard.gradingCompany != null &&
+        item.userCard.gradingCompany != 'Kein Grading';
 
     final displayImage = item.card.displayImage;
 
     // --- Preise und Performance ---
-    final double singlePrice = item.totalValue / (item.quantity > 0 ? item.quantity : 1);
-    final double singlePerformance = item.performance / (item.quantity > 0 ? item.quantity : 1);
-    
-    final bool hasSpecificPrice = item.userCard.customPrice != null && item.userCard.customPrice! > 0;
+    final double singlePrice =
+        item.totalValue / (item.quantity > 0 ? item.quantity : 1);
+    final double singlePerformance =
+        item.performance / (item.quantity > 0 ? item.quantity : 1);
+
+    final bool hasSpecificPrice =
+        item.userCard.customPrice != null && item.userCard.customPrice! > 0;
     final bool isNeutral = singlePerformance.abs() < 0.01;
     final bool isPositive = singlePerformance > 0;
-    
-    final Color perfColor = isNeutral ? Colors.grey[400]! : (isPositive ? Colors.greenAccent : Colors.redAccent);
-    final IconData perfIcon = isNeutral ? Icons.remove : (isPositive ? Icons.arrow_drop_up : Icons.arrow_drop_down);
+
+    final Color perfColor = isNeutral
+        ? Colors.grey[400]!
+        : (isPositive ? Colors.greenAccent : Colors.redAccent);
+    final IconData perfIcon = isNeutral
+        ? Icons.remove
+        : (isPositive ? Icons.arrow_drop_up : Icons.arrow_drop_down);
 
     // --- Daten für die Anzeige ---
-    final String dateStr = DateFormat('dd.MM.yy').format(item.userCard.createdAt);
+    final String dateStr =
+        DateFormat('dd.MM.yy').format(item.userCard.createdAt);
     final String variantStr = _getVariantAbbreviation(item.variant);
-    final String conditionStr = _getConditionAbbreviation(item.userCard.condition);
+    final String conditionStr =
+        _getConditionAbbreviation(item.userCard.condition);
     final Color conditionColor = _getConditionColor(item.userCard.condition);
 
     return InkWell(
       onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => CardDetailScreen(card: item.card)));
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => CardDetailScreen(card: item.card)));
       },
       onLongPress: () async {
         await showModalBottomSheet(
-          context: context, 
-          isScrollControlled: true,
-          builder: (_) => InventoryBottomSheet(card: item.card)
-        );
+            context: context,
+            isScrollControlled: true,
+            builder: (_) => InventoryBottomSheet(card: item.card));
       },
       child: Card(
         clipBehavior: Clip.antiAlias,
-        elevation: isGraded ? 6 : 2, 
+        elevation: isGraded ? 6 : 2,
         shape: RoundedRectangleBorder(
-           borderRadius: BorderRadius.circular(12),
-           side: isGraded ? BorderSide(color: Colors.orange[400]!, width: 1.5) : BorderSide.none
-        ),
+            borderRadius: BorderRadius.circular(12),
+            side: isGraded
+                ? BorderSide(color: Colors.orange[400]!, width: 1.5)
+                : BorderSide.none),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -609,23 +726,33 @@ class _InventoryCardTile extends ConsumerWidget {
                   imageUrl: displayImage,
                   memCacheHeight: 200,
                   fit: BoxFit.contain,
-                  placeholder: (context, url) => Container(color: Colors.grey[200]),
-                  errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
+                  placeholder: (context, url) =>
+                      Container(color: Colors.grey[200]),
+                  errorWidget: (context, url, error) =>
+                      const Icon(Icons.broken_image, color: Colors.grey),
                 );
-                if (showEffect) return HoloEffect(isReverse: isReverseHolo, child: imageWidget);
+                if (showEffect) {
+                  return HoloEffect(
+                      isReverse: isReverseHolo, child: imageWidget);
+                }
                 return imageWidget;
               },
             ),
 
             // --- 2. OBERER BEREICH (Sanfter Gradient + Name & Variante) ---
             Positioned(
-              top: 0, left: 0, right: 0,
+              top: 0,
+              left: 0,
+              right: 0,
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.black.withOpacity(0.8), Colors.transparent],
+                    colors: [
+                      Colors.black.withValues(alpha: 0.8),
+                      Colors.transparent
+                    ],
                     stops: const [0.0, 1.0],
                   ),
                 ),
@@ -669,73 +796,97 @@ class _InventoryCardTile extends ConsumerWidget {
                     Text(
                       variantStr,
                       style: TextStyle(
-                        color: showEffect ? Colors.amberAccent : Colors.white70, 
-                        fontSize: 9, 
-                        fontWeight: showEffect ? FontWeight.bold : FontWeight.normal
-                      ),
+                          color:
+                              showEffect ? Colors.amberAccent : Colors.white70,
+                          fontSize: 9,
+                          fontWeight:
+                              showEffect ? FontWeight.bold : FontWeight.normal),
                     ),
                   ],
                 ),
               ),
             ),
-            
+
             // Grading Score (PSA)
             if (isGraded)
               Positioned(
-                top: 30, left: 4, 
+                top: 30,
+                left: 4,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(color: Colors.orange[800], borderRadius: BorderRadius.circular(6)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                      color: Colors.orange[800],
+                      borderRadius: BorderRadius.circular(6)),
                   child: Text(
-                    "${item.userCard.gradingCompany} ${item.userCard.gradingScore ?? ''}".trim(), 
-                    style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)
-                  ),
+                      "${item.userCard.gradingCompany} ${item.userCard.gradingScore ?? ''}"
+                          .trim(),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold)),
                 ),
               ),
 
             // Anzahl Badge (3x)
             Positioned(
-              top: 30, right: 4, 
+              top: 30,
+              right: 4,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: Colors.blue[800], borderRadius: BorderRadius.circular(10)),
-                child: Text(
-                  "${item.quantity}x", 
-                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
-                ),
+                decoration: BoxDecoration(
+                    color: Colors.blue[800],
+                    borderRadius: BorderRadius.circular(10)),
+                child: Text("${item.quantity}x",
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold)),
               ),
             ),
 
             // --- NEU: ZUSTANDS BADGE (Schwebend über dem unteren Balken) ---
             Positioned(
-              bottom: 20, left: 4, 
+              bottom: 20,
+              left: 4,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 decoration: BoxDecoration(
-                  color: conditionColor, 
+                  color: conditionColor,
                   borderRadius: BorderRadius.circular(6),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 2, offset: const Offset(0, 1))],
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 2,
+                        offset: const Offset(0, 1))
+                  ],
                 ),
-                child: Text(
-                  conditionStr, 
-                  style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)
-                ),
+                child: Text(conditionStr,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold)),
               ),
             ),
 
             // --- 3. UNTERER BEREICH (Sanfter Gradient + Preis/Performance gestapelt) ---
             Positioned(
-              bottom: 0, left: 0, right: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
                     end: Alignment.topCenter,
-                    colors: [Colors.black.withOpacity(0.9), Colors.transparent],
+                    colors: [
+                      Colors.black.withValues(alpha: 0.9),
+                      Colors.transparent
+                    ],
                     stops: const [0.0, 1.0],
                   ),
                 ),
-                padding: const EdgeInsets.fromLTRB(6, 16, 6, 6), 
+                padding: const EdgeInsets.fromLTRB(6, 16, 6, 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -744,14 +895,15 @@ class _InventoryCardTile extends ConsumerWidget {
                     Expanded(
                       child: Text(
                         "Am: $dateStr",
-                        style: const TextStyle(color: Colors.white70, fontSize: 9),
+                        style:
+                            const TextStyle(color: Colors.white70, fontSize: 9),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    
+
                     const SizedBox(width: 4),
-                    
+
                     // Performance OBERHALB des Preises
                     Column(
                       mainAxisSize: MainAxisSize.min,
@@ -763,23 +915,28 @@ class _InventoryCardTile extends ConsumerWidget {
                               Icon(perfIcon, color: perfColor, size: 12),
                               Text(
                                 "${singlePerformance.abs().toStringAsFixed(2)}€",
-                                style: TextStyle(color: perfColor, fontSize: 9, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                    color: perfColor,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold),
                               ),
                             ],
                           ),
                         if (!hasSpecificPrice) const SizedBox(height: 2),
-                        
                         Row(
                           children: [
-                            if (hasSpecificPrice) const Icon(Icons.star, color: Colors.amber, size: 10),
+                            if (hasSpecificPrice)
+                              const Icon(Icons.star,
+                                  color: Colors.amber, size: 10),
                             if (hasSpecificPrice) const SizedBox(width: 2),
                             Text(
                               "${singlePrice.toStringAsFixed(2)}€",
                               style: TextStyle(
-                                color: hasSpecificPrice ? Colors.amberAccent : Colors.greenAccent, 
-                                fontSize: 11, 
-                                fontWeight: FontWeight.bold
-                              ),
+                                  color: hasSpecificPrice
+                                      ? Colors.amberAccent
+                                      : Colors.greenAccent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
@@ -807,31 +964,39 @@ class _InventoryCardTile extends ConsumerWidget {
 
   String _getConditionAbbreviation(String condition) {
     switch (condition) {
-      case 'Mint': return 'MINT';
-      case 'Near Mint': return 'NM';
-      case 'Excellent': return 'EX';
-      case 'Good': return 'GD';
-      case 'Light Played': return 'LP';
-      case 'Played': return 'PL';
-      case 'Poor': return 'POOR';
-      default: return condition;
+      case 'Mint':
+        return 'MINT';
+      case 'Near Mint':
+        return 'NM';
+      case 'Excellent':
+        return 'EX';
+      case 'Good':
+        return 'GD';
+      case 'Light Played':
+        return 'LP';
+      case 'Played':
+        return 'PL';
+      case 'Poor':
+        return 'POOR';
+      default:
+        return condition;
     }
   }
 
   Color _getConditionColor(String condition) {
     switch (condition) {
       case 'Mint':
-      case 'Near Mint': 
+      case 'Near Mint':
         return Colors.green[700]!;
-      case 'Excellent': 
-      case 'Good': 
+      case 'Excellent':
+      case 'Good':
         return Colors.blue[700]!;
-      case 'Light Played': 
-      case 'Played': 
+      case 'Light Played':
+      case 'Played':
         return Colors.orange[700]!;
-      case 'Poor': 
+      case 'Poor':
         return Colors.red[700]!;
-      default: 
+      default:
         return Colors.grey[700]!;
     }
   }
@@ -848,13 +1013,16 @@ class HoloEffect extends StatefulWidget {
   State<HoloEffect> createState() => _HoloEffectState();
 }
 
-class _HoloEffectState extends State<HoloEffect> with SingleTickerProviderStateMixin {
+class _HoloEffectState extends State<HoloEffect>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
+    _controller =
+        AnimationController(vsync: this, duration: const Duration(seconds: 4))
+          ..repeat();
   }
 
   @override
@@ -878,18 +1046,19 @@ class _HoloEffectState extends State<HoloEffect> with SingleTickerProviderStateM
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   // Wir nutzen Flutters natives GradientRotation (kein import dart:math nötig)
-                  transform: GradientRotation(_controller.value * 2 * 3.1415926535), 
+                  transform:
+                      GradientRotation(_controller.value * 2 * 3.1415926535),
                   colors: [
                     Colors.transparent,
-                    Colors.white.withOpacity(0.1),
-                    Colors.purple.withOpacity(0.15), 
-                    Colors.blue.withOpacity(0.15),   
-                    Colors.white.withOpacity(0.25),  
+                    Colors.white.withValues(alpha: 0.1),
+                    Colors.purple.withValues(alpha: 0.15),
+                    Colors.blue.withValues(alpha: 0.15),
+                    Colors.white.withValues(alpha: 0.25),
                     Colors.transparent,
                   ],
                   stops: const [0.0, 0.3, 0.45, 0.55, 0.7, 1.0],
                 ),
-                backgroundBlendMode: BlendMode.overlay, 
+                backgroundBlendMode: BlendMode.overlay,
               ),
             );
           },
