@@ -70,7 +70,7 @@ class BinderService {
   }
 
   // =====================================================================
-  // DIE MAGISCHE SLOT GENERIERUNG
+  // ADVANCED SLOT GENERATION
   // =====================================================================
   Future<void> _generateAdvancedSlots({
     required int binderId, required AdvancedBinderType type, required int rows, required int cols,
@@ -129,7 +129,7 @@ class BinderService {
       }
 
       for (var p in allDex) {
-        // --- 1. DER GEISTER-FILTER (Müll aus der API ignorieren) ---
+        // 1. Filter out ignored non-card forms
         if (_isIgnoredForm(p.name)) continue;
 
         if (p.id <= 1025) {
@@ -153,7 +153,7 @@ class BinderService {
       } else {
         for (var base in basePokemon) {
           finalDex.add(base);
-          // --- 2. DER MR. MIME FIX (Exakte Zuordnung statt Überschneidung) ---
+          // 2. Base identifier matching for distinct species forms
           var forms = specialForms.where((f) => _getBaseIdentifier(f.name) == _getBaseIdentifier(base.name));
           finalDex.addAll(forms);
         }
@@ -165,7 +165,7 @@ class BinderService {
         
         final candidates = _getCandidateNames(p.name);
         
-        // --- DER CASE-SENSITIVITY KILLER: ALLES IN KLEINBUCHSTABEN SUCHEN! ---
+        // Case-insensitive candidate name query
         final lowerCandidates = candidates.map((c) => c.toLowerCase()).toList();
         
         final cards = await (db.select(db.cards)
@@ -178,7 +178,7 @@ class BinderService {
           if (aHasImg && !bHasImg) return -1;
           if (!aHasImg && bHasImg) return 1;
 
-          // Prio prüfen (Kleinbuchstaben!)
+          // Match priority check (lowercase)
           int aPriority = lowerCandidates.indexOf(a.name.toLowerCase());
           int bPriority = lowerCandidates.indexOf(b.name.toLowerCase());
           if (aPriority == -1) aPriority = lowerCandidates.indexOf(a.nameDe?.toLowerCase() ?? "");
@@ -252,13 +252,13 @@ class BinderService {
   }
 
   // =====================================================================
-  // KANDIDATEN-GENERIERUNG FÜR CHAOTISCHE KARTENNAMEN
+  // CANDIDATE NAME GENERATION HEURISTICS
   // =====================================================================
   List<String> _getCandidateNames(String apiName) {
     final String workStr = apiName.toLowerCase();
     final List<String> candidates = [];
 
-    // --- 1. HARDCODED EXCEPTIONS (Exakte Zuordnungen & Ausnahmen) ---
+    // 1. Hardcoded exact name mappings and edge case exceptions
     final exceptions = {
       'nidoran-f': ['Nidoran♀'],
       'nidoran-m': ['Nidoran♂'],
@@ -283,13 +283,13 @@ class BinderService {
       'giratina-altered': ['Giratina V', 'Giratina VSTAR', 'Giratina'],
       'deoxys-normal': ['Deoxys'],
       
-      // Die Toxtricity/Urshifu Fixes (Kein VMAX Diebstahl mehr!)
+      // Specific Toxtricity/Urshifu disambiguations
       'toxtricity-amped': ['Toxtricity'], 
       'toxtricity-amped-gmax': ['Toxtricity VMAX'],
       'urshifu': ['Urshifu', 'Urshifu V'], 
       'tatsugiri-curly-mega': ['Mega Tatsugiri ex', 'Mega Tatsugiri'], 
       
-      // Die Galar & Hisui Basis-Entwicklungen
+      // Galarian and Hisuian distinct base evolutions
       'obstagoon': ['Galarian Obstagoon', 'Obstagoon'],
       'perrserker': ['Galarian Perrserker', 'Perrserker'],
       'cursola': ['Galarian Cursola', 'Cursola'],
@@ -306,7 +306,7 @@ class BinderService {
       return candidates;
     }
 
-    // --- 2. MEGAS ---
+    // 2. Mega Evolution naming patterns
     if (workStr.contains('-mega')) {
       final isX = workStr.endsWith('-x');
       final isY = workStr.endsWith('-y');
@@ -315,22 +315,22 @@ class BinderService {
       final rawBase = workStr.split('-mega').first;
       final base = _formatBase(rawBase);
 
-      // Englisch Modern
+      // English Modern
       candidates.add('Mega $base$suffix EX');
       candidates.add('Mega $base$suffix ex');
       candidates.add('Mega $base$suffix-EX');
-      // Deutsch Modern (mit Bindestrich)
+      // German Modern (hyphenated)
       candidates.add('Mega-$base$suffix-EX');
       candidates.add('Mega-$base$suffix-ex'); 
       candidates.add('Mega-$base-EX'); 
       candidates.add('Mega-$base-ex');
-      // Englisch Alt
+      // English Classic (M prefix)
       candidates.add('M $base$suffix-EX');
       candidates.add('M $base$suffix EX');
       candidates.add('M $base$suffix-ex');
       candidates.add('M $base$suffix ex');
       
-      // Ohne Suffix
+      // Without X/Y suffix
       if (isX || isY || isZ) {
         candidates.add('Mega $base EX');
         candidates.add('Mega $base ex');
@@ -341,7 +341,7 @@ class BinderService {
       return candidates.toSet().toList();
     }
 
-    // --- 3. PRIMAL (Proto) ---
+    // 3. Primal reversion patterns
     if (workStr.contains('-primal')) {
       final rawBase = workStr.split('-primal').first;
       final base = _formatBase(rawBase);
@@ -353,7 +353,7 @@ class BinderService {
       return candidates;
     }
 
-    // --- 4. GMAX (Wird VMAX/VSTAR) ---
+    // 4. Gigantamax (maps to VMAX/VSTAR in TCG)
     if (workStr.contains('-gmax')) {
       final rawBase = workStr.split('-gmax').first;
       final base = _formatBase(rawBase);
@@ -363,7 +363,7 @@ class BinderService {
       return candidates;
     }
 
-    // --- 5. URSHIFU SONDERFORMEN ---
+    // 5. Urshifu battle style variants
     if (workStr.contains('urshifu')) {
       if (workStr.contains('single-strike')) {
         return ['Single Strike Urshifu VMAX', 'Single Strike Urshifu V', 'Single Strike Urshifu'];
@@ -372,7 +372,7 @@ class BinderService {
       }
     }
 
-    // --- 6. REGIONALFORMEN ---
+    // 6. Regional variant forms
     if (workStr.contains('-alola') || workStr.contains('-galar') || workStr.contains('-hisui') || workStr.contains('-paldea')) {
         String cleanedRegion = workStr.replaceAll(RegExp(r'-alola|-galar|-hisui|-paldea|-standard|-combat-breed|-blaze-breed|-aqua-breed'), '');
         String formattedBase = _formatBase(cleanedRegion);
@@ -391,7 +391,7 @@ class BinderService {
         return candidates.toSet().toList();
     }
     
-    // --- 7. OGERPON ---
+    // 7. Ogerpon mask forms
     if (workStr.contains('ogerpon')) {
       if (workStr.contains('wellspring')) return ['Wellspring Mask Ogerpon ex', 'Ogerpon ex'];
       if (workStr.contains('hearthflame')) return ['Hearthflame Mask Ogerpon ex', 'Ogerpon ex'];
@@ -400,7 +400,7 @@ class BinderService {
       return ['Ogerpon ex', 'Ogerpon'];
     }
 
-    // --- 8. SUFFIX CLEANUP ---
+    // 8. Form suffix cleanup
     final suffixesToRemove = [
       '-normal', '-plant', '-altered', '-land', '-red-striped', '-standard', 
       '-incarnate', '-ordinary', '-aria', '-male', '-female', '-shield', '-blade',
@@ -422,7 +422,7 @@ class BinderService {
       }
     }
 
-    // --- 9. STANDARD BEHANDLUNG ---
+    // 9. Standard card candidate variations
     final titleCased = _formatBase(cleaned);
     
     candidates.add(titleCased);
@@ -433,7 +433,7 @@ class BinderService {
     return candidates.toSet().toList(); 
   }
 
-  // --- WICHTIGE HELPER FÜR DEN KORREKTEN BASIS-NAMEN ---
+  // Helper to normalize base Pokémon names
   String _formatBase(String b) {
       final n = b.toLowerCase();
       if (n == 'farfetchd') return "Farfetch'd";
@@ -451,7 +451,7 @@ class BinderService {
       }).join(' ');
   }
 
-  // --- Identifiziert den "Stamm" für die saubere Sortierung (Mime vs Rime) ---
+  // Identifies base stem for grouping (e.g. Mime vs Rime)
   String _getBaseIdentifier(String name) {
     final n = name.toLowerCase();
     if (n.startsWith('mr-mime')) return 'mr-mime';
@@ -460,11 +460,11 @@ class BinderService {
     if (n.startsWith('ho-oh')) return 'ho-oh';
     if (n.startsWith('porygon-z')) return 'porygon-z';
     if (n.startsWith('type-null')) return 'type-null';
-    if (n.startsWith('tapu-')) return n; // Tapu Koko bleibt Tapu Koko
+    if (n.startsWith('tapu-')) return n; // Keep Tapu Koko intact
     return n.split('-').first;
   }
 
-  // --- DER HARTE GEISTER-FILTER ---
+  // Ignored forms filter
   bool _isIgnoredForm(String name) {
       final n = name.toLowerCase();
       if (n == 'magearna-original-mega') return true;
@@ -485,7 +485,7 @@ class BinderService {
       if (n.contains('-cap')) return true;
       if (n.startsWith('pikachu-') && !n.contains('gmax')) return true;
       if (n.startsWith('eevee-') && !n.contains('gmax')) return true;
-      // Unsichtbare Formen
+      // Non-card aesthetic forms
       if (n.contains('-busted') || n.contains('-meteor') || n.contains('-school')) return true;
       if (n.contains('-noice') || n.contains('-hangry') || n.contains('family-of-three')) return true;
       if (n.contains('squawkabilly-') && n != 'squawkabilly-green-plumage') return true;
@@ -495,7 +495,7 @@ class BinderService {
       return false;
   }
 
-  // --- STANDARD HILFSFUNKTIONEN (Bleiben gleich) ---
+  // Standard helper functions
 
   /// Deletes the binder with [binderId] and cascades removal of all associated slots.
   Future<void> deleteBinder(int binderId) async {
@@ -581,7 +581,7 @@ class BinderService {
     }
 
     final cardIds = slots.map((s) => s.cardId).whereType<String>().toSet().toList();
-    // --- NEU: Wir laden alle UserCards der Slots auf einen Schlag ---
+    // Preload all user card entries associated with slots in batch
     final userCardIds = slots.map((s) => s.userCardId).whereType<int>().toSet().toList();
     
     final cardsList = await (db.select(db.cards)..where((t) => t.id.isIn(cardIds))).get();
@@ -615,7 +615,7 @@ class BinderService {
       final card = cardMap[cardId];
       if (card == null) continue;
 
-      // Das spezifische Inventar-Objekt für diesen Slot
+      // Specific user card inventory instance for this slot
       final userCard = slot.userCardId != null ? userCardMap[slot.userCardId!] : null;
 
       final cmPrice = cmMap[cardId];
@@ -666,21 +666,21 @@ class BinderService {
 
   /// Finds all binders containing [cardId] and recalculates each binder's total value.
   Future<void> recalculateBindersForCard(String cardId) async {
-    // 1. Finde alle Binder, in denen diese Karte liegt
+    // 1. Find all binders containing this card
     final usedSlotsQuery = db.select(db.binderCards)..where((t) => t.cardId.equals(cardId) & t.isPlaceholder.equals(false));
     final usedSlots = await usedSlotsQuery.get();
     
-    // 2. Sammle die eindeutigen Binder-IDs
+    // 2. Collect unique binder IDs
     final Set<int> affectedBinderIds = usedSlots.map((s) => s.binderId).toSet();
     
-    // 3. Berechne NUR diese Binder neu
+    // 3. Recalculate affected binders only
     for (var binderId in affectedBinderIds) {
       await recalculateBinderValue(binderId);
     }
   }
 
  // =====================================================================
-  // SLOT MANAGEMENT (Löschen & Einfügen per Long-Press)
+  // SLOT MANAGEMENT
   // =====================================================================
   
   /// Inserts a new empty slot immediately to the right of [currentSlotId], shifting remaining slots forward.
@@ -689,7 +689,7 @@ class BinderService {
     final isBulk = binder.rowsPerPage == 0 || binder.columnsPerPage == 0;
     final rows = binder.rowsPerPage;
     final cols = binder.columnsPerPage;
-    final slotsPerPage = isBulk ? 999999 : (rows * cols); // Bulk hat keine Seiten-Limits
+    final slotsPerPage = isBulk ? 999999 : (rows * cols); // Bulk containers have unbounded capacity
 
     final sortOrder = binder.sortOrder == BinderSortOrder.topToBottom.name 
         ? BinderSortOrder.topToBottom 
@@ -821,7 +821,7 @@ class BinderService {
   }
 
   // =====================================================================
-  // SLOT VERSCHIEBEN (LINKS / RECHTS / TAUSCHEN)
+  // SLOT REORDERING AND SWAPPING
   // =====================================================================
   
   Future<void> moveSlotLeft(int binderId, int slotId) => _swapSlot(binderId, slotId, -1);
@@ -943,7 +943,7 @@ class BinderService {
   }
 
   // =====================================================================
-  // BULK BOX MANAGEMENT (Listen-Inventar, Trennkarten & SORTIERUNG)
+  // BULK BOX MANAGEMENT (List inventory, dividers, and sorting)
   // =====================================================================
 
   /// Adds a card instance to a bulk box container at the trailing slot position.
@@ -984,7 +984,7 @@ class BinderService {
     await (db.update(db.binders)..where((t) => t.id.equals(binderId))).write(BindersCompanion(isFull: Value(isFull)));
   }
 
-  // --- DIE GENIALE SORTIER-FUNKTION (Berücksichtigt Trennkarten!) ---
+  // Bulk container sorting algorithm preserving section divider boundaries
   Future<void> sortBulkBox(int binderId, String sortMode) async {
     final slots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))..orderBy([(t) => OrderingTerm(expression: t.slotIndex)])).get();
 
@@ -996,7 +996,7 @@ class BinderService {
     List<BinderCard> currentGroupCards = [];
     BinderCard? currentDivider;
 
-    // Hilfsfunktion: Seltenheit bewerten (Höhere Nummer = seltener = weiter vorne)
+    // Helper: calculate rarity tier score (higher value = rarer)
     int getRarityScore(String? rarity) {
       if (rarity == null) return 0;
       final r = rarity.toLowerCase();
@@ -1006,7 +1006,7 @@ class BinderService {
       if (r.contains('double') || r.contains('v') || r.contains('ex') || r.contains('gx')) return 70;
       if (r.contains('holo') || r.contains('rare')) return 50;
       if (r.contains('uncommon')) return 20;
-      return 10; // Common
+      return 10; // Common tier baseline
     }
 
     void sortAndAppendGroup() {
@@ -1022,9 +1022,9 @@ class BinderService {
         } else if (sortMode == 'rarity') {
            return getRarityScore(cb.rarity).compareTo(getRarityScore(ca.rarity));
         } else if (sortMode == 'type') {
-           // Sortieren nach Typ (A-Z, Trainer und Energy rutschen automatisch ans Ende / Alphabetisch)
-           // Wenn der Typ gleich ist, sortiere intern nach Nummer
-           final tA = ca.cardType ?? 'ZZZ'; // Fallback nach ganz hinten
+           // Sort by element type (A-Z, Trainers and Energy sort naturally to end)
+           // When type matches, sort secondary by collector number
+           final tA = ca.cardType ?? 'ZZZ'; // Fallback to end of list
            final tB = cb.cardType ?? 'ZZZ';
            final typeCompare = tA.compareTo(tB);
            if (typeCompare != 0) return typeCompare;
@@ -1064,7 +1064,7 @@ class BinderService {
     );
   }
 
-  // Holt exakt die Karten (mit Grading & Preis), die noch nicht vergeben sind!
+  // Fetches available unassigned copies of card instances with grading and pricing metadata
   Future<List<UserCard>> getAvailableUserCards(String cardId) async {
     final userCards = await (db.select(db.userCards)..where((t) => t.cardId.equals(cardId))).get();
     final binderCards = await (db.select(db.binderCards)..where((t) => t.cardId.equals(cardId) & t.isPlaceholder.equals(false))).get();
@@ -1076,7 +1076,7 @@ class BinderService {
       if (bc.userCardId != null) {
         usedById[bc.userCardId!] = (usedById[bc.userCardId!] ?? 0) + 1;
       } else {
-        // Fallback für alte Karten in der Datenbank, bevor wir das Update gemacht haben
+        // Fallback for legacy database rows without assigned userCardId
         final v = bc.variant ?? 'Normal';
         usedByVariant[v] = (usedByVariant[v] ?? 0) + 1;
       }

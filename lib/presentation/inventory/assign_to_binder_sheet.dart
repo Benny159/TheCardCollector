@@ -42,7 +42,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
     final db = ref.read(databaseProvider);
     final binders = await db.select(db.binders).get();
 
-    // Lade alle Versionen dieser Karte, die der User besitzt
+    // Load all owned copies of this card
     final cards = await (db.select(db.userCards)
           ..where((t) => t.cardId.equals(widget.card.id)))
         .get();
@@ -240,7 +240,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
         }
       }
 
-      // --- 2. Smarte Suche im ausgewählten Binder ---
+      // 2. Smart matching search in selected binder
       final cardNameDe = (widget.card.nameDe ?? "").toLowerCase();
       final cardNameEn = widget.card.name.toLowerCase();
 
@@ -310,7 +310,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
             db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
       ]);
 
-      // --- PERFORMANCE OPTIMIERUNG: Grobe Vorfilterung in der Datenbank ---
+      // Performance optimization: database pre-filtering by core tokens
       final allCoreWords = {
         ...getCoreWords(cardNameDe),
         ...getCoreWords(cardNameEn)
@@ -401,7 +401,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
         bool didFill = false;
 
         for (final info in potentialSlots) {
-          if (didFill) break; // Wir tauschen nur EINE Karte ein
+          if (didFill) break; // Only insert a single copy
 
           final slot = info.slot;
           final binder = info.binder;
@@ -423,7 +423,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
 
           bool? userConfirmed = false;
 
-          // DER SCHÖNE BESTÄTIGUNGSDIALOG
+          // User confirmation dialog for slot placement
           if (slot.isPlaceholder) {
             if (!mounted) continue;
             userConfirmed = await showDialog<bool>(
@@ -682,7 +682,7 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
         ));
       }
 
-      // Cache busten für genau diese Karte!
+      // Invalidate inventory provider cache
       ref.invalidate(inventoryProvider);
     } catch (e) {
       if (mounted) {

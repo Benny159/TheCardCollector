@@ -2,33 +2,32 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
-import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../data/api/search_provider.dart';
-import '../cards/card_detail_screen.dart';
-import 'inventory_bottom_sheet.dart';
+import 'widgets/inventory_card_tile.dart';
 
 final inventorySearchProvider = StateProvider.autoDispose<String>((ref) => '');
 
-// Speichert die IDs/Namen der aktuell aufgeklappten Sets & Binder
+/// Tracks set IDs currently expanded in the grouped-by-set view.
 final expandedSetsProvider = StateProvider<Set<String>>((ref) => {});
+
+/// Tracks binder names currently expanded in the grouped-by-binder view.
 final expandedBindersProvider = StateProvider<Set<String>>((ref) => {});
 
-// --- NEU: DIESER PROVIDER ÜBERNIMMT DIE RECHENARBEIT ---
+/// Computes filtered, aggregated, and sorted inventory items.
 final processedInventoryProvider =
     Provider<AsyncValue<List<InventoryItem>>>((ref) {
-  // 1. Wir überwachen alle Ausgangsdaten und Filter-Zustände
+  // Watch raw inventory dataset and active filter states
   final inventoryAsync = ref.watch(inventoryProvider);
   final searchText = ref.watch(inventorySearchProvider);
   final groupMode = ref.watch(inventoryGroupModeProvider);
   final sortMode = ref.watch(inventorySortProvider);
   final isAscending = ref.watch(inventorySortAscendingProvider);
 
-  // 2. Wir führen die schwere Logik nur aus, wenn die Daten fertig geladen sind
   return inventoryAsync.whenData((allItems) {
     if (allItems.isEmpty) return [];
 
-    // --- A. FILTERN (Suche) ---
+    // Filter by search query across card names, set names, and binder assignments
     var filteredItems = allItems;
     if (searchText.isNotEmpty) {
       filteredItems = allItems.where((item) {
@@ -48,7 +47,7 @@ final processedInventoryProvider =
       }).toList();
     }
 
-    // --- B. KARTEN ZUSAMMENFASSEN ---
+    // Consolidate card duplicates when not grouped by binder
     if (groupMode != InventoryGroupMode.byBinder) {
       final Map<String, InventoryItem> mergedMap = {};
 
@@ -88,7 +87,7 @@ final processedInventoryProvider =
       filteredItems = mergedMap.values.toList();
     }
 
-    // --- C. SORTIEREN ---
+    // Sort cards according to active criterion and direction
     final sortedItems = List<InventoryItem>.from(filteredItems);
 
     sortedItems.sort((a, b) {
@@ -183,7 +182,7 @@ class InventoryScreen extends ConsumerWidget {
               _buildFilterBar(context, ref, sortMode, groupMode),
               const Divider(height: 1),
 
-              // ANZEIGEN JE NACH MODUS
+              // Display cards according to selected grouping mode
               Expanded(
                 child: sortedItems.isEmpty
                     ? const Center(
@@ -197,7 +196,7 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  // --- WIDGETS ---
+  // Sub-widgets
 
   Widget _buildContent(
       List<InventoryItem> items, InventoryGroupMode mode, WidgetRef ref) {
@@ -368,17 +367,17 @@ class InventoryScreen extends ConsumerWidget {
             ],
             onChanged: (val) {
               if (val != null && val != currentSort) {
-                // Wenn eine neue Kategorie gewählt wird, setzen wir wieder auf "Absteigend" (Pfeil runter) zurück
+                // Reset order to descending when sorting category changes
                 ref.read(inventorySortProvider.notifier).state = val;
                 ref.read(inventorySortAscendingProvider.notifier).state = false;
               }
             },
           ),
 
-          // --- DER NEUE PFEIL ZUM UMKEHREN DER SORTIERUNG ---
+          // Sort direction toggle button
           InkWell(
             onTap: () {
-              // Dreht true zu false und false zu true
+              // Invert sort order direction
               ref.read(inventorySortAscendingProvider.notifier).state =
                   !isAscending;
             },
@@ -431,7 +430,7 @@ class InventoryScreen extends ConsumerWidget {
         mainAxisSpacing: 8,
       ),
       itemCount: items.length,
-      itemBuilder: (context, index) => _InventoryCardTile(item: items[index]),
+      itemBuilder: (context, index) => InventoryCardTile(item: items[index]),
     );
   }
 
@@ -449,8 +448,7 @@ class InventoryScreen extends ConsumerWidget {
     return CustomScrollView(
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
-        // .expand() erlaubt es uns, pro Set entweder nur den Header (1 Widget)
-        // oder Header + Grid (2 Widgets) zurückzugeben.
+        // Expand sets into header and optional lazy grid
         ...sortedKeys.expand((setId) {
           final setCards = grouped[setId]!;
           final apiSet = setCards.first.set;
@@ -461,7 +459,7 @@ class InventoryScreen extends ConsumerWidget {
               setCards.fold(0.0, (sum, i) => sum + i.totalValue);
 
           return [
-            // 1. Der Header (ersetzt den Kopf des ExpansionTiles)
+            // 1. Group header item
             SliverToBoxAdapter(
               child: Card(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -471,7 +469,7 @@ class InventoryScreen extends ConsumerWidget {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () {
-                    // Auf- und Zuklappen togglen
+                    // Toggle section expansion state
                     final current = ref.read(expandedSetsProvider);
                     if (isExpanded) {
                       ref.read(expandedSetsProvider.notifier).state = {
@@ -519,7 +517,7 @@ class InventoryScreen extends ConsumerWidget {
               ),
             ),
 
-            // 2. Das Grid (wird NUR gerendert, wenn aufgeklappt - und absolut Lazy!)
+            // 2. Lazy card grid rendered only when section is expanded
             if (isExpanded)
               SliverPadding(
                 padding:
@@ -533,7 +531,7 @@ class InventoryScreen extends ConsumerWidget {
                   ),
                   delegate: SliverChildBuilderDelegate(
                     (context, cardIndex) =>
-                        _InventoryCardTile(item: setCards[cardIndex]),
+                        InventoryCardTile(item: setCards[cardIndex]),
                     childCount: setCards.length,
                   ),
                 ),
@@ -564,7 +562,7 @@ class InventoryScreen extends ConsumerWidget {
           final binderCards = grouped[binderName]!;
           final isLoose = binderName == "Nicht im Binder";
 
-          // "Nicht im Binder" soll standardmäßig offen sein, Binder standardmäßig zu (außer sie wurden angeklickt)
+          // 'Not in binder' group is expanded by default; specific binders are collapsed by default
           final isExpanded = isLoose
               ? !expandedBinders.contains(binderName)
               : expandedBinders.contains(binderName);
@@ -640,7 +638,7 @@ class InventoryScreen extends ConsumerWidget {
                   ),
                   delegate: SliverChildBuilderDelegate(
                     (context, cardIndex) =>
-                        _InventoryCardTile(item: binderCards[cardIndex]),
+                        InventoryCardTile(item: binderCards[cardIndex]),
                     childCount: binderCards.length,
                   ),
                 ),
@@ -650,446 +648,5 @@ class InventoryScreen extends ConsumerWidget {
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
     );
-  }
-}
-
-// --- DAS MINIMALISTISCHE KARTEN-TILE (Clean & Edel!) ---
-class _InventoryCardTile extends ConsumerWidget {
-  final InventoryItem item;
-
-  const _InventoryCardTile({required this.item});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bool isReverseHolo = item.variant == 'Reverse Holo';
-    final bool isHolo = item.variant == 'Holo';
-    final bool showEffect = isReverseHolo || isHolo;
-
-    final bool isGraded = item.userCard.gradingCompany != null &&
-        item.userCard.gradingCompany != 'Kein Grading';
-
-    final displayImage = item.card.displayImage;
-
-    // --- Preise und Performance ---
-    final double singlePrice =
-        item.totalValue / (item.quantity > 0 ? item.quantity : 1);
-    final double singlePerformance =
-        item.performance / (item.quantity > 0 ? item.quantity : 1);
-
-    final bool hasSpecificPrice =
-        item.userCard.customPrice != null && item.userCard.customPrice! > 0;
-    final bool isNeutral = singlePerformance.abs() < 0.01;
-    final bool isPositive = singlePerformance > 0;
-
-    final Color perfColor = isNeutral
-        ? Colors.grey[400]!
-        : (isPositive ? Colors.greenAccent : Colors.redAccent);
-    final IconData perfIcon = isNeutral
-        ? Icons.remove
-        : (isPositive ? Icons.arrow_drop_up : Icons.arrow_drop_down);
-
-    // --- Daten für die Anzeige ---
-    final String dateStr =
-        DateFormat('dd.MM.yy').format(item.userCard.createdAt);
-    final String variantStr = _getVariantAbbreviation(item.variant);
-    final String conditionStr =
-        _getConditionAbbreviation(item.userCard.condition);
-    final Color conditionColor = _getConditionColor(item.userCard.condition);
-
-    return RepaintBoundary(
-      child: InkWell(
-        onTap: () {
-        Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => CardDetailScreen(card: item.card)));
-      },
-      onLongPress: () async {
-        await showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            builder: (_) => InventoryBottomSheet(card: item.card));
-      },
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        elevation: isGraded ? 6 : 2,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: isGraded
-                ? BorderSide(color: Colors.orange[400]!, width: 1.5)
-                : BorderSide.none),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // 1. Das Kartenbild (Hintergrund)
-            Builder(
-              builder: (context) {
-                Widget imageWidget = CachedNetworkImage(
-                  imageUrl: displayImage,
-                  memCacheHeight: 200,
-                  fit: BoxFit.contain,
-                  placeholder: (context, url) =>
-                      Container(color: Colors.grey[200]),
-                  errorWidget: (context, url, error) =>
-                      const Icon(Icons.broken_image, color: Colors.grey),
-                );
-                if (showEffect) {
-                  return HoloEffect(
-                      isReverse: isReverseHolo, child: imageWidget);
-                }
-                return imageWidget;
-              },
-            ),
-
-            // --- 2. OBERER BEREICH (Sanfter Gradient + Name & Variante) ---
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.8),
-                      Colors.transparent
-                    ],
-                    stops: const [0.0, 1.0],
-                  ),
-                ),
-                padding: const EdgeInsets.fromLTRB(6, 6, 6, 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // --- NEU: KARTEN-NAME MIT TRADING CARD OUTLINE ---
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          // 1. Die weiße, dicke Kontur (Outline)
-                          Text(
-                            item.card.nameDe ?? item.card.name,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900, // Extra fett
-                              foreground: Paint()
-                                ..style = PaintingStyle.stroke
-                                ..strokeWidth = 1.0 // Dicke der Umrandung
-                                ..color = Colors.white,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          // 2. Die schwarze Füllung
-                          Text(
-                            item.card.nameDe ?? item.card.name,
-                            style: const TextStyle(
-                              color: Colors.black,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      variantStr,
-                      style: TextStyle(
-                          color:
-                              showEffect ? Colors.amberAccent : Colors.white70,
-                          fontSize: 9,
-                          fontWeight:
-                              showEffect ? FontWeight.bold : FontWeight.normal),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Grading Score (PSA)
-            if (isGraded)
-              Positioned(
-                top: 30,
-                left: 4,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(
-                      color: Colors.orange[800],
-                      borderRadius: BorderRadius.circular(6)),
-                  child: Text(
-                      "${item.userCard.gradingCompany} ${item.userCard.gradingScore ?? ''}"
-                          .trim(),
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold)),
-                ),
-              ),
-
-            // Anzahl Badge (3x)
-            Positioned(
-              top: 30,
-              right: 4,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                    color: Colors.blue[800],
-                    borderRadius: BorderRadius.circular(10)),
-                child: Text("${item.quantity}x",
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold)),
-              ),
-            ),
-
-            // --- NEU: ZUSTANDS BADGE (Schwebend über dem unteren Balken) ---
-            Positioned(
-              bottom: 20,
-              left: 4,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(
-                  color: conditionColor,
-                  borderRadius: BorderRadius.circular(6),
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        blurRadius: 2,
-                        offset: const Offset(0, 1))
-                  ],
-                ),
-                child: Text(conditionStr,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold)),
-              ),
-            ),
-
-            // --- 3. UNTERER BEREICH (Sanfter Gradient + Preis/Performance gestapelt) ---
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.9),
-                      Colors.transparent
-                    ],
-                    stops: const [0.0, 1.0],
-                  ),
-                ),
-                padding: const EdgeInsets.fromLTRB(6, 16, 6, 6),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // Datum (Links, unten ausgerichtet)
-                    Expanded(
-                      child: Text(
-                        "Am: $dateStr",
-                        style:
-                            const TextStyle(color: Colors.white70, fontSize: 9),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-
-                    const SizedBox(width: 4),
-
-                    // Performance OBERHALB des Preises
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (!hasSpecificPrice)
-                          Row(
-                            children: [
-                              Icon(perfIcon, color: perfColor, size: 12),
-                              Text(
-                                "${singlePerformance.abs().toStringAsFixed(2)}€",
-                                style: TextStyle(
-                                    color: perfColor,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                        if (!hasSpecificPrice) const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            if (hasSpecificPrice)
-                              const Icon(Icons.star,
-                                  color: Colors.amber, size: 10),
-                            if (hasSpecificPrice) const SizedBox(width: 2),
-                            Text(
-                              "${singlePrice.toStringAsFixed(2)}€",
-                              style: TextStyle(
-                                  color: hasSpecificPrice
-                                      ? Colors.amberAccent
-                                      : Colors.greenAccent,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-  // --- HILFSFUNKTIONEN FÜR ABKÜRZUNGEN UND FARBEN ---
-
-  String _getVariantAbbreviation(String variant) {
-    if (variant == 'Reverse Holo') return 'Rev.';
-    if (variant == 'Normal') return 'Norm.';
-    if (variant == 'Holo') return 'Holo';
-    if (variant == '1st Edition') return '1.Ed';
-    return variant;
-  }
-
-  String _getConditionAbbreviation(String condition) {
-    switch (condition) {
-      case 'Mint':
-        return 'MINT';
-      case 'Near Mint':
-        return 'NM';
-      case 'Excellent':
-        return 'EX';
-      case 'Good':
-        return 'GD';
-      case 'Light Played':
-        return 'LP';
-      case 'Played':
-        return 'PL';
-      case 'Poor':
-        return 'POOR';
-      default:
-        return condition;
-    }
-  }
-
-  Color _getConditionColor(String condition) {
-    switch (condition) {
-      case 'Mint':
-      case 'Near Mint':
-        return Colors.green[700]!;
-      case 'Excellent':
-      case 'Good':
-        return Colors.blue[700]!;
-      case 'Light Played':
-      case 'Played':
-        return Colors.orange[700]!;
-      case 'Poor':
-        return Colors.red[700]!;
-      default:
-        return Colors.grey[700]!;
-    }
-  }
-}
-
-// --- HOLO EFFEKT WIDGET ---
-class HoloEffect extends StatefulWidget {
-  final Widget child;
-  final bool isReverse;
-
-  const HoloEffect({super.key, required this.child, this.isReverse = false});
-
-  @override
-  State<HoloEffect> createState() => _HoloEffectState();
-}
-
-class _HoloEffectState extends State<HoloEffect>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller =
-        AnimationController(vsync: this, duration: const Duration(seconds: 4))
-          ..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        widget.child,
-        AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) {
-            return Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  // Wir nutzen Flutters natives GradientRotation (kein import dart:math nötig)
-                  transform:
-                      GradientRotation(_controller.value * 2 * 3.1415926535),
-                  colors: [
-                    Colors.transparent,
-                    Colors.white.withValues(alpha: 0.1),
-                    Colors.purple.withValues(alpha: 0.15),
-                    Colors.blue.withValues(alpha: 0.15),
-                    Colors.white.withValues(alpha: 0.25),
-                    Colors.transparent,
-                  ],
-                  stops: const [0.0, 0.3, 0.45, 0.55, 0.7, 1.0],
-                ),
-                backgroundBlendMode: BlendMode.overlay,
-              ),
-            );
-          },
-        ),
-        if (widget.isReverse)
-          Opacity(
-            opacity: 0.1,
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment(0.3, -0.5),
-                  radius: 1.0,
-                  colors: [Colors.white, Colors.transparent],
-                ),
-                backgroundBlendMode: BlendMode.screen,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class GradientRotation extends GradientTransform {
-  final double radians;
-  const GradientRotation(this.radians);
-  @override
-  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
-    return Matrix4.rotationZ(radians);
   }
 }

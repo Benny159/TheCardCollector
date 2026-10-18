@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/database/database_provider.dart';
 import '../../domain/logic/binder_service.dart';
-import '../../domain/models/binder_templates.dart'; // Holt die Enums jetzt HIERHER!
+import '../../domain/models/binder_templates.dart'; // Enums and binder template definitions
 
 class CreateBinderDialog extends ConsumerStatefulWidget {
   const CreateBinderDialog({super.key});
@@ -14,9 +14,9 @@ class CreateBinderDialog extends ConsumerStatefulWidget {
 class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
   final _nameController = TextEditingController();
   bool _isLoading = false;
-  String _bulkBoxShape = "box"; // 'box', 'etb', oder 'tin'
+  String _bulkBoxShape = "box"; // 'box', 'etb', or 'tin'
 
-  // --- AUTOCOMPLETE DATEN ---
+  // --- Autocomplete dataset ---
   List<String> _dbSetNames = [];
   List<String> _dbPokemonNames = [];
   List<String> _dbArtists = [];
@@ -24,24 +24,24 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
   String _selectedSetName = "";
   String _selectedTarget = "";
 
-  // --- BASIS EINSTELLUNGEN ---
+  // --- Basic configuration ---
   Color _selectedColor = Colors.blue;
   int _rows = 3;
   int _cols = 3;
   AdvancedBinderType _selectedType = AdvancedBinderType.custom;
   final BinderSortOrder _sortOrder = BinderSortOrder.leftToRight;
 
-  // --- 1. CUSTOM EINSTELLUNGEN ---
+  // --- 1. Custom configuration ---
   int _customPages = 10;
 
-  // --- 2. DEX EINSTELLUNGEN ---
+  // --- 2. Pokédex configuration ---
   final Set<int> _selectedGens = {1};
   bool _dexMegas = false;
   bool _dexGmax = false;
   bool _dexRegional = false;
   DexSortStyle _dexSort = DexSortStyle.inline;
 
-  // --- 3. SET EINSTELLUNGEN ---
+  // --- 3. Card set configuration ---
   SetCompletionType _setCompletion = SetCompletionType.standard;
 
   @override

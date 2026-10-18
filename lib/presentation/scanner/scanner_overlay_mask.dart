@@ -10,9 +10,8 @@ class ScannerOverlayMask extends StatelessWidget {
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
 
-        // Ein echtes Pokémon-Karten-Format (63x88 -> 0.716)
-        // Deutlich schmaler als vorher!
-        final cardWidth = width * 0.65; // Nur noch 65% der Bildschirmbreite
+        // Authentic Pokémon card aspect ratio (63x88 -> 0.716)
+        final cardWidth = width * 0.65; // 65% of screen width
         final cardHeight = cardWidth / 0.716;
 
         final left = (width - cardWidth) / 2;
@@ -93,7 +92,7 @@ class MaskPainter extends CustomPainter {
       ..fillType = PathFillType.evenOdd;
     canvas.drawPath(path, backgroundPaint);
 
-    // 2. Dünner Rahmen um die Karte
+    // 2. Card outline border
     final borderPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.7)
       ..style = PaintingStyle.stroke
@@ -102,7 +101,7 @@ class MaskPainter extends CustomPainter {
         RRect.fromRectAndRadius(cardRect, const Radius.circular(12)),
         borderPaint);
 
-    // 3. Fast unsichtbare Fokus-Zonen INNERHALB der Karte
+    // 3. Subtle focus regions within card area
     final zonePaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.1)
       ..style = PaintingStyle.fill;
@@ -113,7 +112,7 @@ class MaskPainter extends CustomPainter {
         RRect.fromRectAndRadius(bottomZoneRect, const Radius.circular(8)),
         zonePaint);
 
-    // Dünner Rahmen um die Zonen
+    // Thin border around focus zones
     final zoneBorderPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke

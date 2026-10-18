@@ -9,7 +9,7 @@ import '../../domain/models/api_card.dart';
 import '../../data/api/search_provider.dart';
 import '../../domain/logic/binder_service.dart';
 
-// --- NEU: Speichert die letzte Binder-Auswahl für diese App-Session ---
+// Stores last binder selection across current session
 final lastSelectedBinderProvider = StateProvider<int?>((ref) => -1);
 
 class InventoryBottomSheet extends ConsumerStatefulWidget {
@@ -22,7 +22,7 @@ class InventoryBottomSheet extends ConsumerStatefulWidget {
       _InventoryBottomSheetState();
 }
 
-// --- HILFSKLASSE FÜR DIE POSITION ---
+// Helper model for slot location details
 class _SlotInfo {
   final BinderCard slot;
   final Binder binder;
@@ -97,7 +97,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
 
-    // Wir lesen die zuletzt getätigte Auswahl aus dem Provider
+    // Read last selected binder from provider
     final selectedBinderId = ref.watch(lastSelectedBinderProvider);
 
     final bool idExists = selectedBinderId == null ||
@@ -173,7 +173,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
 
           const SizedBox(height: 16),
 
-          // --- BINDER AUSWAHL (Speichert Auswahl live im Provider) ---
+          // Binder dropdown selection
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -198,7 +198,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
                 const SizedBox(height: 4),
                 DropdownButtonHideUnderline(
                   child: DropdownButton<int?>(
-                    value: safeBinderId, // Aus dem Provider!
+                    value: safeBinderId, // Read from state provider
                     isExpanded: true,
                     isDense: true,
                     icon: const Icon(Icons.arrow_drop_down, color: Colors.blue),
@@ -216,7 +216,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
                           )),
                     ],
                     onChanged: (val) {
-                      // Speichert die Auswahl für das nächste Mal
+                      // Persist selection for next time
                       ref.read(lastSelectedBinderProvider.notifier).state = val;
                     },
                   ),
@@ -323,7 +323,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
     final selectedBinderId = ref.read(lastSelectedBinderProvider);
 
     try {
-      // --- NEU: Wir fangen die ID der konkreten Karte ein! ---
+      // Fetch target user card entry ID
       int targetUserCardId;
 
       final existingEntry = await (db.select(db.userCards)
@@ -331,7 +331,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
             ..where((tbl) => tbl.variant.equals(_variant))
             ..where((tbl) => tbl.condition.equals(_condition))
             ..where((tbl) => tbl.language.equals(_language))
-            // Da wir hier neu hinzufügen, matchen wir nur mit Karten OHNE Sonder-Grading/Preis
+            // Match existing copies without grading or custom prices
             ..where((tbl) => tbl.customPrice.isNull())
             ..where((tbl) => tbl.gradingCompany.isNull()))
           .getSingleOrNull();
@@ -343,10 +343,10 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
             .write(
           UserCardsCompanion(quantity: drift.Value(newQuantity)),
         );
-        // Wir nehmen die ID des bereits existierenden Eintrags
+        // Reuse ID of existing entry
         targetUserCardId = existingEntry.id;
       } else {
-        // insert() gibt uns die flammneue ID direkt zurück!
+        // Insert returns newly generated ID
         targetUserCardId = await db.into(db.userCards).insert(
               UserCardsCompanion.insert(
                 cardId: widget.card.id,
@@ -362,7 +362,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
       bool showOrangeBanner = false;
 
       if (selectedBinderId != null) {
-        // --- 1. Check auf Bulk Box! ---
+        // 1. Bulk Box check
         if (selectedBinderId != -1) {
           final targetBinder = await (db.select(db.binders)
                 ..where((t) => t.id.equals(selectedBinderId)))
@@ -383,7 +383,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
               return;
             } else if (targetBinder.rowsPerPage == 0) {
               for (int i = 0; i < _quantity; i++) {
-                // --- FIX: targetUserCardId wird an die Bulk Box übergeben! ---
+                // Pass targetUserCardId to bulk box insertion
                 await binderService.addCardToBulkBox(selectedBinderId,
                     widget.card.id, targetUserCardId, _variant);
               }
@@ -394,7 +394,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
           }
         }
 
-        // --- 2. Smarte Suche in echten Bindern ---
+        // 2. Smart matching search in standard binders
         final cardNameDe = (widget.card.nameDe ?? "").toLowerCase();
         final cardNameEn = widget.card.name.toLowerCase();
 
@@ -795,7 +795,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
 
             // Auswertung des Dialogs
             if (userConfirmed == true) {
-              // --- FIX: targetUserCardId wird in den Slot sortiert! ---
+              // Assign targetUserCardId into the filled slot
               await binderService.fillSlot(
                   slot.id, widget.card.id, targetUserCardId,
                   variant: _variant);
@@ -829,10 +829,9 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
     }
   }
 
-  // Hilfsmethode, um doppelten Code am Ende zu vermeiden
   void _closeAndShowSuccess(
       String binderMessage, bool showOrangeBanner, int targetUserCardId) {
-    // Cache gezielt NUR für diese Karte löschen, damit das Inventar blitzschnell updatet!
+    // Invalidate inventory and search providers to trigger immediate UI refresh
     ref.invalidate(inventoryProvider);
     ref.invalidate(searchResultsProvider);
     ref.invalidate(cardsForSetProvider(widget.card.setId));

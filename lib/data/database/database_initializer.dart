@@ -2,18 +2,20 @@ import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'app_database.dart';
 
+/// Utility service responsible for seeding initial cross-platform set mappings and database cleanup.
 class DatabaseInitializer {
+  /// Local database instance.
   final AppDatabase db;
 
-  DatabaseInitializer(this.db);
+  /// Creates a [DatabaseInitializer] tied to [db].
+  const DatabaseInitializer(this.db);
 
-  /// Synchronisiert die Mapping-Tabelle.
-  /// Neue Einträge werden hinzugefügt, bestehende werden aktualisiert.
+  /// Seeds or updates cross-platform mapping entries connecting TCGdex and pokemontcg.io set identifiers.
   Future<void> seedInitialMappings() async {
-    debugPrint('🌱 Überprüfe/Aktualisiere Set-Mappings...');
+    debugPrint('🌱 Checking and updating set mappings...');
 
     final List<Map<String, String?>> initialMappings = [
-      // --- DIE AUTOMATISCHEN MATCHES ---
+      // --- Automated set mappings ---
       {"tcgdexId": "base1", "ptcgId": "base1", "cmCode": "BS"}, // TCGdex: Base Set | PTCG: Base
       {"tcgdexId": "base2", "ptcgId": "base2", "cmCode": "JU"}, // TCGdex: Jungle | PTCG: Jungle
       {"tcgdexId": "basep", "ptcgId": "basep", "cmCode": "PR"}, // TCGdex: Wizards Black Star Promos | PTCG: Wizards Black Star Promos
@@ -215,9 +217,7 @@ class DatabaseInitializer {
       {"tcgdexId": "me03", "ptcgId": "me3", "cmCode": "POR"}, // NUR BEI PTCG: Perfect Order
     ];
 
-    // --- NEU: insertAllOnConflictUpdate anstelle von insertAll ---
-    // Dadurch werden die Einträge bei jedem App-Start überprüft 
-    // und (falls du die Liste änderst) sofort aktualisiert!
+    // Upsert mappings on startup to ensure latest set correspondences are synchronized
     await db.batch((batch) {
       batch.insertAllOnConflictUpdate(
         db.setMappings,
@@ -229,30 +229,29 @@ class DatabaseInitializer {
       );
     });
 
-    debugPrint('✅ Set-Mappings erfolgreich synchronisiert!');
+    debugPrint('✅ Set mappings synchronized successfully.');
   }
 
-  /// Löscht alte, falsche Sets und deren Karten restlos aus der Datenbank
+  /// Deletes obsolete or invalid sets and cascades deletion across dependent tables.
   Future<void> cleanUpOldSets(List<String> oldSetIds) async {
-    debugPrint('🧹 Räume alte, falsche Sets auf...');
+    debugPrint('🧹 Cleaning up old sets...');
 
-    for (var oldId in oldSetIds) {
-      // 1. Finde alle Karten dieses alten Sets
+    for (final oldId in oldSetIds) {
+      // 1. Find all cards of this set
       final cardsToTrash = await (db.select(db.cards)..where((t) => t.setId.equals(oldId))).get();
       final cardIds = cardsToTrash.map((c) => c.id).toList();
 
       if (cardIds.isNotEmpty) {
         await db.batch((batch) {
-          // 2. Abhängige Preise restlos löschen
+          // 2. Cascade delete dependent market and custom prices
           batch.deleteWhere(db.cardMarketPrices, (t) => t.cardId.isIn(cardIds));
           batch.deleteWhere(db.tcgPlayerPrices, (t) => t.cardId.isIn(cardIds));
           batch.deleteWhere(db.customCardPrices, (t) => t.cardId.isIn(cardIds));
 
-          // 3. Aus dem Inventar löschen
+          // 3. Remove user collection inventory instances
           batch.deleteWhere(db.userCards, (t) => t.cardId.isIn(cardIds));
 
-          // 4. Binder-Slots reparieren! 
-          // (Wir löschen den Slot nicht, sondern machen ihn wieder zu einem leeren Platzhalter)
+          // 4. Reset binder slot placements to empty placeholders
           batch.update(
             db.binderCards,
             const BinderCardsCompanion(
@@ -264,18 +263,18 @@ class DatabaseInitializer {
             where: (t) => t.cardId.isIn(cardIds),
           );
 
-          // 5. Die Karten selbst löschen
+          // 5. Delete card records
           batch.deleteWhere(db.cards, (t) => t.setId.equals(oldId));
         });
       }
 
-      // 6. Das Set selbst löschen
+      // 6. Delete expansion set entry
       await (db.delete(db.cardSets)..where((t) => t.id.equals(oldId))).go();
 
-      // 7. Eventuell übrig gebliebene alte Mappings löschen
+      // 7. Delete lingering cross-platform mapping records
       await (db.delete(db.setMappings)..where((t) => t.tcgdexId.equals(oldId))).go();
     }
 
-    debugPrint('✅ Aufräumen beendet!');
+    debugPrint('✅ Cleanup completed.');
   }
 }

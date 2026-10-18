@@ -10,25 +10,43 @@ import 'package:flutter/foundation.dart';
 import '../../data/api/tcgdex_api_client.dart';
 import '../../domain/logic/price_calculator.dart';
 
-// --- 1. CONFIG ---
-enum SearchMode { name, artist }
+// --- 1. SEARCH CONFIGURATION ---
 
+/// Defines the search target attribute when querying cards.
+enum SearchMode {
+  /// Search matching against German and English card names.
+  name,
+
+  /// Search matching against card illustrator names.
+  artist,
+}
+
+/// Active search mode (by card name or artist), disposed when not listened to.
 final searchModeProvider =
     StateProvider.autoDispose<SearchMode>((ref) => SearchMode.name);
+
+/// Current search query string filter.
 final searchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
+
+/// Controls whether cards in the inventory view should be grouped by their set.
 final inventoryGroupBySetProvider = StateProvider<bool>((ref) => false);
 
 // --- 2. SETS PROVIDER ---
+
+/// Loads all available expansion sets from local storage, sorted newest first.
+///
+/// Falls back to performing an initial metadata synchronization via [SetImporter]
+/// if no sets are found in the local database.
 final allSetsProvider = FutureProvider<List<ApiSet>>((ref) async {
   final db = ref.watch(databaseProvider);
   final localSets = await db.select(db.cardSets).get();
 
   if (localSets.isNotEmpty) {
-    // JETZT KÖNNEN WIR WIEDER NACH DATUM SORTIEREN!
+    // Sort chronologically descending (newest release dates first)
     localSets.sort((a, b) {
       final dateA = a.releaseDate ?? '';
       final dateB = b.releaseDate ?? '';
-      return dateB.compareTo(dateA); // Neueste zuerst
+      return dateB.compareTo(dateA);
     });
 
     return localSets
@@ -48,7 +66,7 @@ final allSetsProvider = FutureProvider<List<ApiSet>>((ref) async {
         .toList();
   }
 
-  // Fallback: Initialer Download (nur Metadaten der Sets)
+  // Fallback: Initial metadata sync for sets
   final dexApi = ref.read(tcgDexApiClientProvider);
   final importer = SetImporter(dexApi, db);
   await importer.syncAllData();
@@ -57,6 +75,10 @@ final allSetsProvider = FutureProvider<List<ApiSet>>((ref) async {
 });
 
 // --- 3. SEARCH PROVIDER ---
+
+/// Searches cards by name or artist matching [searchQueryProvider].
+///
+/// Returns up to 100 card matches with batch-loaded ownership and price data.
 final searchResultsProvider =
     FutureProvider.autoDispose<List<ApiCard>>((ref) async {
   final queryText = ref.watch(searchQueryProvider);
@@ -82,10 +104,10 @@ final searchResultsProvider =
   final rows = await query.get();
   if (rows.isEmpty) return [];
 
-  // IDs sammeln für Batch-Abfragen
+  // Collect card IDs for batch relation queries
   final cardIds = rows.map((r) => r.readTable(db.cards).id).toList();
 
-  // 2. ALLE nötigen Zusatzdaten PARALLEL in einem Rutsch holen
+  // Parallel batch queries for ownership and pricing (Anti-N+1)
   final results = await Future.wait([
     _fetchOwnedIds(db, cardIds),
     (db.select(db.cardMarketPrices)..where((tbl) => tbl.cardId.isIn(cardIds)))
@@ -102,14 +124,14 @@ final searchResultsProvider =
   final List<CustomCardPrice> allCustomPrices =
       results[3] as List<CustomCardPrice>;
 
-  // 3. Mapping für schnellen Zugriff
+  // Build in-memory lookup maps for O(1) resolution
   final cmPriceMap = _getLatestCmPrices(allCmPrices);
   final tcgPriceMap = _getLatestTcgPrices(allTcgPrices);
   final customPriceMap = _getLatestCustomPrices(allCustomPrices);
 
   List<ApiCard> apiCards = [];
 
-  // 4. Synchrones, schnelles Zusammenbauen
+  // Assemble ApiCard domain models in memory
   for (final row in rows) {
     final card = row.readTable(db.cards);
     final set = row.readTable(db.cardSets);
@@ -127,6 +149,10 @@ final searchResultsProvider =
 });
 
 // --- 4. SET LIST PROVIDER ---
+
+/// Fetches all cards belonging to the set with [setId], ordered by card number.
+///
+/// Performs batch hydration of ownership flags and pricing data.
 final cardsForSetProvider =
     FutureProvider.family<List<ApiCard>, String>((ref, setId) async {
   final db = ref.watch(databaseProvider);
@@ -175,6 +201,8 @@ final cardsForSetProvider =
 });
 
 // --- SET BY ID PROVIDER ---
+
+/// Resolves a single [ApiSet] metadata record by its unique [setId].
 final setByIdProvider =
     FutureProvider.family<ApiSet?, String>((ref, setId) async {
   final sets = await ref.watch(allSetsProvider.future);
@@ -186,6 +214,10 @@ final setByIdProvider =
 });
 
 // --- ALL SET STATS PROVIDER (Anti-N+1 Batch Aggregation) ---
+
+/// Aggregates distinct owned card counts grouped by set ID in a single SQL query.
+///
+/// Prevents N+1 database queries across set list items.
 final allSetStatsProvider = FutureProvider<Map<String, int>>((ref) async {
   final db = ref.watch(databaseProvider);
   final query = db.customSelect(
@@ -204,6 +236,8 @@ final allSetStatsProvider = FutureProvider<Map<String, int>>((ref) async {
 });
 
 // --- SINGLE SET STATS PROVIDER ---
+
+/// Returns the owned card count for a specific set [setId] from [allSetStatsProvider].
 final setStatsProvider = FutureProvider.family<int, String>((ref, setId) async {
   final allStats = await ref.watch(allSetStatsProvider.future);
   return allStats[setId] ?? 0;
@@ -339,17 +373,34 @@ Map<String, CustomCardPrice> _getLatestCustomPrices(
 // INVENTORY PROVIDER
 // -----------------------------------------------------------------------------
 
+/// Represents a distinct card entry in the user's inventory or binder.
 class InventoryItem {
+  /// Domain model for the card details and current market price.
   final ApiCard card;
-  final ApiSet set;
-  final int quantity;
-  final String variant;
-  final double totalValue;
-  final String? binderName;
-  final UserCard userCard;
-  final double performance; // --- NEU: Rendite / Gewinn in Euro ---
 
-  InventoryItem({
+  /// Expansion set that this card belongs to.
+  final ApiSet set;
+
+  /// Quantity of cards represented by this inventory line item.
+  final int quantity;
+
+  /// Specific printing variant (e.g. 'Normal', 'Holo', 'Reverse Holo', '1st Edition').
+  final String variant;
+
+  /// Current cumulative market valuation in EUR for this item entry.
+  final double totalValue;
+
+  /// Name of the physical binder containing this item, or `null` if stored loose.
+  final String? binderName;
+
+  /// Underlying database user card record with purchase date and custom settings.
+  final UserCard userCard;
+
+  /// Total capital gain/loss in EUR relative to the purchase/acquisition date.
+  final double performance;
+
+  /// Creates a fully resolved [InventoryItem].
+  const InventoryItem({
     required this.card,
     required this.set,
     required this.quantity,
@@ -357,23 +408,45 @@ class InventoryItem {
     required this.totalValue,
     this.binderName,
     required this.userCard,
-    this.performance = 0.0, // Standardmäßig 0
+    this.performance = 0.0,
   });
 }
 
-// --- NEU: Erweiterte Sortierung & Sortier-Richtung ---
-enum InventorySort { value, name, rarity, type, performance, dateAdded }
+/// Available sorting criteria for the inventory overview.
+enum InventorySort {
+  /// Sort by total portfolio value.
+  value,
 
+  /// Sort alphabetically by card name.
+  name,
+
+  /// Sort by card rarity tier.
+  rarity,
+
+  /// Sort by card element/type.
+  type,
+
+  /// Sort by historical profit/loss performance.
+  performance,
+
+  /// Sort by date added to the collection.
+  dateAdded,
+}
+
+/// Currently active sorting criterion for the inventory screen.
 final inventorySortProvider =
     StateProvider<InventorySort>((ref) => InventorySort.value);
-// false = Absteigend (Das Beste/Neueste zuerst), true = Aufsteigend (Das Schlechteste/Älteste zuerst)
+
+/// Controls sort order: `false` for descending (highest first), `true` for ascending.
 final inventorySortAscendingProvider = StateProvider<bool>((ref) => false);
 
-// --- NEUER HIGH-PERFORMANCE INVENTORY PROVIDER ---
+/// High-performance provider loading all collection items with valuations and binder locations.
+///
+/// Uses parallel batch queries and in-memory resolution to avoid N+1 queries.
 final inventoryProvider = FutureProvider<List<InventoryItem>>((ref) async {
   final db = ref.watch(databaseProvider);
 
-  // 1. Hole ALLE UserCards inkl. Karten & Set-Infos auf EINEN SCHLAG
+  // Fetch all UserCards joined with Card and Set metadata in one query
   final rows = await (db.select(db.userCards).join([
     innerJoin(db.cards, db.cards.id.equalsExp(db.userCards.cardId)),
     innerJoin(db.cardSets, db.cardSets.id.equalsExp(db.cards.setId)),
@@ -381,10 +454,10 @@ final inventoryProvider = FutureProvider<List<InventoryItem>>((ref) async {
 
   if (rows.isEmpty) return [];
 
-  // 2. Sammle alle benötigten IDs für die Massenabfragen
+  // Collect distinct card IDs for batch relation queries
   final cardIds = rows.map((r) => r.readTable(db.cards).id).toSet().toList();
 
-  // 3. Batch-Abfragen parallel im Hintergrund ausführen
+  // Execute batch pricing and binder slot queries in parallel
   final results = await Future.wait([
     (db.select(db.cardMarketPrices)
           ..where((tbl) => tbl.cardId.isIn(cardIds))
@@ -417,7 +490,7 @@ final inventoryProvider = FutureProvider<List<InventoryItem>>((ref) async {
   final allCustomPrices = results[2] as List<CustomCardPrice>;
   final binderRows = results[3] as List<TypedResult>;
 
-  // 4. Mappings bauen (für extrem schnellen O(1) RAM-Zugriff)
+  // Build in-memory lookup maps for fast O(1) access
   final Map<String, List<CardMarketPrice>> cmMap = {};
   for (final p in allCmPrices) {
     cmMap.putIfAbsent(p.cardId, () => []).add(p);
@@ -433,14 +506,14 @@ final inventoryProvider = FutureProvider<List<InventoryItem>>((ref) async {
     customMap.putIfAbsent(p.cardId, () => []).add(p);
   }
 
-  // Aktuellste Preise für das ApiCard Objekt
+  // Latest prices for the ApiCard model
   final latestCmPriceMap = _getLatestCmPrices(allCmPrices);
   final latestTcgPriceMap = _getLatestTcgPrices(allTcgPrices);
   final latestCustomPriceMap = _getLatestCustomPrices(allCustomPrices);
 
   List<InventoryItem> inventoryItems = [];
 
-  // 5. In einer schnellen Schleife im Arbeitsspeicher alles zusammenbauen
+  // Assemble InventoryItem models in memory
   for (final row in rows) {
     final userCard = row.readTable(db.userCards);
     final dbCard = row.readTable(db.cards);
@@ -546,7 +619,7 @@ final inventoryProvider = FutureProvider<List<InventoryItem>>((ref) async {
     }
     final double itemPerformance = (singlePrice - purchasePrice);
 
-    // --- BINDER LOGIK (Aus dem RAM, ohne DB!) ---
+    // In-memory binder allocation matching
     final Map<String, int> bindersForThisCard = {};
     for (final bRow in binderRows) {
       final bc = bRow.readTable(db.binderCards);
@@ -598,12 +671,13 @@ final inventoryProvider = FutureProvider<List<InventoryItem>>((ref) async {
   return inventoryItems;
 });
 
+/// Returns the top 10 most valuable individual cards across the user's inventory.
 final top10CardsProvider = Provider<List<InventoryItem>>((ref) {
   final allItemsAsync = ref.watch(inventoryProvider);
   return allItemsAsync.when(
     data: (items) {
       final sorted = List<InventoryItem>.from(items);
-      // --- FIX: Nach Einzel-Wert sortieren ---
+      // Sort descending by single-card value
       sorted.sort((a, b) {
         final singleA = a.totalValue / (a.quantity > 0 ? a.quantity : 1);
         final singleB = b.totalValue / (b.quantity > 0 ? b.quantity : 1);
@@ -616,7 +690,7 @@ final top10CardsProvider = Provider<List<InventoryItem>>((ref) {
   );
 });
 
-// --- TOP 10 GEWINNER (Nach Einzel-Rendite sortiert) ---
+/// Returns the top 10 cards with the highest historical single-unit value gain.
 final top10GainersProvider = Provider<List<InventoryItem>>((ref) {
   final allItemsAsync = ref.watch(inventoryProvider);
   return allItemsAsync.when(
@@ -643,7 +717,7 @@ final top10GainersProvider = Provider<List<InventoryItem>>((ref) {
 
       var sorted =
           mergedMap.values.where((item) => item.performance > 0).toList();
-      // --- FIX: Nach Einzelkarten-Performance sortieren! ---
+      // Sort descending by individual card performance
       sorted.sort((a, b) {
         final singleA = a.performance / (a.quantity > 0 ? a.quantity : 1);
         final singleB = b.performance / (b.quantity > 0 ? b.quantity : 1);
@@ -656,7 +730,7 @@ final top10GainersProvider = Provider<List<InventoryItem>>((ref) {
   );
 });
 
-// --- TOP 10 VERLIERER (Nach Einzel-Rendite sortiert, schlechteste zuerst) ---
+/// Returns the top 10 cards with the lowest historical single-unit value performance.
 final top10LosersProvider = Provider<List<InventoryItem>>((ref) {
   final allItemsAsync = ref.watch(inventoryProvider);
   return allItemsAsync.when(
@@ -683,11 +757,11 @@ final top10LosersProvider = Provider<List<InventoryItem>>((ref) {
 
       var sorted =
           mergedMap.values.where((item) => item.performance < 0).toList();
-      // --- FIX: Nach Einzelkarten-Performance sortieren! ---
+      // Sort ascending by individual card performance (worst first)
       sorted.sort((a, b) {
         final singleA = a.performance / (a.quantity > 0 ? a.quantity : 1);
         final singleB = b.performance / (b.quantity > 0 ? b.quantity : 1);
-        return singleA.compareTo(singleB); // a < b für schlechteste zuerst
+        return singleA.compareTo(singleB);
       });
       return sorted.take(10).toList();
     },
@@ -696,6 +770,7 @@ final top10LosersProvider = Provider<List<InventoryItem>>((ref) {
   );
 });
 
+/// Streams the historical portfolio value snapshots ordered chronologically.
 final portfolioHistoryProvider =
     StreamProvider<List<PortfolioHistoryData>>((ref) {
   final db = ref.watch(databaseProvider);
@@ -704,10 +779,10 @@ final portfolioHistoryProvider =
       .watch();
 });
 
+/// Computes and persists a portfolio valuation snapshot for today's date.
 Future<void> createPortfolioSnapshot(WidgetRef ref) async {
   try {
     final db = ref.read(databaseProvider);
-    // PERFORMANCE FIX: read() statt refresh(), wir nutzen den sauberen Cache!
     final items = await ref.read(inventoryProvider.future);
 
     final double currentTotal =
@@ -733,8 +808,7 @@ Future<void> createPortfolioSnapshot(WidgetRef ref) async {
           );
     }
 
-    // PERFORMANCE FIX: Komplett entfernt! Der Service berechnet den einen
-    // betroffenen Binder beim Einsortieren des Slots bereits live neu.
+    // Invalidate historical portfolio stream to trigger UI chart update
     ref.invalidate(portfolioHistoryProvider);
   } on StateError catch (_) {
   } catch (e) {
@@ -742,6 +816,7 @@ Future<void> createPortfolioSnapshot(WidgetRef ref) async {
   }
 }
 
+/// Loads historical price timelines across CardMarket, TCGPlayer, and Custom prices for [cardId].
 final cardPriceHistoryProvider =
     FutureProvider.family<Map<String, List<dynamic>>, String>(
         (ref, cardId) async {
@@ -767,6 +842,7 @@ final cardPriceHistoryProvider =
   };
 });
 
+/// Resolves the names of all physical binders containing instances of [cardId].
 final cardBinderLocationProvider =
     FutureProvider.autoDispose.family<List<String>, String>((ref, cardId) async {
   final db = ref.watch(databaseProvider);

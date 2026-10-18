@@ -37,7 +37,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   BinderSlotData? _slotToSwap;
   int? _highlightedSlotId;
 
-  // --- NEU: Toggle für Overlays (Namen & Preise) ---
+  // Toggle for overlays (card names and market prices)
   bool _showSlotOverlays = true;
 
   @override
@@ -173,7 +173,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                         slotToSwapId:
                             _highlightedSlotId ?? _slotToSwap?.binderCard.id,
                         showOverlays:
-                            _showSlotOverlays, // <--- NEU: Übergeben an die Page
+                            _showSlotOverlays, // Pass overlay visibility to page
                         onNextPage: () {
                           FocusScope.of(context).unfocus();
                           if (_currentIndex < totalPages - 1) {
@@ -445,7 +445,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   }
 
   void _handleSlotLongPress(BinderSlotData slot) {
-    if (_isSwapMode) return; // Wenn wir schon tauschen, kein langes Drücken
+    if (_isSwapMode) return; // Prevent long-press interaction during swap mode
 
     showModalBottomSheet(
       context: context,
@@ -834,18 +834,18 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
     final int totalPages =
         (state.slots.length / (itemsPerPage > 0 ? itemsPerPage : 1)).ceil();
 
-    // Tastatur schließen und warten, bis das Layout sich beruhigt hat
+    // Dismiss soft keyboard and allow layout settling
     FocusScope.of(context).unfocus();
     await Future.delayed(const Duration(milliseconds: 400));
     if (!mounted) return;
 
-    // --- SEITEN-SPRUNG ---
+    // --- Page number navigation ---
     if (isNumeric) {
       final targetPageNumber = int.tryParse(query.trim());
       if (targetPageNumber != null &&
           targetPageNumber > 0 &&
           targetPageNumber <= totalPages) {
-        // FIX: jumpToPage verhindert, dass Flutter sich bei langen Distanzen verrechnet!
+        // jumpToPage prevents animation calculation errors over long page jumps
         _pageController.jumpToPage(targetPageNumber - 1);
 
         ScaffoldMessenger.of(context).clearSnackBars();
@@ -857,7 +857,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
       }
     }
 
-    // --- TEXT-SUCHE ---
+    // --- Text search ---
     final qLower = query.toLowerCase();
     final index = state.slots.indexWhere((s) {
       final label = s.binderCard.placeholderLabel?.toLowerCase() ?? "";
@@ -872,7 +872,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
       final int targetPage = (index / itemsPerPage).floor();
       final foundSlot = state.slots[index];
 
-      // FIX: Sofortiger Sprung ohne Verrechnen
+      // Jump immediately without animation distortion
       _pageController.jumpToPage(targetPage);
 
       setState(() {
@@ -885,7 +885,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
           behavior: SnackBarBehavior.floating,
           duration: const Duration(milliseconds: 500)));
 
-      // Leuchten nach 2 Sekunden wieder ausschalten
+      // Turn off slot highlighting after 2 seconds
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted && _highlightedSlotId == foundSlot.binderCard.id) {
           setState(() {

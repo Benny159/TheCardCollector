@@ -7,7 +7,7 @@ class BinderSlotWidget extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
   final bool isHighlighted;
-  final bool showOverlay; // <--- NEU: Steuert, ob Text/Preise angezeigt werden
+  final bool showOverlay; // Controls whether card text/price badges are rendered
 
   const BinderSlotWidget({
     super.key,
@@ -15,7 +15,7 @@ class BinderSlotWidget extends StatelessWidget {
     required this.onTap,
     this.onLongPress,
     this.isHighlighted = false,
-    this.showOverlay = true, // <--- NEU: Standardmäßig an
+    this.showOverlay = true, // Enabled by default
   });
 
   @override
@@ -75,7 +75,7 @@ class BinderSlotWidget extends StatelessWidget {
             else
               const Center(child: Icon(Icons.add, color: Colors.grey)),
 
-            // --- HIER IST DER FILTER: if (showOverlay) ---
+            // Overlay: placeholder slot label
             if (showOverlay && slotData.binderCard.placeholderLabel != null)
               Positioned(
                 bottom: 2,
@@ -95,7 +95,7 @@ class BinderSlotWidget extends StatelessWidget {
                 ),
               ),
 
-            // --- HIER IST DER FILTER: if (showOverlay) ---
+            // Overlay: card market price badge
             if (showOverlay && !isPlaceholder)
               Positioned(
                 top: 4,

@@ -12,12 +12,21 @@ class _CardImportData {
   _CardImportData(this.card, this.cmPrice, this.tcgPrice);
 }
 
+/// Primary data synchronization service for fetching card sets, prints, and prices from TCGdex.
 class SetImporter {
+  /// REST API client for TCGdex endpoints.
   final TcgDexApiClient dexClient;
+
+  /// Local Drift database instance.
   final AppDatabase database;
 
-  SetImporter(this.dexClient, this.database);
+  /// Creates a [SetImporter] with the required [dexClient] and [database].
+  const SetImporter(this.dexClient, this.database);
 
+  /// Synchronizes all official Pokémon TCG card sets and cards from TCGdex.
+  ///
+  /// Skips digital-only and jumbo sets, pre-caches latest market prices in memory,
+  /// and triggers portfolio value recalculations upon completion.
   Future<void> syncAllData({Function(String status)? onProgress}) async {
     onProgress?.call('Lade Set-Liste von TCGdex...');
     
@@ -25,8 +34,7 @@ class SetImporter {
     final dexSetsDe = await dexClient.fetchAllSets(lang: 'de');
     final deMap = { for (var s in dexSetsDe) s['id']: s };
 
-    // --- NEU: WIR LADEN DIE LETZTEN PREISE VORAB IN DEN SPEICHER ---
-    // Das ist das Geheimnis für den ultimativen Speed-Boost!
+    // Preload latest known prices into memory for change-detection diffing
     onProgress?.call('Lade Preis-Cache für smarten Sync...');
     final allLatestCmQuery = await database.customSelect(
       'SELECT card_id, trend, trend_holo, trend_reverse FROM card_market_prices GROUP BY card_id HAVING MAX(fetched_at)'
@@ -49,12 +57,11 @@ class SetImporter {
         'reverseMarket': row.read<double?>('reverse_market'),
       }
     };
-    // -------------------------------------------------------------
 
     int current = 0;
     int skipped = 0;
 
-    for (var listSet in dexSetsEn) {
+    for (final listSet in dexSetsEn) {
       await Future.delayed(const Duration(milliseconds: 10)); 
 
       final setId = listSet['id'] as String;
@@ -62,9 +69,10 @@ class SetImporter {
       final serieData = listSet['serie'];
       final String serieId = (serieData is Map) ? serieData['id'] ?? '' : '';
 
+      // Skip jumbo and promotional special series
       if (serieId == 'jumbo' || setId == 'xya' || setId == 'sp') {
         skipped++;
-        debugPrint('⏩ Überspringe Pocket-Set: ${listSet['name']} ($setId)');
+        debugPrint('⏩ Skipping promotional/jumbo set: ${listSet['name']} ($setId)');
         continue; 
       }
 
@@ -79,7 +87,9 @@ class SetImporter {
         final detailSerie = fullSetData['serie'];
         final detailSerieId = (detailSerie is Map) ? detailSerie['id'] ?? '' : '';
         if (detailSerieId == 'tcgp') {
-           skipped++; current--; continue;
+          skipped++; 
+          current--; 
+          continue;
         }
 
         final setDe = deMap[setId];
@@ -88,7 +98,7 @@ class SetImporter {
         try {
           await importCardsForSet(setId, latestCmPrices, latestTcgPrices);
         } catch (e) {
-          debugPrint('⚠️ Fehler bei Karten für $setId: $e');
+          debugPrint('⚠️ Error importing cards for set $setId: $e');
         }
       }
     }
@@ -98,6 +108,7 @@ class SetImporter {
     await BinderService(database).recalculateAllBinders();
   }
 
+  /// Saves or updates set metadata respecting manual override locks.
   Future<void> _saveSetMetadata(dynamic en, dynamic de) async {
     final setId = en['id'];
     
@@ -117,29 +128,28 @@ class SetImporter {
     drift.Value<bool> dbHasManualImagesSet = const drift.Value.absent();
 
     if (existingSet != null) {
-      // 1. Smarte Übersetzungen
+      // 1. Translations override check
       if (existingSet.hasManualTranslations) {
-        bool apiHasRealTranslation = de?['name'] != null && de!['name'].toString().isNotEmpty && de!['name'].toString().toLowerCase() != en['name'].toString().toLowerCase();
+        final bool apiHasRealTranslation = de?['name'] != null && de!['name'].toString().isNotEmpty && de!['name'].toString().toLowerCase() != en['name'].toString().toLowerCase();
         if (apiHasRealTranslation) {
-           dbNameDe = drift.Value(de!['name']);
-           dbHasManualTranslationsSet = const drift.Value(false); // Schutzschild fällt!
+          dbNameDe = drift.Value(de!['name']);
+          dbHasManualTranslationsSet = const drift.Value(false);
         } else {
-           dbNameDe = const drift.Value.absent();
+          dbNameDe = const drift.Value.absent();
         }
       } 
-      // 2. Smarte Set-Bilder
+      // 2. Logo images override check
       if (existingSet.hasManualImages) {
-        // Hat die API jetzt ein echtes Logo?
-        bool apiHasRealLogo = logoEn != null && logoEn.isNotEmpty;
+        final bool apiHasRealLogo = logoEn != null && logoEn.isNotEmpty;
         if (apiHasRealLogo) {
-           dbLogoEn = drift.Value(logoEn);
-           dbLogoDe = logoDe != null ? drift.Value(logoDe) : const drift.Value.absent();
-           dbSymbol = symbol != null ? drift.Value(symbol) : const drift.Value.absent();
-           dbHasManualImagesSet = const drift.Value(false); // Schutzschild fällt!
+          dbLogoEn = drift.Value(logoEn);
+          dbLogoDe = logoDe != null ? drift.Value(logoDe) : const drift.Value.absent();
+          dbSymbol = symbol != null ? drift.Value(symbol) : const drift.Value.absent();
+          dbHasManualImagesSet = const drift.Value(false);
         } else {
-           dbLogoEn = const drift.Value.absent();
-           dbLogoDe = const drift.Value.absent();
-           dbSymbol = const drift.Value.absent();
+          dbLogoEn = const drift.Value.absent();
+          dbLogoDe = const drift.Value.absent();
+          dbSymbol = const drift.Value.absent();
         }
       }
     }
@@ -163,23 +173,18 @@ class SetImporter {
     );
   }
 
- // --- MERGE LOGIK FÜR LÜCKENFÜLLER ---
+  /// Reconciles duplicate placeholder card records that share the same normalized card number.
+  ///
+  /// Merges user collection inventory and binder slots onto official canonical card prints.
   Future<void> mergeDuplicatePlaceholderCards(String setId) async {
-    // 1. Hole alle Karten für dieses Set aus der Datenbank
+    // 1. Fetch all cards for this set
     final cards = await (database.select(database.cards)..where((t) => t.setId.equals(setId))).get();
 
-    // 2. Wir gruppieren präziser: Prefix + Nummer + Suffix
-    // "001" -> "", "1", ""
-    // "1"   -> "", "1", "" (WIRD GEMERGED)
-    // "GG01" -> "gg", "1", "" (WIRD IGNORIERT)
-    // "19a"  -> "", "19", "a" (WIRD IGNORIERT)
+    // 2. Group cards by normalized Prefix + Number + Suffix
     final Map<String, List<dynamic>> groupedCards = {};
     
-    for (var card in cards) {
-      // Falls die Nummer "001/165" ist, ignorieren wir den Teil nach dem Slash
-      String cleanNum = card.number.split('/').first.trim();
-      
-      // Regex: Sucht nach optionalen Buchstaben vorn, ignoriert führende Nullen, sucht nach Buchstaben hinten
+    for (final card in cards) {
+      final String cleanNum = card.number.split('/').first.trim();
       final match = RegExp(r'^([A-Za-z_\-]*)\s*0*(\d+)\s*([A-Za-z_\-]*)$').firstMatch(cleanNum);
       
       if (match != null) {
@@ -192,46 +197,49 @@ class SetImporter {
       }
     }
 
-    // 3. Zusammenführen
-    for (var entry in groupedCards.entries) {
+    // 3. Consolidate duplicates onto the official card record
+    for (final entry in groupedCards.entries) {
       final duplicates = entry.value;
 
       if (duplicates.length > 1) {
-        // Offizielle Karten haben meist führende Nullen oder die längere ID (z.B. sv5-001 vs sv5-1)
-        duplicates.sort((a, b) => b.id.length.compareTo(a.id.length));
+        // Official prints generally have formatted leading zeros or longer ID codes
+        duplicates.sort((a, b) => (b.id as String).length.compareTo((a.id as String).length));
         
         final officialCard = duplicates.first;
         final fakeCards = duplicates.skip(1).toList();
 
-        for (var fake in fakeCards) {
-          debugPrint("Führe zusammen: ${fake.id} (${fake.number}) -> ${officialCard.id} (${officialCard.number})");
+        for (final fake in fakeCards) {
+          debugPrint("Consolidating card duplicates: ${fake.id} (${fake.number}) -> ${officialCard.id} (${officialCard.number})");
 
-          // A: Inventar umschreiben (UserCards)
+          // A: Remap user inventory cards
           await (database.update(database.userCards)..where((t) => t.cardId.equals(fake.id)))
               .write(UserCardsCompanion(cardId: drift.Value(officialCard.id)));
 
-          // B: Binder-Slots umschreiben (BinderCards)
+          // B: Remap binder slots
           await (database.update(database.binderCards)..where((t) => t.cardId.equals(fake.id)))
               .write(BinderCardsCompanion(cardId: drift.Value(officialCard.id)));
 
-          // C: Benutzerdefinierte Preise umschreiben
+          // C: Remap custom prices
           await (database.update(database.customCardPrices)..where((t) => t.cardId.equals(fake.id)))
               .write(CustomCardPricesCompanion(cardId: drift.Value(officialCard.id)));
 
-          // D: FIX FÜR DEN FOREIGN KEY ERROR!
-          // Wir müssen auch die alten Preis-Historien der Fake-Karte löschen, sonst weigert sich SQLite die Karte zu löschen.
+          // D: Clean foreign key dependent prices before deleting fake card record
           await (database.delete(database.cardMarketPrices)..where((t) => t.cardId.equals(fake.id))).go();
           await (database.delete(database.tcgPlayerPrices)..where((t) => t.cardId.equals(fake.id))).go();
 
-          // E: Alte Fake-Karte restlos aus der Datenbank löschen
+          // E: Delete orphaned duplicate card record
           await (database.delete(database.cards)..where((t) => t.id.equals(fake.id))).go();
         }
       }
     }
   }
 
-  // --- KARTEN IMPORT ---
-  Future<void> importCardsForSet(String setId, Map<String, Map<String, dynamic>> latestCmPrices, Map<String, Map<String, dynamic>> latestTcgPrices) async {
+  /// Imports all cards belonging to [setId] with prices in batch chunks of 200.
+  Future<void> importCardsForSet(
+    String setId,
+    Map<String, Map<String, dynamic>> latestCmPrices,
+    Map<String, Map<String, dynamic>> latestTcgPrices,
+  ) async {
     final enList = await dexClient.fetchCardsOfSet(setId, lang: 'en');
     final deList = await dexClient.fetchCardsOfSet(setId, lang: 'de');
     final deMap = { for (var c in deList) c['id']: c };
@@ -239,7 +247,7 @@ class SetImporter {
     final existingCardsList = await (database.select(database.cards)..where((t) => t.setId.equals(setId))).get();
     final Map<String, Card> existingCardsMap = { for (var c in existingCardsList) c.id: c };
 
-    int chunkSize = 200;
+    const int chunkSize = 200;
     
     for (var i = 0; i < enList.length; i += chunkSize) {
       await Future.delayed(Duration.zero);
@@ -268,11 +276,18 @@ class SetImporter {
       });
     }
 
-    // --- NEU: Nach dem Import räumen wir mögliche Lückenfüller-Duplikate auf ---
+    // Clean up duplicate placeholders that may have been generated by partial syncs
     await mergeDuplicatePlaceholderCards(setId);
   }
 
-  Future<_CardImportData?> _prepareCardData(dynamic summaryEn, dynamic summaryDe, Card? existingCard, Map<String, Map<String, dynamic>> latestCmPrices, Map<String, Map<String, dynamic>> latestTcgPrices) async {
+  /// Fetches card details and constructs companions for cards and price records.
+  Future<_CardImportData?> _prepareCardData(
+    dynamic summaryEn,
+    dynamic summaryDe,
+    Card? existingCard,
+    Map<String, Map<String, dynamic>> latestCmPrices,
+    Map<String, Map<String, dynamic>> latestTcgPrices,
+  ) async {
     final cardId = summaryEn['id'];
     
     final data = await dexClient.fetchCardDetails(cardId, lang: 'en');
@@ -296,7 +311,7 @@ class SetImporter {
     final String? artistApi = data['illustrator'];
     final v = data['variants'] ?? {};
     final number = data['localId'] ?? '0';
-    int sortNum = int.tryParse(number) ?? 0;
+    final int sortNum = int.tryParse(number) ?? 0;
 
     String? cardType;
     final cat = data['category']; 
@@ -328,52 +343,52 @@ class SetImporter {
     drift.Value<bool> dbHasRev = drift.Value(v['reverse'] == true);
     drift.Value<bool> dbHasPromo = drift.Value(v['wPromo'] == true);
 
-    // --- FLAGS für die Smart-Update-Logik (Schutzschilde) ---
+    // Flags for smart update locks
     drift.Value<bool> dbHasManualTranslationsCard = const drift.Value.absent();
     drift.Value<bool> dbHasManualImagesCard = const drift.Value.absent();
     drift.Value<bool> dbHasManualStatsCard = const drift.Value.absent();
 
     if (existingCard != null) {
-      // 1. Smarte Übersetzungen
+      // 1. Translations lock
       if (existingCard.hasManualTranslations) {
-        bool apiHasRealTranslation = nameDeApi != null && nameDeApi.isNotEmpty && nameDeApi.toLowerCase() != nameEn.toLowerCase();
+        final bool apiHasRealTranslation = nameDeApi != null && nameDeApi.isNotEmpty && nameDeApi.toLowerCase() != nameEn.toLowerCase();
         if (apiHasRealTranslation) {
-           dbNameDe = drift.Value(nameDeApi);
-           dbHasManualTranslationsCard = const drift.Value(false); // API hat geliefert -> Schutzschild fällt!
+          dbNameDe = drift.Value(nameDeApi);
+          dbHasManualTranslationsCard = const drift.Value(false);
         } else {
-           dbNameDe = drift.Value(existingCard.nameDe); // <--- FIX: Alten Wert übergeben!
+          dbNameDe = drift.Value(existingCard.nameDe);
         }
       }
       
-      // 2. Smarte Karten-Bilder
+      // 2. Card image assets lock
       if (existingCard.hasManualImages) {
-        bool apiHasRealImage = finalImageEn.isNotEmpty;
+        final bool apiHasRealImage = finalImageEn.isNotEmpty;
         if (apiHasRealImage) {
-           dbImgEn = drift.Value(finalImageEn);
-           dbImgDe = drift.Value(finalImageDe);
-           dbHasManualImagesCard = const drift.Value(false);
+          dbImgEn = drift.Value(finalImageEn);
+          dbImgDe = drift.Value(finalImageDe);
+          dbHasManualImagesCard = const drift.Value(false);
         } else {
-           dbImgEn = drift.Value(existingCard.imageUrl); // <--- FIX: Alten Wert übergeben! (Hier crashte es!)
-           dbImgDe = drift.Value(existingCard.imageUrlDe);
+          dbImgEn = drift.Value(existingCard.imageUrl);
+          dbImgDe = drift.Value(existingCard.imageUrlDe);
         }
       }
       
-      // 3. Smarte Stats (Künstler, Rarity etc.)
+      // 3. Metadata stats lock (artist, rarity, hp)
       if (existingCard.hasManualStats) {
-        bool apiHasRealArtist = artistApi != null && artistApi.isNotEmpty && artistApi.toLowerCase() != 'unknown' && artistApi.toLowerCase() != 'illustrator';
+        final bool apiHasRealArtist = artistApi != null && artistApi.isNotEmpty && artistApi.toLowerCase() != 'unknown' && artistApi.toLowerCase() != 'illustrator';
         if (apiHasRealArtist) {
-           dbArtist = drift.Value(artistApi);
-           dbHasManualStatsCard = const drift.Value(false);
+          dbArtist = drift.Value(artistApi);
+          dbHasManualStatsCard = const drift.Value(false);
         } else {
-           dbArtist = drift.Value(existingCard.artist);
-           dbRarity = drift.Value(existingCard.rarity);
-           dbHp = drift.Value(existingCard.hp);
-           dbCardType = drift.Value(existingCard.cardType);
-           dbNumber = drift.Value(existingCard.number); // <--- FIX: Alten Wert übergeben! (Hier crashte es auch)
+          dbArtist = drift.Value(existingCard.artist);
+          dbRarity = drift.Value(existingCard.rarity);
+          dbHp = drift.Value(existingCard.hp);
+          dbCardType = drift.Value(existingCard.cardType);
+          dbNumber = drift.Value(existingCard.number);
         }
       }
       
-      // 4. Varianten
+      // 4. Variant flags lock
       if (existingCard.hasManualVariants) {
         dbHas1st = drift.Value(existingCard.hasFirstEdition);
         dbHasNormal = drift.Value(existingCard.hasNormal);
@@ -384,26 +399,26 @@ class SetImporter {
     }
 
     final cardCompanion = CardsCompanion(
-        id: drift.Value(cardId),
-        setId: drift.Value(data['set']['id']),
-        name: drift.Value(nameEn),
-        sortNumber: drift.Value(sortNum),
-        nameDe: dbNameDe,
-        number: dbNumber,
-        cardType: dbCardType,
-        hp: dbHp, 
-        artist: dbArtist,
-        rarity: dbRarity,
-        imageUrl: dbImgEn,
-        imageUrlDe: dbImgDe,
-        hasFirstEdition: dbHas1st,
-        hasNormal: dbHasNormal,
-        hasHolo: dbHasHolo,
-        hasReverse: dbHasRev,
-        hasWPromo: dbHasPromo,
-        hasManualTranslations: dbHasManualTranslationsCard,
-        hasManualImages: dbHasManualImagesCard,
-        hasManualStats: dbHasManualStatsCard,
+      id: drift.Value(cardId),
+      setId: drift.Value(data['set']['id']),
+      name: drift.Value(nameEn),
+      sortNumber: drift.Value(sortNum),
+      nameDe: dbNameDe,
+      number: dbNumber,
+      cardType: dbCardType,
+      hp: dbHp, 
+      artist: dbArtist,
+      rarity: dbRarity,
+      imageUrl: dbImgEn,
+      imageUrlDe: dbImgDe,
+      hasFirstEdition: dbHas1st,
+      hasNormal: dbHasNormal,
+      hasHolo: dbHasHolo,
+      hasReverse: dbHasRev,
+      hasWPromo: dbHasPromo,
+      hasManualTranslations: dbHasManualTranslationsCard,
+      hasManualImages: dbHasManualImagesCard,
+      hasManualStats: dbHasManualStatsCard,
     );
 
     CardMarketPricesCompanion? cmCompanion;

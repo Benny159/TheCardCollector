@@ -8,7 +8,7 @@ import 'bulk_box_detail_screen.dart';
 import 'create_binder_dialog.dart';
 import 'binder_detail_provider.dart';
 
-// --- STATE PROVIDER FÜR SUCHE & SORTIERUNG ---
+// State providers for storage search and sorting
 enum StorageSort { newest, name, value }
 
 final storageSearchProvider = StateProvider.autoDispose<String>((ref) => '');
@@ -24,7 +24,7 @@ class BinderListScreen extends ConsumerWidget {
     final search = ref.watch(storageSearchProvider);
     final sort = ref.watch(storageSortProvider);
 
-    // Live-Stream aller Binder/Boxen
+    // Live stream of all binders/boxes
     final bindersStream = db.select(db.binders).watch();
 
     return Scaffold(
@@ -47,7 +47,7 @@ class BinderListScreen extends ConsumerWidget {
 
             var binders = snapshot.data!;
 
-            // 1. FILTERN (SUCHE)
+            // 1. Filter by search query
             if (search.isNotEmpty) {
               binders = binders
                   .where((b) =>
@@ -55,9 +55,9 @@ class BinderListScreen extends ConsumerWidget {
                   .toList();
             }
 
-            // 2. SORTIEREN
+            // 2. Sort binders
             binders.sort((a, b) {
-              // Favoriten IMMER ganz oben!
+              // Pinned favorites first
               if (a.isFavorite && !b.isFavorite) return -1;
               if (!a.isFavorite && b.isFavorite) return 1;
 
@@ -68,12 +68,12 @@ class BinderListScreen extends ConsumerWidget {
                 return a.name.toLowerCase().compareTo(b.name.toLowerCase());
               }
               return b.createdAt
-                  .compareTo(a.createdAt); // Standard: Neueste zuerst
+                  .compareTo(a.createdAt); // Default: Newest first
             });
 
             return Column(
               children: [
-                // --- SUCHE & SORTIER LEISTE ---
+                // Search and sort bar
                 Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -217,7 +217,7 @@ class BinderListScreen extends ConsumerWidget {
                   ),
                 ),
 
-                // --- DIE LISTE ---
+                // Storage item grid
                 Expanded(
                   child: binders.isEmpty
                       ? const Center(
@@ -245,7 +245,7 @@ class BinderListScreen extends ConsumerWidget {
   }
 }
 
-// --- BINDER CARD (Mit ETB, Favoriten & Fortschrittsbalken) ---
+// Storage binder/box card component
 class _BinderCard extends ConsumerWidget {
   final Binder binder;
   const _BinderCard({required this.binder});

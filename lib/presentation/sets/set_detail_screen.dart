@@ -8,7 +8,7 @@ import '../../domain/models/api_set.dart';
 import '../cards/card_detail_screen.dart';
 import '../inventory/inventory_bottom_sheet.dart';
 
-// Enum für den Besitz-Filter
+// Filter enum for card ownership status
 enum OwnershipFilter { all, owned, missing }
 
 class SetDetailScreen extends ConsumerStatefulWidget {
@@ -27,7 +27,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
   OwnershipFilter _ownershipFilter = OwnershipFilter.all;
 
-  // --- SUCH-VARIABLEN (Inklusive Aufklapp-Status) ---
+  // Search state variables (including expanded status)
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = "";
@@ -42,7 +42,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Wir beobachten den Provider. Riverpod cacht das Ergebnis, also ist das okay.
+    // Observe cards provider (Riverpod caches query results)
     final cardsAsync = ref.watch(cardsForSetProvider(widget.set.id));
 
     return Scaffold(
@@ -60,7 +60,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
           final List<ApiCard> allCards = rawCards;
 
-          // 1. FILTERN
+          // 1. Filter visible cards
           List<ApiCard> visibleCards = allCards;
 
           if (_showStandardSetOnly) {
@@ -83,7 +83,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
             visibleCards = visibleCards.where((c) => !c.isOwned).toList();
           }
 
-          // --- TEXT-SUCHE ---
+          // Text search filter
           if (_searchQuery.isNotEmpty) {
             final query = _searchQuery.toLowerCase();
             visibleCards = visibleCards.where((c) {
@@ -95,7 +95,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
             }).toList();
           }
 
-          // 2. WERTE BERECHNEN (Summen)
+          // 2. Aggregate values
           double totalSetVal = 0.0;
           double userOwnedVal = 0.0;
 
@@ -112,7 +112,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
           return Column(
             children: [
-              // Header ist fix, scrollt nicht mit (Enthält jetzt die smarte Suchleiste!)
+              // Sticky header including set statistics, search bar, and filter options
               _buildHeader(context, allCards, totalSetVal, userOwnedVal),
               const Divider(height: 1),
 
@@ -144,11 +144,11 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     );
   }
 
-  // --- UI KOMPONENTEN ---
+  // UI sub-widgets
 
   Widget _buildHeader(BuildContext context, List<ApiCard> allCards,
       double totalValue, double ownedValue) {
-    // Statistik berechnen
+    // Calculate set ownership statistics
     final int userOwnedMaster = allCards.where((c) => c.isOwned).length;
     final int totalCards = allCards.length;
     final double progress =
@@ -160,7 +160,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
       return c.isOwned && num != null && num <= standardTotal;
     }).length;
 
-    // Raritäten Zähler
+    // Rarity frequency counts
     final Map<String, int> totalRarityCounts = {};
     final Map<String, int> ownedRarityCounts = {};
 
@@ -172,7 +172,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
       }
     }
 
-    // Sortieren der Raritäten
+    // Sort rarities by configured rarity weight
     final sortedRarities = totalRarityCounts.keys.toList()
       ..sort((a, b) => _getRarityWeight(a).compareTo(_getRarityWeight(b)));
 
@@ -297,7 +297,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
           const SizedBox(height: 8),
 
-          // 4. BESITZ FILTER & ANIMIERTE SUCHE
+          // 4. Ownership filter and animated search bar
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -317,7 +317,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                 ),
               ),
 
-              // --- HIER IST DIE ANIMIERTE LUPE ---
+              // Animated compact search trigger
               _buildCompactSearch(allCards),
             ],
           ),
@@ -633,12 +633,12 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     return Colors.grey.withValues(alpha: 0.1);
   }
 
-  // --- DAS KOMPAKTE, ANIMIERTE SUCH-WIDGET ---
+  // Compact animated search widget
   Widget _buildCompactSearch(List<ApiCard> cards) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
-      // Wenn eingeklappt: 32px breit (Lupe). Wenn ausgeklappt: 160px breit (Textfeld)
+      // Collapsed: 32px icon button; Expanded: 160px text field
       width: _isSearchExpanded ? 160 : 32,
       height: 32,
       child: _isSearchExpanded
@@ -746,8 +746,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
               borderRadius: BorderRadius.circular(20),
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.grey[
-                      300], // Leicht abgedunkeltes Grau für den runden Button
+                  color: Colors.grey[300], // Circular icon background tint
                   shape: BoxShape.circle,
                 ),
                 child:

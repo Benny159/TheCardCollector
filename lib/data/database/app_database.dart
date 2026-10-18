@@ -10,6 +10,7 @@ import 'tables.dart';
 
 part 'app_database.g.dart';
 
+/// Central Drift SQLite database managing relational data across sets, cards, binders, and prices.
 @DriftDatabase(tables: [
   Cards, 
   CardSets, 
@@ -22,12 +23,12 @@ part 'app_database.g.dart';
   BinderCards,
   BinderHistory,
   Pokedex,
-  SetMappings // <--- NEU HINZUGEFÜGT
+  SetMappings,
 ])
 class AppDatabase extends _$AppDatabase {
+  /// Opens the background isolate connection to the local database file.
   AppDatabase() : super(_openConnection());
 
-  // Wir springen auf Version 44 für das Übersetzungs-Wörterbuch
   @override
   int get schemaVersion => 44; 
 
@@ -38,9 +39,7 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        // ... (Deine bisherigen Migrationsschritte bleiben hier!) ...
-        
-        // --- Version 42 ---
+        // Schema migrations
         if (from < 42) {
           await m.addColumn(userCards, userCards.customPrice);
           await m.addColumn(userCards, userCards.gradingCompany);
@@ -48,7 +47,6 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(binderCards, binderCards.userCardId);
         }
 
-        // --- Version 43 (Schutzschilde, HP & Mapper) ---
         if (from < 43) {
           await m.createTable(setMappings);
           await m.addColumn(cards, cards.hp);
@@ -65,7 +63,6 @@ class AppDatabase extends _$AppDatabase {
           await m.createIndex(Index('idx_usercards_cardid', 'CREATE INDEX idx_usercards_cardid ON user_cards (card_id)'));
         }
 
-        // --- NEU: Version 44 (Deutscher Pokedex) ---
         if (from < 44) {
           await m.addColumn(pokedex, pokedex.nameDe);
         }
@@ -79,31 +76,25 @@ class AppDatabase extends _$AppDatabase {
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    // Wo soll die Datenbank auf dem Handy gespeichert werden?
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'tcg_collector.sqlite'));
 
-    // --- DER WICHTIGE TEIL: PRE-FILLED DB KOPIEREN ---
+    // Copy bundled asset database on initial clean launch if missing
     if (!await file.exists()) {
-      debugPrint('📦 Keine lokale Datenbank gefunden. Kopiere Pre-filled DB aus Assets...');
+      debugPrint('📦 No local database file found. Copying pre-filled database from assets...');
       try {
-        // Lade die Datei aus den Assets in den Zwischenspeicher
         final blob = await rootBundle.load('assets/db/tcg_collector.sqlite');
         final buffer = blob.buffer;
         
-        // Schreibe die Datei auf den Handy-Speicher
         await file.writeAsBytes(buffer.asUint8List(blob.offsetInBytes, blob.lengthInBytes));
-        debugPrint('✅ Pre-filled Datenbank erfolgreich auf das Gerät kopiert!');
+        debugPrint('✅ Pre-filled database copied to device storage successfully.');
       } catch (e) {
-        debugPrint('❌ Fehler beim Kopieren der Asset-Datenbank: $e');
-        // Falls die Datei im Asset-Ordner fehlt, baut Drift einfach eine leere auf.
+        debugPrint('❌ Error copying asset database: $e');
       }
     } else {
-      debugPrint('✅ Lokale Datenbank gefunden. Nutze bestehende Daten.');
+      debugPrint('✅ Existing local database found.');
     }
-    // -------------------------------------------------
 
-    // Öffne die Datenbank
     return NativeDatabase.createInBackground(file);
   });
 }

@@ -134,7 +134,7 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
         final cmPrice = cmMap[card.id];
         final tcgPrice = tcgMap[card.id];
         final variant = userCard?.variant ?? bc.variant ?? 'Normal';
-        final customPrice = customMap[card.id]?.price; // <-- WICHTIG: Globale Custom-Preise bereitlegen!
+        final customPrice = customMap[card.id]?.price; // Global custom prices fallback
 
         if (userCard != null && userCard.customPrice != null && userCard.customPrice! > 0) {
             price = userCard.customPrice!;

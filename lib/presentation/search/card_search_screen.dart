@@ -9,7 +9,7 @@ import '../../data/api/search_provider.dart';
 import '../../domain/models/api_card.dart';
 import '../cards/card_detail_screen.dart';
 import '../widgets/app_drawer.dart';
-import '../inventory/inventory_bottom_sheet.dart';
+import 'widgets/search_card_tile.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'dart:async';
 
@@ -78,7 +78,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
     return Scaffold(
       drawer: widget.pickerMode
           ? null
-          : const AppDrawer(), // <--- NEU: HIER MUSS ER HIN!
+          : const AppDrawer(),
       appBar: AppBar(
         title: Text(widget.pickerMode
             ? 'Karte auswählen'
@@ -91,7 +91,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                     icon: const Icon(Icons.menu),
                     onPressed: () {
                       Scaffold.of(context)
-                          .openDrawer(); // Funktioniert jetzt fehlerfrei!
+                          .openDrawer();
                     },
                   );
                 },
@@ -431,7 +431,7 @@ class _DashboardView extends ConsumerWidget {
       }
     }
 
-    // Wenn das Portfolio gerade komplett leer geräumt wurde (z.B. durch den Delete Button)
+    // When portfolio was cleared or has zero value
     if (currentTotal == 0.0) {
       change = 0.0;
       percent = 0.0;
@@ -652,8 +652,7 @@ class _PortfolioChart extends ConsumerWidget {
     final filter = ref.watch(chartFilterProvider);
     final now = DateTime.now();
 
-    // --- FIX: Wenn der Nutzer sein Portfolio löscht (currentTotal == 0),
-    // ignorieren wir alle alten historischen Daten und zeichnen eine flache Linie! ---
+    // If user's portfolio is empty (currentTotal == 0), ignore legacy history points and draw flat baseline
     List<db.PortfolioHistoryData> chartData = [];
 
     if (currentTotal > 0.0) {
@@ -665,7 +664,7 @@ class _PortfolioChart extends ConsumerWidget {
       }
     }
 
-    // Aktuellen Punkt IMMER anhängen
+    // Always append latest real-time point
     chartData.add(
         db.PortfolioHistoryData(id: -1, date: now, totalValue: currentTotal));
 
@@ -704,7 +703,7 @@ class _PortfolioChart extends ConsumerWidget {
           .toList();
     }
 
-    // Wenn nach dem Filtern nur noch ein Punkt übrig ist (oder alles leer ist), zeichnen wir eine Nulllinie
+    // Render flat baseline when filtered down to a single point or empty
     if (chartData.isEmpty || chartData.length == 1) {
       chartData = [
         db.PortfolioHistoryData(
@@ -855,9 +854,7 @@ class _PortfolioChart extends ConsumerWidget {
   }
 }
 
-// =========================================================
-// VIEW 2: SUCHERGEBNISSE ODER INVENTAR-PICKER
-// =========================================================
+// View: Search Results or Inventory Picker
 class _SearchResultsView extends ConsumerWidget {
   final bool pickerMode;
   final bool onlyOwned;
@@ -866,7 +863,7 @@ class _SearchResultsView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // --- FALL 1: WIR SUCHEN NUR IM EIGENEN INVENTAR (Picker Mode) ---
+    // 1. Inventory picker mode
     if (onlyOwned) {
       final inventoryAsync = ref.watch(inventoryProvider);
       final queryText = ref.watch(searchQueryProvider).toLowerCase();
@@ -939,7 +936,7 @@ class _SearchResultsView extends ConsumerWidget {
         },
       );
     }
-    // --- FALL 2: GLOBALE KARTEN SUCHE ---
+    // 2. Global card search
     else {
       final searchAsyncValue = ref.watch(searchResultsProvider);
       final queryText = ref.watch(searchQueryProvider);
@@ -983,163 +980,11 @@ class _SearchResultsView extends ConsumerWidget {
       ),
       itemCount: cards.length,
       itemBuilder: (context, index) {
-        return _SearchCardTile(
+        return SearchCardTile(
           card: cards[index],
           isPicker: isPicker,
         );
       },
-    );
-  }
-}
-
-class _SearchCardTile extends ConsumerWidget {
-  final ApiCard card;
-  final bool isPicker;
-
-  const _SearchCardTile({
-    required this.card,
-    required this.isPicker,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bool isOwned = card.isOwned;
-
-    double? displayPrice = card.cardmarket?.trendPrice;
-    if (displayPrice == null || displayPrice == 0) {
-      displayPrice = card.tcgplayer?.prices?.normal?.market ??
-          card.tcgplayer?.prices?.holofoil?.market ??
-          card.tcgplayer?.prices?.reverseHolofoil?.market;
-    }
-
-    final displayImage = card.displayImage;
-    final binderLocationsAsync = ref.watch(cardBinderLocationProvider(card.id));
-
-    return RepaintBoundary(
-      child: InkWell(
-        onTap: () {
-          if (isPicker) {
-            Navigator.pop(context, card);
-          } else {
-            Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => CardDetailScreen(card: card)))
-                .then((_) {
-              ref.invalidate(searchResultsProvider);
-              ref.invalidate(cardBinderLocationProvider(card.id));
-            });
-          }
-        },
-        onLongPress: () {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            builder: (context) => InventoryBottomSheet(card: card),
-          ).then((_) {
-            ref.invalidate(searchResultsProvider);
-            ref.invalidate(cardBinderLocationProvider(card.id));
-          });
-        },
-        child: Card(
-          elevation: 2,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(4),
-              side: (isPicker && isOwned)
-                  ? const BorderSide(color: Colors.green, width: 2)
-                  : BorderSide.none),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              CachedNetworkImage(
-                imageUrl: displayImage,
-                memCacheWidth: 200,
-                placeholder: (context, url) =>
-                    Container(color: Colors.grey[200]),
-                errorWidget: (context, url, error) =>
-                    const Icon(Icons.broken_image, color: Colors.grey),
-                fadeInDuration: const Duration(milliseconds: 150),
-              ),
-              binderLocationsAsync.when(
-                data: (binders) {
-                  if (binders.isEmpty) return const SizedBox();
-
-                  final badgeText = binders.length > 1
-                      ? "${binders.first} (+${binders.length - 1})"
-                      : binders.first;
-
-                  return Positioned(
-                    top: 4,
-                    left: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.blueAccent.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(4),
-                        boxShadow: [
-                          BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.3),
-                              blurRadius: 2)
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.folder_special,
-                              color: Colors.white, size: 10),
-                          const SizedBox(width: 3),
-                          Text(
-                            badgeText,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 8,
-                                fontWeight: FontWeight.bold),
-                            maxLines: 1,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-                loading: () => const SizedBox(),
-                error: (_, __) => const SizedBox(),
-              ),
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  color: Colors.black.withValues(alpha: 0.7),
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 2, horizontal: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        card.number,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold),
-                      ),
-                      if (displayPrice != null && displayPrice > 0)
-                        Text(
-                          '${displayPrice.toStringAsFixed(2)}€',
-                          style: const TextStyle(
-                              color: Colors.lightGreenAccent,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

@@ -8,14 +8,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// WICHTIG: 'hide Card' verhindert Konflikte mit dem Flutter Card-Widget!
+// Note: 'hide Card' avoids name clashes with the Flutter Card widget
 import '../../data/database/app_database.dart' hide Card; 
 import '../../data/database/app_database.dart' as db_models;
 import 'package:drift/drift.dart' hide Column;
 
 import '../../data/database/database_provider.dart';
 import '../../data/api/search_provider.dart'; 
-import '../../domain/logic/binder_service.dart'; // Für die Live-Neuberechnung!
+import '../../domain/logic/binder_service.dart'; // Used for live recalculations
 
 import '../admin/admin_dashboard_screen.dart'; 
 
@@ -74,45 +74,45 @@ class AppDrawer extends ConsumerWidget {
             padding: EdgeInsets.all(16.0),
             child: Text("App Version 1.0.0", style: TextStyle(color: Colors.grey, fontSize: 12)),
           ),
-          const SizedBox(height: 100), // Platzhalter für die Bottom Bar
+          const SizedBox(height: 100), // Spacing for bottom navigation bar
         ],
       ),
     );
   }
 
   // ==========================================
-  // 1. EXPORT LOGIK (Jetzt 100% vollständig)
+  // 1. EXPORT LOGIC
   // ==========================================
   Future<void> _exportData(BuildContext context, WidgetRef ref) async {
     try {
       final db = ref.read(databaseProvider);
       final prefs = await SharedPreferences.getInstance(); 
       
-      // 1. App-Einstellungen sichern (Darkmode, Preis-Quellen etc.)
+      // 1. Export user shared preferences (theme, preferred pricing source, etc.)
       final Map<String, dynamic> settingsData = {};
       for (String key in prefs.getKeys()) {
         settingsData[key] = prefs.get(key);
       }
 
-      // 2. Suche ALLE Karten, an denen der Nutzer manuell etwas geändert hat!
+      // 2. Fetch all cards with user-modified metadata
       final editedCardsList = await (db.select(db.cards)..where((t) => 
           t.hasManualTranslations.equals(true) | 
           t.hasManualImages.equals(true) | 
           t.hasManualStats.equals(true) | 
           t.hasManualVariants.equals(true) |
-          t.preferredPriceSource.isNotValue('cardmarket') // Sichert Custom-Preis Flags!
+          t.preferredPriceSource.isNotValue('cardmarket') // Preserves custom price source preference
       )).get();
 
-      // 3. Alles zusammenpacken
+      // 3. Assemble JSON payload
       final exportData = {
         'settings': settingsData,
-        'editedCards': editedCardsList.map((e) => e.toJson()).toList(), // Die modifizierten Karten
+        'editedCards': editedCardsList.map((e) => e.toJson()).toList(), // User-modified cards
         'userCards': (await db.select(db.userCards).get()).map((e) => e.toJson()).toList(),
         'binderCards': (await db.select(db.binderCards).get()).map((e) => e.toJson()).toList(),
         'binders': (await db.select(db.binders).get()).map((e) => e.toJson()).toList(),
         'customCardPrices': (await db.select(db.customCardPrices).get()).map((e) => e.toJson()).toList(),
         'portfolioHistory': (await db.select(db.portfolioHistory).get()).map((e) => e.toJson()).toList(),
-        'binderHistory': (await db.select(db.binderHistory).get()).map((e) => e.toJson()).toList(), // NEU!
+        'binderHistory': (await db.select(db.binderHistory).get()).map((e) => e.toJson()).toList(),
       };
 
       final jsonString = jsonEncode(exportData);
@@ -173,7 +173,7 @@ class AppDrawer extends ConsumerWidget {
         }
       }
 
-      // 2. Datenbank Modelle parsen (Noch ungefiltert)
+      // 2. Parse database models from imported JSON
       final editedCards = (data['editedCards'] as List?)?.map((e) => db_models.Card.fromJson(e)).toList() ?? [];
       final userCards = (data['userCards'] as List?)?.map((e) => UserCard.fromJson(e)).toList() ?? [];
       final binderCards = (data['binderCards'] as List?)?.map((e) => BinderCard.fromJson(e)).toList() ?? [];
@@ -184,26 +184,26 @@ class AppDrawer extends ConsumerWidget {
 
       final db = ref.read(databaseProvider);
 
-      // --- NEU: DER SCHMUTZFILTER (Behebt den Foreign Key Error!) ---
-      // Wir holen uns blitzschnell alle existierenden Karten-IDs aus der Datenbank
+      // Data sanitation: filter out orphaned cards to prevent foreign key violations
+      // Efficiently query all valid card IDs currently in database
       final validCardIdsQuery = await db.customSelect('SELECT id FROM cards').get();
       final validCardIds = validCardIdsQuery.map((row) => row.read<String>('id')).toSet();
 
-      // Wir filtern das Inventar: Nur Karten behalten, die auch wirklich noch existieren
+      // Filter inventory: retain only cards that exist in the local catalog
       final safeUserCards = userCards.where((c) => validCardIds.contains(c.cardId)).toList();
       final safeCustomPrices = customPrices.where((c) => validCardIds.contains(c.cardId)).toList();
       final safeEditedCards = editedCards.where((c) => validCardIds.contains(c.id)).toList();
 
-      // Binder-Karten reparieren (Wenn eine Karte gelöscht wurde, wird der Slot wieder leer!)
+      // Repair binder slots: transform orphaned entries into empty placeholders
       final safeBinderCards = binderCards.map((c) {
         if (c.cardId != null && !validCardIds.contains(c.cardId)) {
-          // Geisterkarte entdeckt -> Verwandle Slot in leeren Platzhalter
+          // Orphaned card detected -> reset slot to empty placeholder
           return BinderCard(
             id: c.id,
             binderId: c.binderId,
             pageIndex: c.pageIndex,
             slotIndex: c.slotIndex,
-            isPlaceholder: true, // Wieder leer!
+            isPlaceholder: true, // Reset to empty
             cardId: null,
             userCardId: null,
             variant: null,
@@ -211,9 +211,8 @@ class AppDrawer extends ConsumerWidget {
         }
         return c;
       }).toList();
-      // -------------------------------------------------------------
 
-      // 3. Batch Insert (Jetzt mit den SAFE-Listen!)
+      // 3. Batch insert using sanitized data
       await db.batch((batch) {
         batch.deleteAll(db.binderCards);
         batch.deleteAll(db.binderHistory); 
@@ -222,19 +221,19 @@ class AppDrawer extends ConsumerWidget {
         batch.deleteAll(db.customCardPrices);
         batch.deleteAll(db.portfolioHistory);
 
-        batch.insertAllOnConflictUpdate(db.cards, safeEditedCards); // <-- safeList
-        batch.insertAll(db.userCards, safeUserCards);               // <-- safeList
+        batch.insertAllOnConflictUpdate(db.cards, safeEditedCards);
+        batch.insertAll(db.userCards, safeUserCards);
         batch.insertAll(db.binders, binders);     
-        batch.insertAll(db.binderCards, safeBinderCards);           // <-- safeList
+        batch.insertAll(db.binderCards, safeBinderCards);
         batch.insertAll(db.binderHistory, binderHistory);
-        batch.insertAll(db.customCardPrices, safeCustomPrices);     // <-- safeList
+        batch.insertAll(db.customCardPrices, safeCustomPrices);
         batch.insertAll(db.portfolioHistory, portfolioHistory);
       });
 
-      // 4. DER WICHTIGSTE SCHRITT FÜR DEN 900€ FIX: Alles Live neu durchrechnen!
+      // 4. Recalculate totals across all binders
       await BinderService(db).recalculateAllBinders();
 
-      // 5. UI Aktualisieren
+      // 5. Invalidate dependent UI providers
       ref.invalidate(inventoryProvider);
       ref.invalidate(portfolioHistoryProvider);
       ref.invalidate(top10CardsProvider);
@@ -252,7 +251,7 @@ class AppDrawer extends ConsumerWidget {
   }
 
   // ==========================================
-  // 3. LÖSCH LOGIK
+  // 3. RESET DATA LOGIC
   // ==========================================
   void _confirmReset(BuildContext context, WidgetRef ref) {
     showDialog(

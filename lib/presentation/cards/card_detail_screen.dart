@@ -152,7 +152,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        // Größere Schrift im AppBar
+        // Title styling in AppBar
         title: Text(widget.card.nameDe ?? widget.card.name,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
@@ -196,7 +196,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- LINKE SPALTE (Karte, Tags) ---
+                  // Left column (card visual, tags, external links)
                   Expanded(
                     flex: 4,
                     child: Column(
@@ -239,12 +239,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // 1. Block: Künstler (Mit Such-Lupe)
+                        // 1. Artist tag with interactive search trigger
                         if (widget.card.artist.isNotEmpty) ...[
                           Center(
                             child: _buildTag(Icons.brush, widget.card.artist,
                                 color: Colors.blue,
-                                suffixIcon: Icons.search, // Lupe am Ende!
+                                suffixIcon: Icons.search, // Trailing search icon
                                 onTap: () {
                               ref.read(searchModeProvider.notifier).state =
                                   SearchMode.artist;
@@ -259,7 +259,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                           ),
                         ],
 
-                        //2. Block: Externe Links (Mit Redirect-Symbol)
+                        // 2. External marketplace links
                         const Divider(height: 20, thickness: 0.5),
                         Wrap(
                           spacing: 8,
@@ -342,12 +342,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     );
   }
 
-  // --- WIDGETS FÜR DAS DASHBOARD ---
+  // Dashboard sub-widgets
 
   Widget _buildTag(IconData icon, String text,
       {Color? color, VoidCallback? onTap, IconData? suffixIcon}) {
     final content = Container(
-      // Padding vergrößert für leichteres Tippen
+      // Touch target padding
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: (color ?? Colors.grey).withValues(alpha: 0.1),
@@ -359,13 +359,13 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon,
-              size: 16, color: color ?? Colors.grey[700]), // Icon vergrößert
+              size: 16, color: color ?? Colors.grey[700]), // Scaled icon
           const SizedBox(width: 6),
           Text(text,
               style: TextStyle(
                   fontSize: 12,
                   color: color ?? Colors.grey[800],
-                  fontWeight: FontWeight.bold)), // Schrift vergrößert
+                  fontWeight: FontWeight.bold)), // Scaled font size
           if (suffixIcon != null) ...[
             const SizedBox(width: 6),
             Icon(suffixIcon, size: 14, color: color ?? Colors.grey[700]),
@@ -464,7 +464,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     );
   }
 
-  // --- DIE PREIS TABELLEN ---
+  // Market price tables
 
   Widget _buildPriceSectionContainer(BuildContext context,
       {required String title,
@@ -742,7 +742,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     }
   }
 
-  // --- DIE SAMMLUNGS-BOX ---
+  // Collection inventory card block
 
   double _calculateItemPrice(UserCard item) {
     if (item.customPrice != null && item.customPrice! > 0) {
@@ -1095,7 +1095,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
             ),
           ),
 
-          // --- NEU: BinderLocation Widget mit anklickbaren Elementen ---
+          // Interactive storage and binder location list widget
           BinderLocationWidget(card: widget.card),
         ],
       ),
@@ -1340,6 +1340,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 child: InteractiveViewer(
                     child: CachedNetworkImage(
                         imageUrl: imageUrl,
+                        memCacheHeight: 1200,
                         fit: BoxFit.contain,
                         errorWidget: (_, __, ___) => const Icon(
                             Icons.broken_image,

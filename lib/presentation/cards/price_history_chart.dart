@@ -18,7 +18,7 @@ class PriceHistoryChart extends StatefulWidget {
   final List<CustomCardPrice> customHistory;
   final List<UserCard> userCards;
 
-  // --- NEU: Die Blacklist vom Detail-Screen ---
+  // Set of card copies to hide from timeline annotations
   final Set<int> hiddenUserCardIds;
 
   const PriceHistoryChart({
@@ -27,7 +27,7 @@ class PriceHistoryChart extends StatefulWidget {
     required this.tcgHistory,
     required this.customHistory,
     this.userCards = const [],
-    this.hiddenUserCardIds = const {}, // Standardmäßig ist nichts versteckt
+    this.hiddenUserCardIds = const {}, // Empty by default
   });
 
   @override
@@ -148,7 +148,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                     ),
                     borderData: FlBorderData(show: false),
                     extraLinesData: ExtraLinesData(
-                      // --- NEU: Wir prüfen anhand der Blacklist (hiddenUserCardIds) ---
+                      // Filter timeline markers using excluded card ID set
                       verticalLines: widget.userCards
                           .where(
                               (uc) => !widget.hiddenUserCardIds.contains(uc.id))
@@ -221,7 +221,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
 
         const SizedBox(height: 8),
 
-        // FILTER CHIPS (Nur noch die reinen Preisquellen!)
+        // Filter chips for price data sources
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(

@@ -78,7 +78,7 @@ class BinderPageWidget extends StatelessWidget {
                           : null,
                       isHighlighted: slotToSwapId == slotData.binderCard.id,
                       showOverlay:
-                          showOverlays, // <--- NEU: Wird an den Slot gegeben!
+                          showOverlays, // Forwarded to individual slot
                     );
                   },
                 );

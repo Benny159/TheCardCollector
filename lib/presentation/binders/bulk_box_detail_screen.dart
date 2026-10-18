@@ -70,13 +70,13 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
             icon: const Icon(Icons.sort),
             onPressed: () => _showSortDialog(context),
           ),
-          // --- SUCHEN ---
+          // Search action
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () =>
                 _showSearchDialog(context, asyncData.asData?.value),
           ),
-          // --- GRAPH / STATS ---
+          // Analytics & statistics action
           IconButton(
             icon: const Icon(Icons.analytics_outlined),
             onPressed: () => _showStats(context, asyncData.asData?.value),
@@ -156,7 +156,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
     );
   }
 
-  // --- WIDGET FÜR EIN LISTEN-ELEMENT ---
+  // List item builder
   Widget _buildListItem(
       BinderSlotData slot, bool isDivider, bool isHighlighted) {
     if (isDivider) {
@@ -514,7 +514,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
               },
             ),
 
-            // IN BULK BOX SCREEN:
+            // Detail navigation action
             if (!isDivider) ...[
               ListTile(
                 leading: const Icon(Icons.zoom_in, color: Colors.purple),
@@ -525,7 +525,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                   if (slot.card != null) {
                     final db = ref.read(databaseProvider);
 
-                    // --- PREISE KURZ AUS DER DB LADEN ---
+                    // Load latest market prices from database
                     final cmPrice = await (db.select(db.cardMarketPrices)
                           ..where((t) => t.cardId.equals(slot.card!.id))
                           ..orderBy([
@@ -653,7 +653,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
               rarity: drift.Value(pickedCard.rarity),
             ));
 
-        // Wir holen die kompletten UserCards, nicht nur Strings!
+        // Fetch complete UserCard instances
         final availableCards =
             await service.getAvailableUserCards(pickedCard.id);
 
@@ -713,7 +713,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
         }
 
         if (selectedCard != null) {
-          // ID wird hier perfekt an die AddCardToBulkBox Methode übergeben!
+          // Pass chosen UserCard ID to bulk box insertion
           await service.addCardToBulkBox(widget.binder.id, pickedCard.id,
               selectedCard.id, selectedCard.variant);
           if (mounted) ref.invalidate(binderDetailProvider(widget.binder.id));

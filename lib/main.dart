@@ -7,32 +7,28 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 // Deine Datenbank Imports
 import 'data/database/app_database.dart';
 import 'data/database/database_provider.dart';
-import 'data/database/database_initializer.dart'; // <--- NEU: Der Import für den Initializer
-
-// Dein Screen Import
+import 'data/database/database_initializer.dart';
 import 'presentation/main_screen.dart'; 
 
-// --- NEU: Die main() Methode muss jetzt "async" sein ---
+// Entry point configured as asynchronous for database initialization.
 void main() async {
-  // Das ist zwingend nötig, wenn man vor dem App-Start auf die Datenbank zugreifen will
+  // Ensures Flutter widget binding is initialized before asynchronous services start.
   WidgetsFlutterBinding.ensureInitialized(); 
 
   bool isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
-  // 1. Datenbank initialisieren
+  // 1. Initialize local database
   final database = AppDatabase();
 
-  // --- NEU: Mapping-Tabelle füllen, falls sie leer ist ---
-  // Das passiert unsichtbar im Hintergrund. Wenn die Tabelle schon voll ist,
-  // bricht die Funktion (dank unserer Prüfung) sofort ab und kostet keine Zeit.
+  // Seed initial mappings if empty in the background
   final initializer = DatabaseInitializer(database);
   await initializer.seedInitialMappings();
-  //alte sets löschen nach neuen referenzen 
+  // Delete legacy sets according to new references
   //await initializer.cleanUpOldSets(['mcd22']);
   // -------------------------------------------------------
 
   runApp(
-    // 2. Die ganze App wird in "DevicePreview" eingepackt
+    // Wrap application in DevicePreview for desktop simulation
     DevicePreview(
       enabled: isDesktop,
       builder: (context) => ProviderScope(
@@ -54,10 +50,10 @@ class TcgCollectorApp extends StatelessWidget {
       title: 'TCG Collector',
       debugShowCheckedModeBanner: false,
 
-      // --- WICHTIG FÜR DEVICE PREVIEW ---
+      // --- Required for DevicePreview simulation ---
       locale: DevicePreview.locale(context), 
       builder: DevicePreview.appBuilder, 
-      // ----------------------------------
+      // ---------------------------------------------
 
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.redAccent),

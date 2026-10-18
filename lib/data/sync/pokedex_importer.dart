@@ -4,53 +4,49 @@ import 'package:http/http.dart' as http;
 import 'package:drift/drift.dart';
 import '../database/app_database.dart';
 
+/// Importer service for synchronizing National Pokédex species names and German translations.
 class PokedexImporter {
+  /// Local database instance.
   final AppDatabase db;
 
-  PokedexImporter(this.db);
+  /// Creates a [PokedexImporter] with the designated database instance.
+  const PokedexImporter(this.db);
 
+  /// Synchronizes the initial list of Pokémon species names from PokéAPI.
+  ///
+  /// Early returns if the local Pokédex already contains over 1,000 entries.
   Future<void> syncPokedex() async {
-    // 1. Prüfen ob schon Daten da sind
+    // 1. Check if Pokédex data already exists locally
     final count = await db.select(db.pokedex).get().then((l) => l.length);
     
-    // Wenn wir schon viele Daten haben, brechen wir ab (spart Traffic)
+    // Skip remote download if database already populated
     if (count > 1000) {
-      debugPrint("✅ Pokedex ist bereits gefüllt ($count Einträge).");
+      debugPrint("✅ Pokédex is already populated ($count entries).");
       return; 
     }
 
-    debugPrint("⏳ Lade Pokedex Liste von PokeAPI...");
+    debugPrint("⏳ Loading Pokédex list from PokéAPI...");
 
     try {
-      // 2. API Abfragen (limit=2000 holt alle auf einmal)
+      // 2. Fetch all species entries in a single request
       final response = await http.get(Uri.parse('https://pokeapi.co/api/v2/pokemon?limit=2000'));
       
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
-        
-        // WICHTIG: Die Liste steckt im Feld 'results'
         final List<dynamic> results = data['results'];
-        
         final List<PokedexCompanion> inserts = [];
 
-        // 3. Daten verarbeiten
-        for (var item in results) {
+        // 3. Process entries and extract numeric species IDs
+        for (final item in results) {
           final String rawName = item['name'];
-          final String url = item['url']; // z.B. "https://pokeapi.co/api/v2/pokemon/1/"
+          final String url = item['url'];
 
-          // ID aus der URL extrahieren
-          // Wir splitten bei '/' und nehmen das vorletzte Element (das ist die ID)
           final uriSegments = Uri.parse(url).pathSegments;
-          // pathSegments bei '.../pokemon/1/' ist ['api', 'v2', 'pokemon', '1', '']
-          // Die ID ist das vorletzte Element, wenn man die leeren ignoriert, oder IndexWhere.
-          // Sicherer Weg:
           final idString = uriSegments.where((s) => s.isNotEmpty).last;
           final id = int.tryParse(idString);
 
           if (id != null) {
-            // Name formatieren: "bulbasaur" -> "Bulbasaur"
             final formattedName = rawName[0].toUpperCase() + rawName.substring(1);
-
             inserts.add(PokedexCompanion(
               id: Value(id),
               name: Value(formattedName),
@@ -58,28 +54,29 @@ class PokedexImporter {
           }
         }
 
-        // 4. In Datenbank schreiben (Batch)
+        // 4. Batch insert into SQLite database
         if (inserts.isNotEmpty) {
           await db.batch((batch) {
             batch.insertAllOnConflictUpdate(db.pokedex, inserts);
           });
-          debugPrint("✅ ${inserts.length} Pokémon erfolgreich importiert!");
+          debugPrint("✅ Successfully imported ${inserts.length} Pokémon.");
         }
-        
       } else {
-        debugPrint("❌ API Fehler: ${response.statusCode}");
+        debugPrint("❌ PokéAPI error: ${response.statusCode}");
       }
     } catch (e) {
-      debugPrint("❌ Fehler beim Pokedex Import: $e");
+      debugPrint("❌ Error during Pokédex import: $e");
     }
   }
 
-  // --- NEU: Baut das deutsch-englische Wörterbuch auf! ---
+  /// Builds the localized German species dictionary from PokéAPI species endpoints.
+  ///
+  /// Processes missing translations in parallel batches of 20 to prevent rate limiting.
   Future<void> buildTranslationDictionary({Function(String status)? onProgress}) async {
     onProgress?.call("Lade Pokedex-Daten aus der Datenbank...");
     final allDex = await db.select(db.pokedex).get();
     
-    // Filtere alle raus, die noch keinen deutschen Namen haben
+    // Filter species records that lack German translations
     final missingTranslations = allDex.where((p) => p.nameDe == null || p.nameDe!.isEmpty).toList();
     
     if (missingTranslations.isEmpty) {
@@ -89,11 +86,11 @@ class PokedexImporter {
 
     int current = 0;
     final int total = missingTranslations.length;
-    List<PokedexCompanion> updates = [];
+    final List<PokedexCompanion> updates = [];
 
     onProgress?.call("Lade $total deutsche Namen von PokeAPI herunter...");
 
-    // Wir holen sie in 20er-Batches, um die API nicht abzuschießen und Zeit zu sparen
+    // Query in 20-item chunks to avoid HTTP timeouts and rate limits
     for (int i = 0; i < total; i += 20) {
       final end = (i + 20 < total) ? i + 20 : total;
       final batch = missingTranslations.sublist(i, end);
@@ -104,19 +101,18 @@ class PokedexImporter {
           if (res.statusCode == 200) {
             final data = json.decode(res.body);
             final names = data['names'] as List;
-            // Suche den deutschen Namen ("language": {"name": "de"})
             final deNameObj = names.firstWhere((n) => n['language']['name'] == 'de', orElse: () => null);
             
             if (deNameObj != null) {
               return PokedexCompanion(
                 id: Value(pokemon.id),
-                name: Value(pokemon.name), // <--- DIESE ZEILE HINZUFÜGEN!
+                name: Value(pokemon.name),
                 nameDe: Value(deNameObj['name']),
               );
             }
           }
         } catch (e) {
-          debugPrint("Fehler bei ${pokemon.name}: $e");
+          debugPrint("Error fetching German name for ${pokemon.name}: $e");
         }
         return null;
       });

@@ -10,7 +10,7 @@ import '../../data/sync/pokedex_importer.dart';
 import '../../data/database/database_provider.dart';
 import 'scanner/scanner_screen.dart'; 
 
-// Wir brauchen Keys, um den Status der Navigatoren zu speichern
+// Navigator global keys to maintain nested routing state per tab
 final _searchNavigatorKey = GlobalKey<NavigatorState>();
 final _setsNavigatorKey = GlobalKey<NavigatorState>();
 final _inventoryNavigatorKey = GlobalKey<NavigatorState>();
@@ -98,9 +98,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           ],
         ),
 
-        // --- DER SCANNER BUTTON ---
+        // Scanner floating action button
         floatingActionButton: SizedBox(
-          height: 64, // Leicht vergrößert für die perfekte Kreisform
+          height: 64, // Scaled size for circular touch target
           width: 64,
           child: FloatingActionButton(
             onPressed: _openScanner,
@@ -110,14 +110,14 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             child: const Icon(Icons.qr_code_scanner, size: 28, color: Colors.white), 
           ),
         ),
-        // --- HIER NUTZEN WIR UNSEREN NEUEN, TIEFEREN ANKERPUNKT ---
+        // Custom lowered docked anchor location
         floatingActionButtonLocation: const _LoweredCenterDockedFabLocation(),
 
-        // --- DIE BOTTOM BAR (mit Notch) ---
+        // Notched navigation bottom bar
         bottomNavigationBar: BottomAppBar(
           shape: const CircularNotchedRectangle(),
-          notchMargin: 8.0, // Die wunderschöne Lücke! (Erhöht für besseren Effekt)
-          clipBehavior: Clip.antiAlias, // WICHTIG: Schneidet die Ecken wirklich physisch ab!
+          notchMargin: 8.0, // Floating action button cutout margin
+          clipBehavior: Clip.antiAlias, // Antialiased corner clipping
           color: theme.colorScheme.surface,
           elevation: 16,
           child: SizedBox(
@@ -134,7 +134,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 48), // Platz für den Button
+                const SizedBox(width: 48), // Spacing for floating action button
                 Expanded(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -208,21 +208,19 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 }
 
-// =========================================================================
-// EIGENE KLASSE UM DEN BUTTON TIEFER ZU SETZEN
-// =========================================================================
+// Custom FAB location provider to position scanner button deeper into notch
 class _LoweredCenterDockedFabLocation extends FloatingActionButtonLocation {
   const _LoweredCenterDockedFabLocation();
 
   @override
   Offset getOffset(ScaffoldPrelayoutGeometry scaffoldGeometry) {
-    // 1. Die Mitte des Bildschirms berechnen
+    // 1. Calculate horizontal center
     final double fabX = (scaffoldGeometry.scaffoldSize.width - scaffoldGeometry.floatingActionButtonSize.width) / 2.0;
     
-    // 2. Standard-Docked-Höhe berechnen
+    // 2. Calculate baseline docked vertical position
     final double standardY = scaffoldGeometry.contentBottom - (scaffoldGeometry.floatingActionButtonSize.height / 2.0);
     
-    // 3. Den Button um 12 Pixel tiefer setzen! (Kannst du anpassen, wenn er noch tiefer soll)
+    // 3. Offset button downwards into the notch
     final double fabY = standardY + 24.0; 
     
     return Offset(fabX, fabY);
