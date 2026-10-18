@@ -16,8 +16,9 @@ class PokedexImporter {
   ///
   /// Early returns if the local Pokédex already contains over 1,000 entries.
   Future<void> syncPokedex() async {
-    // 1. Check if Pokédex data already exists locally
-    final count = await db.select(db.pokedex).get().then((l) => l.length);
+    // 1. Check if Pokédex data already exists locally with lightweight COUNT query
+    final countRow = await db.customSelect('SELECT COUNT(*) AS c FROM pokedex').getSingle();
+    final count = countRow.read<int>('c');
     
     // Skip remote download if database already populated
     if (count > 1000) {

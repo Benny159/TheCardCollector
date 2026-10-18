@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Note: 'hide Card' avoids name clashes with the Flutter Card widget
@@ -16,6 +17,7 @@ import 'package:drift/drift.dart' hide Column;
 import '../../data/database/database_provider.dart';
 import '../../data/api/search_provider.dart'; 
 import '../../domain/logic/binder_service.dart'; // Used for live recalculations
+import '../../domain/services/offline_sync_service.dart';
 
 import '../admin/admin_dashboard_screen.dart'; 
 
@@ -48,6 +50,19 @@ class AppDrawer extends ConsumerWidget {
             title: const Text("Backup laden (Import)"),
             subtitle: const Text("Sammlung wiederherstellen"),
             onTap: () => _importData(context, ref),
+          ),
+          
+          ListTile(
+            leading: const Icon(Icons.download_for_offline, color: Colors.orange),
+            title: const Text("Offline-Cache synchronisieren"),
+            subtitle: const Text("Bilder für Sammlung & Binder herunterladen"),
+            onTap: () => _syncOfflineCache(context, ref),
+          ),
+          ListTile(
+            leading: const Icon(Icons.storage, color: Colors.teal),
+            title: const Text("SQLite-Datenbank exportieren"),
+            subtitle: const Text("tcg_collector.sqlite Datei teilen"),
+            onTap: () => _exportDatabaseFile(context, ref),
           ),
           
           const Divider(),
@@ -289,5 +304,56 @@ class AppDrawer extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _syncOfflineCache(BuildContext context, WidgetRef ref) async {
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Starte Download aller Kartenbilder für deine Sammlung & Binder..."),
+        duration: Duration(seconds: 3),
+      ),
+    );
+
+    await ref.read(offlineSyncProgressProvider.notifier).syncCollectionAndBinders();
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("✅ Alle Karten deiner Sammlung und Binder sind jetzt dauerhaft offline verfügbar!"),
+          backgroundColor: Colors.green[700],
+        ),
+      );
+    }
+  }
+
+  Future<void> _exportDatabaseFile(BuildContext context, WidgetRef ref) async {
+    try {
+      final db = ref.read(databaseProvider);
+      // Flush WAL journal into the main sqlite file
+      await db.customStatement('PRAGMA wal_checkpoint(FULL);');
+
+      final dbFolder = await getApplicationDocumentsDirectory();
+      final file = File(p.join(dbFolder.path, 'tcg_collector.sqlite'));
+
+      if (!await file.exists()) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("❌ Keine Datenbankdatei gefunden!"), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
+
+      final xFile = XFile(file.path);
+      await Share.shareXFiles([xFile], text: 'tcg_collector.sqlite');
+      if (context.mounted) Navigator.pop(context);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❌ Fehler beim Export: $e"), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }

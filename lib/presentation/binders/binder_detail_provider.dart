@@ -100,9 +100,14 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
     List<CustomCardPrice> customPrices = []; 
     
     if (cardIds.isNotEmpty) {
-      cmPrices = await (db.select(db.cardMarketPrices)..where((t) => t.cardId.isIn(cardIds))).get();
-      tcgPrices = await (db.select(db.tcgPlayerPrices)..where((t) => t.cardId.isIn(cardIds))).get();
-      customPrices = await (db.select(db.customCardPrices)..where((t) => t.cardId.isIn(cardIds))).get(); 
+      final priceResults = await Future.wait([
+        (db.select(db.cardMarketPrices)..where((t) => t.cardId.isIn(cardIds))).get(),
+        (db.select(db.tcgPlayerPrices)..where((t) => t.cardId.isIn(cardIds))).get(),
+        (db.select(db.customCardPrices)..where((t) => t.cardId.isIn(cardIds))).get(),
+      ]);
+      cmPrices = priceResults[0] as List<CardMarketPrice>;
+      tcgPrices = priceResults[1] as List<TcgPlayerPrice>;
+      customPrices = priceResults[2] as List<CustomCardPrice>;
     }
 
     final cmMap = <String, CardMarketPrice>{};

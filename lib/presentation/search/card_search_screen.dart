@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../core/cache/app_image_cache_manager.dart';
 import '../../data/database/database_provider.dart';
 import '../../data/database/app_database.dart' as db;
 import '../../data/api/search_provider.dart';
@@ -561,6 +562,7 @@ class _DashboardView extends ConsumerWidget {
                             tag:
                                 "top10_${showPerformance ? 'perf' : 'val'}_${item.card.id}_$index",
                             child: CachedNetworkImage(
+                              cacheManager: AppImageCacheManager.instance,
                               imageUrl: displayImage,
                               memCacheWidth: 200,
                               fadeOutDuration:

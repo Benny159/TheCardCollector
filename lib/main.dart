@@ -10,6 +10,8 @@ import 'data/database/database_provider.dart';
 import 'data/database/database_initializer.dart';
 import 'presentation/main_screen.dart'; 
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 // Entry point configured as asynchronous for database initialization.
 void main() async {
   // Ensures Flutter widget binding is initialized before asynchronous services start.
@@ -19,13 +21,6 @@ void main() async {
 
   // 1. Initialize local database
   final database = AppDatabase();
-
-  // Seed initial mappings if empty in the background
-  final initializer = DatabaseInitializer(database);
-  await initializer.seedInitialMappings();
-  // Delete legacy sets according to new references
-  //await initializer.cleanUpOldSets(['mcd22']);
-  // -------------------------------------------------------
 
   runApp(
     // Wrap application in DevicePreview for desktop simulation
@@ -39,6 +34,21 @@ void main() async {
       ),
     ),
   );
+
+  // Background non-blocking initialization after first frame is displayed
+  Future.microtask(() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      const currentSeedVersion = 1;
+      if (prefs.getInt('mappings_seed_version') != currentSeedVersion) {
+        final initializer = DatabaseInitializer(database);
+        await initializer.seedInitialMappings();
+        await prefs.setInt('mappings_seed_version', currentSeedVersion);
+      }
+    } catch (e) {
+      debugPrint('Background mappings seeding notice: $e');
+    }
+  });
 }
 
 class TcgCollectorApp extends StatelessWidget {

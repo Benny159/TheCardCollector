@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/cache/app_image_cache_manager.dart';
 import '../../../data/api/search_provider.dart';
 import '../../../data/api/tcgdex_api_client.dart';
 import '../../../data/database/database_provider.dart';
@@ -50,6 +51,7 @@ class SetCardTile extends ConsumerWidget {
                       padding: const EdgeInsets.all(16.0),
                       child: logoUrl != null 
                           ? CachedNetworkImage(
+                              cacheManager: AppImageCacheManager.instance,
                               imageUrl: logoUrl,
                               memCacheHeight: 200,
                               fit: BoxFit.contain,

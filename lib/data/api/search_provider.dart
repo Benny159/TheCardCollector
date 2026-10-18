@@ -511,6 +511,24 @@ final inventoryProvider = FutureProvider<List<InventoryItem>>((ref) async {
   final latestTcgPriceMap = _getLatestTcgPrices(allTcgPrices);
   final latestCustomPriceMap = _getLatestCustomPrices(allCustomPrices);
 
+  // Pre-index binder allocations in O(M) before row iteration (Eliminates O(N*M) lag)
+  final Map<int, Map<String, int>> bindersByUserCardId = {};
+  final Map<String, Map<String, int>> bindersByCardAndVariant = {};
+
+  for (final bRow in binderRows) {
+    final bc = bRow.readTable(db.binderCards);
+    final b = bRow.readTable(db.binders);
+    if (bc.userCardId != null) {
+      final m = bindersByUserCardId.putIfAbsent(bc.userCardId!, () => {});
+      m[b.name] = (m[b.name] ?? 0) + 1;
+    }
+    if (bc.cardId != null && bc.variant != null) {
+      final key = '${bc.cardId}_${bc.variant}';
+      final m = bindersByCardAndVariant.putIfAbsent(key, () => {});
+      m[b.name] = (m[b.name] ?? 0) + 1;
+    }
+  }
+
   List<InventoryItem> inventoryItems = [];
 
   // Assemble InventoryItem models in memory
@@ -619,16 +637,10 @@ final inventoryProvider = FutureProvider<List<InventoryItem>>((ref) async {
     }
     final double itemPerformance = (singlePrice - purchasePrice);
 
-    // In-memory binder allocation matching
-    final Map<String, int> bindersForThisCard = {};
-    for (final bRow in binderRows) {
-      final bc = bRow.readTable(db.binderCards);
-      final b = bRow.readTable(db.binders);
-      if (bc.userCardId == userCard.id ||
-          (bc.cardId == cardId && bc.variant == userCard.variant)) {
-        bindersForThisCard[b.name] = (bindersForThisCard[b.name] ?? 0) + 1;
-      }
-    }
+    // Fast O(1) in-memory binder allocation resolution
+    final Map<String, int> bindersForThisCard = bindersByUserCardId[userCard.id] ??
+        bindersByCardAndVariant['${cardId}_${userCard.variant}'] ??
+        const {};
 
     int totalInBinders = 0;
     for (final entry in bindersForThisCard.entries) {
@@ -780,16 +792,26 @@ final portfolioHistoryProvider =
 });
 
 /// Computes and persists a portfolio valuation snapshot for today's date.
-Future<void> createPortfolioSnapshot(WidgetRef ref) async {
+Future<void> createPortfolioSnapshot(WidgetRef ref, {bool force = false}) async {
   try {
     final db = ref.read(databaseProvider);
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+
+    if (!force) {
+      final existing = await (db.select(db.portfolioHistory)
+            ..where((t) => t.date.equals(todayDate)))
+          .getSingleOrNull();
+      if (existing != null) {
+        // Daily snapshot already exists, skip heavy inventory calculation on startup
+        return;
+      }
+    }
+
     final items = await ref.read(inventoryProvider.future);
 
     final double currentTotal =
         items.fold(0.0, (sum, item) => sum + item.totalValue);
-
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
 
     final existingEntry = await (db.select(db.portfolioHistory)
           ..where((t) => t.date.equals(todayDate)))

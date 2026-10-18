@@ -258,20 +258,23 @@ class _BinderCard extends ConsumerWidget {
     final isBulkBox = binder.rowsPerPage == 0 || binder.columnsPerPage == 0;
     final shape = binder.icon ?? 'box'; // 'etb', 'tin', 'box'
 
-    return GestureDetector(
-      onTap: () {
-        if (isBulkBox) {
-          Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => BulkBoxDetailScreen(binder: binder)));
-        } else {
-          Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => BinderDetailScreen(binder: binder)));
-        }
-      },
+    return MouseRegion(
+      onEnter: (_) => ref.read(binderDetailProvider(binder.id)),
+      child: GestureDetector(
+        onTapDown: (_) => ref.read(binderDetailProvider(binder.id)),
+        onTap: () {
+          if (isBulkBox) {
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => BulkBoxDetailScreen(binder: binder)));
+          } else {
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => BinderDetailScreen(binder: binder)));
+          }
+        },
       child: Container(
         decoration: BoxDecoration(
           color: color,
@@ -494,6 +497,7 @@ class _BinderCard extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

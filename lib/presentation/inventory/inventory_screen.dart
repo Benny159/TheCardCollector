@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
 
+import '../../core/cache/app_image_cache_manager.dart';
 import '../../data/api/search_provider.dart';
 import 'widgets/inventory_card_tile.dart';
 
@@ -490,6 +491,7 @@ class InventoryScreen extends ConsumerWidget {
                         height: 30,
                         child: apiSet.logoUrl != null
                             ? CachedNetworkImage(
+                                cacheManager: AppImageCacheManager.instance,
                                 imageUrl: apiSet.logoUrl!,
                                 memCacheHeight: 200,
                                 fit: BoxFit.contain,

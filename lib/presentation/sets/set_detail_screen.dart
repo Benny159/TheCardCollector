@@ -2,9 +2,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/cache/app_image_cache_manager.dart';
 import '../../data/api/search_provider.dart';
 import '../../domain/models/api_card.dart';
 import '../../domain/models/api_set.dart';
+import '../../domain/services/offline_sync_service.dart';
 import '../cards/card_detail_screen.dart';
 import '../inventory/inventory_bottom_sheet.dart';
 
@@ -44,11 +46,46 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
   Widget build(BuildContext context) {
     // Observe cards provider (Riverpod caches query results)
     final cardsAsync = ref.watch(cardsForSetProvider(widget.set.id));
+    final syncProgress = ref.watch(offlineSyncProgressProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.set.nameDe ?? widget.set.name),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: syncProgress.isSyncing && syncProgress.currentTask == (widget.set.nameDe ?? widget.set.name)
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.redAccent),
+                  )
+                : const Icon(Icons.download_for_offline_outlined),
+            tooltip: "Set für Offline-Nutzung herunterladen",
+            onPressed: syncProgress.isSyncing
+                ? null
+                : () async {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("Lade Kartenbilder für '${widget.set.nameDe ?? widget.set.name}' herunter..."),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                    await ref.read(offlineSyncProgressProvider.notifier).syncSet(
+                          widget.set.id,
+                          widget.set.nameDe ?? widget.set.name,
+                        );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text("Alle Bilder für '${widget.set.nameDe ?? widget.set.name}' sind jetzt offline verfügbar!"),
+                          backgroundColor: Colors.green[700],
+                        ),
+                      );
+                    }
+                  },
+          ),
+        ],
       ),
       body: cardsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -531,13 +568,35 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                   );
                 },
                 child: CachedNetworkImage(
+                  cacheManager: AppImageCacheManager.instance,
                   imageUrl: imageUrl,
                   memCacheHeight: 200,
                   width: 160,
                   placeholder: (context, url) =>
                       Container(color: Colors.grey[200]),
-                  errorWidget: (context, url, error) => const Center(
-                      child: Icon(Icons.broken_image, color: Colors.grey)),
+                  errorWidget: (context, url, error) => Container(
+                    color: Colors.blueGrey[900],
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.all(4),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.style, color: Colors.amber, size: 24),
+                        const SizedBox(height: 2),
+                        Text(
+                          card.nameDe ?? card.name,
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          "#${card.number}",
+                          style: const TextStyle(color: Colors.white70, fontSize: 8),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               )
             else

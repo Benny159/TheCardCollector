@@ -149,60 +149,15 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                 final int totalPages =
                     (state.slots.length / itemsPerPage).ceil();
 
-                List<Widget> pages = [];
-                for (int i = 0; i < totalPages; i++) {
-                  final start = i * itemsPerPage;
-                  final end = (start + itemsPerPage < state.slots.length)
-                      ? start + itemsPerPage
-                      : state.slots.length;
-
-                  final pageSlots = state.slots.sublist(start, end);
-
-                  pages.add(
-                    Container(
-                      color: const Color(0xFFFDFDFD),
-                      child: BinderPageWidget(
-                        slots: pageSlots,
-                        rows: widget.binder.rowsPerPage,
-                        cols: widget.binder.columnsPerPage,
-                        pageNumber: i,
-                        totalPages: totalPages,
-                        onSlotTap: (slot) => _handleSlotTap(slot),
-                        onSlotLongPress: (slot) => _handleSlotLongPress(slot),
-                        isSwapMode: _isSwapMode,
-                        slotToSwapId:
-                            _highlightedSlotId ?? _slotToSwap?.binderCard.id,
-                        showOverlays:
-                            _showSlotOverlays, // Pass overlay visibility to page
-                        onNextPage: () {
-                          FocusScope.of(context).unfocus();
-                          if (_currentIndex < totalPages - 1) {
-                            _pageController.nextPage(
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut);
-                          }
-                        },
-                        onPrevPage: () {
-                          FocusScope.of(context).unfocus();
-                          if (_currentIndex > 0) {
-                            _pageController.previousPage(
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut);
-                          }
-                        },
-                      ),
-                    ),
-                  );
-                }
-
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.only(
                         left: 0, top: 20, right: 0, bottom: 100),
                     child: AspectRatio(
                       aspectRatio: 0.65,
-                      child: PageView(
+                      child: PageView.builder(
                         controller: _pageController,
+                        itemCount: totalPages + 1,
                         scrollBehavior:
                             ScrollConfiguration.of(context).copyWith(
                           dragDevices: {
@@ -213,13 +168,54 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                         onPageChanged: (index) {
                           _currentIndex = index;
                         },
-                        children: [
-                          ...pages,
-                          Container(
+                        itemBuilder: (context, i) {
+                          if (i == totalPages) {
+                            return Container(
                               color: Colors.white,
-                              child:
-                                  const Center(child: Text("Ende des Binders")))
-                        ],
+                              child: const Center(child: Text("Ende des Binders")),
+                            );
+                          }
+
+                          final start = i * itemsPerPage;
+                          final end = (start + itemsPerPage < state.slots.length)
+                              ? start + itemsPerPage
+                              : state.slots.length;
+                          final pageSlots = state.slots.sublist(start, end);
+
+                          return Container(
+                            color: const Color(0xFFFDFDFD),
+                            child: BinderPageWidget(
+                              slots: pageSlots,
+                              rows: widget.binder.rowsPerPage,
+                              cols: widget.binder.columnsPerPage,
+                              pageNumber: i,
+                              totalPages: totalPages,
+                              onSlotTap: (slot) => _handleSlotTap(slot),
+                              onSlotLongPress: (slot) => _handleSlotLongPress(slot),
+                              isSwapMode: _isSwapMode,
+                              slotToSwapId:
+                                  _highlightedSlotId ?? _slotToSwap?.binderCard.id,
+                              showOverlays:
+                                  _showSlotOverlays,
+                              onNextPage: () {
+                                FocusScope.of(context).unfocus();
+                                if (_currentIndex < totalPages - 1) {
+                                  _pageController.nextPage(
+                                      duration: const Duration(milliseconds: 300),
+                                      curve: Curves.easeInOut);
+                                }
+                              },
+                              onPrevPage: () {
+                                FocusScope.of(context).unfocus();
+                                if (_currentIndex > 0) {
+                                  _pageController.previousPage(
+                                      duration: const Duration(milliseconds: 300),
+                                      curve: Curves.easeInOut);
+                                }
+                              },
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),

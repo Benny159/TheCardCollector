@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:intl/intl.dart';
 
+import '../../core/cache/app_image_cache_manager.dart';
 import '../../data/api/search_provider.dart';
 import '../../data/api/tcgdex_api_client.dart';
 import '../../data/database/app_database.dart';
@@ -220,6 +221,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
                                 child: CachedNetworkImage(
+                                  cacheManager: AppImageCacheManager.instance,
                                   imageUrl: displayImage,
                                   memCacheHeight: 400,
                                   fit: BoxFit.contain,
@@ -227,11 +229,31 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                                       aspectRatio: 0.7,
                                       child: Center(
                                           child: CircularProgressIndicator())),
-                                  errorWidget: (_, __, ___) =>
-                                      const AspectRatio(
-                                          aspectRatio: 0.7,
-                                          child: Icon(Icons.broken_image,
-                                              color: Colors.grey)),
+                                  errorWidget: (_, __, ___) => AspectRatio(
+                                    aspectRatio: 0.7,
+                                    child: Container(
+                                      color: Colors.blueGrey[900],
+                                      alignment: Alignment.center,
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(Icons.style, color: Colors.amber, size: 36),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            widget.card.nameDe ?? widget.card.name,
+                                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                            textAlign: TextAlign.center,
+                                            maxLines: 2,
+                                          ),
+                                          Text(
+                                            "#${widget.card.number}",
+                                            style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -675,6 +697,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                   height: 40,
                   width: 80,
                   child: CachedNetworkImage(
+                      cacheManager: AppImageCacheManager.instance,
                       imageUrl: logo,
                       memCacheHeight: 400,
                       fit: BoxFit.contain,
@@ -1339,6 +1362,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
             body: Center(
                 child: InteractiveViewer(
                     child: CachedNetworkImage(
+                        cacheManager: AppImageCacheManager.instance,
                         imageUrl: imageUrl,
                         memCacheHeight: 1200,
                         fit: BoxFit.contain,

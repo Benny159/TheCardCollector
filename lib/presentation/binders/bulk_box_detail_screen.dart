@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drift/drift.dart' as drift;
+import '../../core/cache/app_image_cache_manager.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
 import '../../domain/logic/binder_service.dart';
@@ -223,6 +224,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                   borderRadius: BorderRadius.circular(4)),
               child: card != null
                   ? CachedNetworkImage(
+                      cacheManager: AppImageCacheManager.instance,
                       imageUrl: card.imageUrl,
                       memCacheHeight: 200,
                       fit: BoxFit.contain,

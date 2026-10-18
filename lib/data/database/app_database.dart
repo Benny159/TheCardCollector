@@ -68,7 +68,20 @@ class AppDatabase extends _$AppDatabase {
         }
       },
       beforeOpen: (details) async {
-        await customStatement('PRAGMA foreign_keys = ON');
+        await customStatement('PRAGMA foreign_keys = ON;');
+        await customStatement('PRAGMA journal_mode = WAL;');
+        await customStatement('PRAGMA synchronous = NORMAL;');
+        await customStatement('PRAGMA cache_size = -64000;');
+        await customStatement('PRAGMA temp_store = MEMORY;');
+        await customStatement('PRAGMA mmap_size = 268435456;');
+
+        // Critical performance indexes (applied safely if missing)
+        await customStatement('CREATE INDEX IF NOT EXISTS idx_binder_cards_sort ON binder_cards(binder_id, page_index, slot_index);');
+        await customStatement('CREATE INDEX IF NOT EXISTS idx_binder_cards_cardid ON binder_cards(card_id);');
+        await customStatement('CREATE INDEX IF NOT EXISTS idx_binder_cards_usercardid ON binder_cards(user_card_id);');
+        await customStatement('CREATE INDEX IF NOT EXISTS idx_cmprices_card_date ON card_market_prices(card_id, fetched_at DESC);');
+        await customStatement('CREATE INDEX IF NOT EXISTS idx_tcgprices_card_date ON tcg_player_prices(card_id, fetched_at DESC);');
+        await customStatement('CREATE INDEX IF NOT EXISTS idx_customprices_card_date ON custom_card_prices(card_id, fetched_at DESC);');
       },
     );
   }

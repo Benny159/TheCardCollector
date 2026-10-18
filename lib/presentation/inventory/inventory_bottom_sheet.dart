@@ -849,7 +849,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
       ));
     }
 
-    createPortfolioSnapshot(ref);
+    createPortfolioSnapshot(ref, force: true);
     _refreshProviders();
   }
 
