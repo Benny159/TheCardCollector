@@ -1,12 +1,20 @@
 import 'package:drift/drift.dart';
 import '../../data/database/app_database.dart';
 import '../models/binder_templates.dart';
+import 'price_calculator.dart';
 
+/// Core domain service responsible for binder creation, slot calculation,
+/// card placement, bulk box assignments, and collection value aggregation.
 class BinderService {
   final AppDatabase db;
+  final PriceCalculator _priceCalculator = const PriceCalculator();
 
   BinderService(this.db);
 
+  /// Creates a new binder entity in the database and generates its initial grid slots.
+  ///
+  /// Populates slots based on the provided [type], dimensions ([rows] x [cols]),
+  /// [sortOrder], and optional Pokédex/set filters.
   Future<void> createBinder({
     required String name,
     required int color,
@@ -489,6 +497,7 @@ class BinderService {
 
   // --- STANDARD HILFSFUNKTIONEN (Bleiben gleich) ---
 
+  /// Deletes the binder with [binderId] and cascades removal of all associated slots.
   Future<void> deleteBinder(int binderId) async {
    await db.batch((batch) {
       batch.deleteWhere(db.binderCards, (t) => t.binderId.equals(binderId));
@@ -496,6 +505,7 @@ class BinderService {
     });
   }
 
+  /// Returns whether the user owns at least one unassigned copy of [cardId].
   Future<bool> isCardAvailable(String cardId) async {
     final userCards = await (db.select(db.userCards)..where((t) => t.cardId.equals(cardId))).get();
     int ownedQty = 0;
@@ -505,6 +515,7 @@ class BinderService {
     return ownedQty > usedCountList.length;
   }
 
+  /// Returns a list of variant names for [cardId] with unassigned copies available.
   Future<List<String>> getAvailableVariantsForCard(String cardId) async {
     final userCards = await (db.select(db.userCards)..where((t) => t.cardId.equals(cardId))).get();
     Map<String, int> inventoryCounts = {};
@@ -518,6 +529,7 @@ class BinderService {
     return inventoryCounts.entries.where((e) => e.value > 0).map((e) => e.key).toList();
   }
 
+  /// Returns the names of all physical binders currently containing [cardId].
   Future<List<String>> getBindersForCard(String cardId) async {
     final query = db.select(db.binderCards).join([innerJoin(db.binders, db.binders.id.equalsExp(db.binderCards.binderId))]);
     query.where(db.binderCards.cardId.equals(cardId) & db.binderCards.isPlaceholder.equals(false));
@@ -525,12 +537,14 @@ class BinderService {
     return rows.map((r) => r.readTable(db.binders).name).toSet().toList(); 
   }
 
+  /// Configures a planned placeholder slot with a target [newCardId] and [labelName].
   Future<void> configureSlot(int slotId, String newCardId, String labelName) async {
     await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
       BinderCardsCompanion(cardId: Value(newCardId), placeholderLabel: Value(labelName), isPlaceholder: const Value(true), variant: const Value.absent())
     );
   }
   
+  /// Assigns a user inventory card [userCardId] to the binder slot [slotId].
   Future<void> fillSlot(int slotId, String cardId, int userCardId, {String? variant}) async {
     if (!await isUserCardAvailable(userCardId)) throw Exception("Diese spezifische Karte ist nicht mehr verfügbar!");
     await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
@@ -545,6 +559,7 @@ class BinderService {
     await recalculateBinderValue(slot.binderId);
   }
 
+  /// Clears card assignment from slot [slotId] and recalculates the binder's valuation.
   Future<void> clearSlot(int slotId) async {
     await (db.update(db.binderCards)..where((t) => t.id.equals(slotId))).write(
       const BinderCardsCompanion(isPlaceholder: Value(true), variant: Value(null)),
@@ -553,6 +568,9 @@ class BinderService {
     await recalculateBinderValue(slot.binderId);
   }
 
+  /// Aggregates the total valuation of all cards in binder [binderId] using [PriceCalculator].
+  ///
+  /// Also updates or inserts the daily portfolio snapshot record for the binder.
   Future<void> recalculateBinderValue(int binderId) async {
     final slots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId) & t.isPlaceholder.equals(false))).get();
     double total = 0.0;
@@ -605,73 +623,22 @@ class BinderService {
       final customPriceRow = customMap[cardId];
 
       double singlePrice = 0.0;
-      bool baseIsHolo = !card.hasNormal && card.hasHolo;
       final variant = userCard?.variant ?? slot.variant ?? 'Normal'; 
       
-      final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
-      final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
-      final isReverse = variant == 'Reverse Holo';
-      
-      // --- WERT BERECHNUNG MIT JOKER UND SMART FALLBACK ---
+      // Calculate slot value with custom price override fallback
       if (userCard != null && userCard.customPrice != null && userCard.customPrice! > 0) {
-          singlePrice = userCard.customPrice!;
+        singlePrice = userCard.customPrice!;
       } else {
-          final pref = card.preferredPriceSource;
-          final customPrice = customPriceRow?.price;
-
-          // Hilfsfunktion: TCG Preis holen
-          double getTcg() {
-             double p = 0.0;
-             if (isReverse) {
-               p = tcgPrice?.reverseMarket ?? 0.0;
-             } else if (isHolo) {
-               p = tcgPrice?.holoMarket ?? 0.0;
-             } else {
-               p = tcgPrice?.normalMarket ?? 0.0;
-             }
-             if (p == 0.0) {
-               p = tcgPrice?.normalMarket ?? tcgPrice?.holoMarket ?? tcgPrice?.reverseMarket ?? 0.0;
-             }
-             return p;
-          }
-
-          // Hilfsfunktion: CM Preis holen
-          double getCm() {
-             double p = 0.0;
-             if (card.hasFirstEdition) {
-                p = isFirstEd ? (isHolo ? cmPrice?.trend ?? 0.0 : cmPrice?.trendHolo ?? 0.0) : (isHolo ? cmPrice?.trendHolo ?? 0.0 : cmPrice?.trend ?? 0.0);
-             } else if (isReverse) {
-                p = cmPrice?.trendReverse ?? cmPrice?.trendHolo ?? 0.0;
-             } else if (isHolo && !baseIsHolo) {
-                p = cmPrice?.trendHolo ?? 0.0;
-             } else {
-                p = cmPrice?.trend ?? 0.0;
-             }
-             if (p == 0.0) {
-               p = cmPrice?.trend ?? cmPrice?.trendHolo ?? 0.0;
-             }
-             return p;
-          }
-
-          double tcgCur = getTcg();
-          double cmCur = getCm();
-
-          if (pref == 'custom' && customPrice != null && customPrice > 0) {
-              singlePrice = customPrice;
-          } else if (pref == 'tcgplayer' && tcgCur > 0.0) {
-              singlePrice = tcgCur;
-          } else if (pref == 'cardmarket' && cmCur > 0.0) {
-              singlePrice = cmCur;
-          } else {
-              // Harter Fallback auf den ersten gefundenen, gültigen Preis
-              if (cmCur > 0.0) {
-                singlePrice = cmCur;
-              } else if (tcgCur > 0.0) {
-                singlePrice = tcgCur;
-              } else if (customPrice != null) {
-                singlePrice = customPrice;
-              }
-          }
+        singlePrice = _priceCalculator.calculateCardPrice(
+          pref: card.preferredPriceSource,
+          variant: variant,
+          hasFirstEdition: card.hasFirstEdition,
+          hasNormal: card.hasNormal,
+          hasHolo: card.hasHolo,
+          cmPrice: cmPrice,
+          tcgPrice: tcgPrice,
+          customPrice: customPriceRow?.price,
+        );
       }
       total += singlePrice;
     }
@@ -689,6 +656,7 @@ class BinderService {
     }
   }
 
+  /// Triggers full valuation recalculation across all existing binders.
   Future<void> recalculateAllBinders() async {
     final allBinders = await db.select(db.binders).get();
     for (var binder in allBinders) {
@@ -696,6 +664,7 @@ class BinderService {
     }
   }
 
+  /// Finds all binders containing [cardId] and recalculates each binder's total value.
   Future<void> recalculateBindersForCard(String cardId) async {
     // 1. Finde alle Binder, in denen diese Karte liegt
     final usedSlotsQuery = db.select(db.binderCards)..where((t) => t.cardId.equals(cardId) & t.isPlaceholder.equals(false));
@@ -714,6 +683,7 @@ class BinderService {
   // SLOT MANAGEMENT (Löschen & Einfügen per Long-Press)
   // =====================================================================
   
+  /// Inserts a new empty slot immediately to the right of [currentSlotId], shifting remaining slots forward.
   Future<void> addSlotRight(int binderId, int currentSlotId) async {
     final binder = await (db.select(db.binders)..where((t) => t.id.equals(binderId))).getSingle();
     final isBulk = binder.rowsPerPage == 0 || binder.columnsPerPage == 0;
@@ -787,6 +757,7 @@ class BinderService {
     });
   }
 
+  /// Deletes slot [slotId] and shifts all subsequent cards backwards to eliminate gaps.
   Future<void> deleteSlotAndShift(int binderId, int slotId) async {
     final binder = await (db.select(db.binders)..where((t) => t.id.equals(binderId))).getSingle();
     final isBulk = binder.rowsPerPage == 0 || binder.columnsPerPage == 0;
@@ -856,6 +827,7 @@ class BinderService {
   Future<void> moveSlotLeft(int binderId, int slotId) => _swapSlot(binderId, slotId, -1);
   Future<void> moveSlotRight(int binderId, int slotId) => _swapSlot(binderId, slotId, 1);
 
+  /// Swaps the positions and assigned card content of two slots [slotId1] and [slotId2].
   Future<void> swapTwoSlots(int binderId, int slotId1, int slotId2) async {
     if (slotId1 == slotId2) return;
     final binder = await (db.select(db.binders)..where((t) => t.id.equals(binderId))).getSingle();
@@ -974,6 +946,7 @@ class BinderService {
   // BULK BOX MANAGEMENT (Listen-Inventar, Trennkarten & SORTIERUNG)
   // =====================================================================
 
+  /// Adds a card instance to a bulk box container at the trailing slot position.
   Future<void> addCardToBulkBox(int binderId, String cardId, int userCardId, String variant) async {
     if (!await isUserCardAvailable(userCardId)) throw Exception("Diese spezifische Karte ist nicht mehr verfügbar!");
     final existingSlots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
@@ -992,6 +965,7 @@ class BinderService {
     await recalculateBinderValue(binderId);
   }
 
+  /// Inserts a section divider tab with [title] into a bulk storage box.
   Future<void> addBulkDivider(int binderId, String title) async {
     final existingSlots = await (db.select(db.binderCards)..where((t) => t.binderId.equals(binderId))).get();
     await db.into(db.binderCards).insert(
@@ -1005,6 +979,7 @@ class BinderService {
     );
   }
 
+  /// Updates whether the bulk box with [binderId] is marked as full.
   Future<void> toggleBinderFullStatus(int binderId, bool isFull) async {
     await (db.update(db.binders)..where((t) => t.id.equals(binderId))).write(BindersCompanion(isFull: Value(isFull)));
   }
@@ -1082,6 +1057,7 @@ class BinderService {
     });
   }
 
+  /// Toggles the favorite status for the binder with [binderId].
   Future<void> toggleBinderFavorite(int binderId, bool isFavorite) async {
     await (db.update(db.binders)..where((t) => t.id.equals(binderId))).write(
       BindersCompanion(isFavorite: Value(isFavorite))
@@ -1124,6 +1100,7 @@ class BinderService {
     return available;
   }
 
+  /// Returns whether a specific [userCardId] inventory record has unallocated quantity available.
   Future<bool> isUserCardAvailable(int userCardId) async {
     final uc = await (db.select(db.userCards)..where((t) => t.id.equals(userCardId))).getSingleOrNull();
     if (uc == null) return false;

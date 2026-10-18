@@ -2,29 +2,54 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
+import '../../domain/logic/price_calculator.dart';
 
+/// Data bundle for a single slot on a binder page.
 class BinderSlotData {
+  /// The slot entry in the database.
   final BinderCard binderCard; 
+
+  /// The underlying Pokémon card master data, if assigned.
   final Card? card;   
+
+  /// The user's specific collection card copy, if assigned.
   final UserCard? userCard; 
+
+  /// Effective market price for this slot.
   final double marketPrice;    
   
   BinderSlotData({required this.binderCard, this.card, this.userCard, this.marketPrice = 0.0});
 }
 
+/// Aggregated state representation of a binder's current slots and total evaluation.
 class BinderDetailState {
+  /// Ordered list of slots for the binder.
   final List<BinderSlotData> slots;
+
+  /// Aggregated financial value of cards in the binder.
   final double totalValue;
+
+  /// Total number of available pocket slots.
   final int totalSlots;
+
+  /// Number of slots filled with real cards.
   final int filledSlots;
 
   BinderDetailState({this.slots = const [], this.totalValue = 0.0, this.totalSlots = 0, this.filledSlots = 0});
 }
 
+/// Overview statistics of a binder's progress and monetary value.
 class BinderStats {
+  /// Total current market value.
   final double value;
+
+  /// Total number of slots.
   final int total;
+
+  /// Filled slot count.
   final int filled;
+
+  /// Completion percentage (0.0 to 1.0).
   double get progress => total == 0 ? 0 : filled / total;
 
   BinderStats(this.value, this.filled, this.total);
@@ -108,72 +133,22 @@ final binderDetailProvider = StreamProvider.family<BinderDetailState, int>((ref,
       if (card != null && !bc.isPlaceholder) {
         final cmPrice = cmMap[card.id];
         final tcgPrice = tcgMap[card.id];
-        
-        bool baseIsHolo = !card.hasNormal && card.hasHolo;
         final variant = userCard?.variant ?? bc.variant ?? 'Normal';
-        
-        final isFirstEd = variant.toLowerCase().contains('1st') || variant.toLowerCase().contains('first');
-        final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
-        final isReverse = variant == 'Reverse Holo';
-        
-final pref = card.preferredPriceSource;
         final customPrice = customMap[card.id]?.price; // <-- WICHTIG: Globale Custom-Preise bereitlegen!
 
-        // --- NEUE SMARTE PREIS LOGIK (Exakt wie im Search Provider) ---
         if (userCard != null && userCard.customPrice != null && userCard.customPrice! > 0) {
             price = userCard.customPrice!;
         } else {
-            // Hilfsfunktion: TCG Preis holen
-            double getTcg() {
-               double p = 0.0;
-               if (isReverse) {
-                 p = tcgPrice?.reverseMarket ?? 0.0;
-               } else if (isHolo) {
-                 p = tcgPrice?.holoMarket ?? 0.0;
-               } else {
-                 p = tcgPrice?.normalMarket ?? 0.0;
-               }
-               if (p == 0.0) {
-                 p = tcgPrice?.normalMarket ?? tcgPrice?.holoMarket ?? tcgPrice?.reverseMarket ?? 0.0;
-               }
-               return p;
-            }
-
-            // Hilfsfunktion: CM Preis holen
-            double getCm() {
-               double p = 0.0;
-               if (card.hasFirstEdition) {
-                  p = isFirstEd ? (isHolo ? cmPrice?.trend ?? 0.0 : cmPrice?.trendHolo ?? 0.0) : (isHolo ? cmPrice?.trendHolo ?? 0.0 : cmPrice?.trend ?? 0.0);
-               } else if (isReverse) {
-                  p = cmPrice?.trendReverse ?? cmPrice?.trendHolo ?? 0.0;
-               } else if (isHolo && !baseIsHolo) {
-                  p = cmPrice?.trendHolo ?? 0.0;
-               } else {
-                  p = cmPrice?.trend ?? 0.0;
-               }
-               if (p == 0.0) p = cmPrice?.trend ?? cmPrice?.trendHolo ?? 0.0;
-               return p;
-            }
-
-            double tcgCur = getTcg();
-            double cmCur = getCm();
-
-            // --- FIX: WEICHE FÜR GLOBALE CUSTOM PREISE EINGEBAUT! ---
-            if (pref == 'custom' && customPrice != null && customPrice > 0) {
-                price = customPrice;
-            } else if (pref == 'tcgplayer' && tcgCur > 0.0) {
-                price = tcgCur;
-            } else if (pref == 'cardmarket' && cmCur > 0.0) {
-                price = cmCur;
-            } else {
-                if (cmCur > 0.0) {
-                  price = cmCur;
-                } else if (tcgCur > 0.0) {
-                  price = tcgCur;
-                } else if (customPrice != null) {
-                  price = customPrice;
-                }
-            }
+            price = const PriceCalculator().calculateCardPrice(
+              pref: card.preferredPriceSource,
+              variant: variant,
+              hasFirstEdition: card.hasFirstEdition,
+              hasNormal: card.hasNormal,
+              hasHolo: card.hasHolo,
+              cmPrice: cmPrice,
+              tcgPrice: tcgPrice,
+              customPrice: customPrice,
+            );
         }
         // -------------------------------------------------------------
       }

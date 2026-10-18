@@ -17,11 +17,14 @@ import '../inventory/inventory_bottom_sheet.dart';
 import '../search/card_search_screen.dart';
 import '../sets/set_detail_screen.dart';
 import '../inventory/assign_to_binder_sheet.dart';
-import '../binders/binder_detail_screen.dart'; // NEU: Für die Navigation
 import 'price_history_chart.dart';
+import 'widgets/edit_user_card_dialog.dart';
+import 'widgets/binder_location_widget.dart';
+import '../../domain/logic/price_calculator.dart';
 
 // --- PROVIDER ---
 
+/// Ephemeral stream provider watching the user's inventory copies of a specific card.
 final cardInventoryProvider =
     StreamProvider.autoDispose.family<List<UserCard>, String>((ref, cardId) {
   final db = ref.watch(databaseProvider);
@@ -29,7 +32,7 @@ final cardInventoryProvider =
       .watch();
 });
 
-// FIX: Provider gibt jetzt echte 'Binder' Objekte zurück, statt nur Namen, damit wir dorthin navigieren können!
+/// Ephemeral stream provider watching which binders contain an assigned copy of this card.
 final cardBindersProvider =
     StreamProvider.autoDispose.family<List<Binder>, String>((ref, cardId) {
   final db = ref.watch(databaseProvider);
@@ -745,75 +748,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     if (item.customPrice != null && item.customPrice! > 0) {
       return item.customPrice!;
     }
-
-    bool baseIsHolo = !widget.card.hasNormal && widget.card.hasHolo;
-    final variant = item.variant;
-    final isFirstEd = variant.toLowerCase().contains('1st') ||
-        variant.toLowerCase().contains('first');
-    final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
-    final isReverse = variant == 'Reverse Holo';
-    final pref = _currentPreferredSource;
-
-    double getTcg() {
-      final tcg = widget.card.tcgplayer;
-      if (tcg == null) return 0.0;
-      double p = 0.0;
-      if (isReverse) {
-        p = tcg.prices?.reverseHolofoil?.market ?? 0.0;
-      } else if (isHolo) {
-        p = tcg.prices?.holofoil?.market ?? 0.0;
-      } else {
-        p = tcg.prices?.normal?.market ?? 0.0;
-      }
-      if (p == 0.0) {
-        p = tcg.prices?.normal?.market ??
-            tcg.prices?.holofoil?.market ??
-            tcg.prices?.reverseHolofoil?.market ??
-            0.0;
-      }
-      return p;
-    }
-
-    double getCm() {
-      final cm = widget.card.cardmarket;
-      if (cm == null) return 0.0;
-      double p = 0.0;
-      if (widget.card.hasFirstEdition) {
-        p = isFirstEd
-            ? (isHolo ? cm.trendPrice ?? 0.0 : cm.trendHolo ?? 0.0)
-            : (isHolo ? cm.trendHolo ?? 0.0 : cm.trendPrice ?? 0.0);
-      } else if (isReverse) {
-        p = cm.reverseHoloTrend ?? cm.trendHolo ?? 0.0;
-      } else if (isHolo && !baseIsHolo) {
-        p = cm.trendHolo ?? 0.0;
-      } else {
-        p = cm.trendPrice ?? 0.0;
-      }
-      if (p == 0.0) {
-        p = cm.trendPrice ?? cm.trendHolo ?? 0.0;
-      }
-      return p;
-    }
-
-    double tcgCur = getTcg();
-    double cmCur = getCm();
-
-    // --- FIX: Der Eigene Preis wird wieder als erstes gecheckt! ---
-    if (pref == 'custom' &&
-        _currentCustomPrice != null &&
-        _currentCustomPrice! > 0) {
-      return _currentCustomPrice!;
-    }
-    if (pref == 'tcgplayer' && tcgCur > 0.0) return tcgCur;
-    if (pref == 'cardmarket' && cmCur > 0.0) return cmCur;
-
-    if (cmCur > 0.0) return cmCur;
-    if (tcgCur > 0.0) return tcgCur;
-    if (_currentCustomPrice != null && _currentCustomPrice! > 0) {
-      return _currentCustomPrice!;
-    }
-
-    return 0.0;
+    return const PriceCalculator().calculateFromApiCard(
+      card: widget.card,
+      variant: item.variant,
+      preferredSourceOverride: _currentPreferredSource,
+      customPriceOverride: _currentCustomPrice,
+    );
   }
 
   double? _getHistoricalPrice(
@@ -823,54 +763,27 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     }
     if (historyData == null) return null;
 
-    bool baseIsHolo = !widget.card.hasNormal && widget.card.hasHolo;
     final variant = item.variant;
-    final isFirstEd = variant.toLowerCase().contains('1st') ||
-        variant.toLowerCase().contains('first');
-    final isHolo = variant.toLowerCase().contains('holo') || baseIsHolo;
-    final isReverse = variant == 'Reverse Holo';
     final pref = _currentPreferredSource;
 
-    double tcgCur = 0.0;
-    if (widget.card.tcgplayer != null) {
-      final tcg = widget.card.tcgplayer!;
-      if (isReverse) {
-        tcgCur = tcg.prices?.reverseHolofoil?.market ?? 0.0;
-      } else if (isHolo) {
-        tcgCur = tcg.prices?.holofoil?.market ?? 0.0;
-      } else {
-        tcgCur = tcg.prices?.normal?.market ?? 0.0;
-      }
-      if (tcgCur == 0.0) {
-        tcgCur = tcg.prices?.normal?.market ??
-            tcg.prices?.holofoil?.market ??
-            tcg.prices?.reverseHolofoil?.market ??
-            0.0;
-      }
-    }
+    const calculator = PriceCalculator();
+    final double tcgCur = widget.card.tcgplayer != null
+        ? calculator.calculateFromApiCard(
+            card: widget.card,
+            variant: variant,
+            preferredSourceOverride: 'tcgplayer',
+          )
+        : 0.0;
 
-    double cmCur = 0.0;
-    if (widget.card.cardmarket != null) {
-      final cm = widget.card.cardmarket!;
-      if (widget.card.hasFirstEdition) {
-        cmCur = isFirstEd
-            ? (isHolo ? cm.trendPrice ?? 0.0 : cm.trendHolo ?? 0.0)
-            : (isHolo ? cm.trendHolo ?? 0.0 : cm.trendPrice ?? 0.0);
-      } else if (isReverse) {
-        cmCur = cm.reverseHoloTrend ?? cm.trendHolo ?? 0.0;
-      } else if (isHolo && !baseIsHolo) {
-        cmCur = cm.trendHolo ?? 0.0;
-      } else {
-        cmCur = cm.trendPrice ?? 0.0;
-      }
-      if (cmCur == 0.0) {
-        cmCur = cm.trendPrice ?? cm.trendHolo ?? 0.0;
-      }
-    }
+    final double cmCur = widget.card.cardmarket != null
+        ? calculator.calculateFromApiCard(
+            card: widget.card,
+            variant: variant,
+            preferredSourceOverride: 'cardmarket',
+          )
+        : 0.0;
 
-    // Selbe Entscheidung treffen wie der Preisrechner
     String usedSource = pref;
-    // --- FIX: Auch hier den Eigenen Preis berücksichtigen! ---
     if (pref == 'custom' &&
         _currentCustomPrice != null &&
         _currentCustomPrice! > 0) {
@@ -889,7 +802,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
       }
     }
 
-    DateTime targetDate = item.createdAt;
+    final targetDate = item.createdAt;
 
     if (usedSource == 'custom') {
       final list = (historyData['custom'] as List).cast<CustomCardPrice>();
@@ -906,66 +819,24 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         closest.sort((a, b) => b.fetchedAt.compareTo(a.fetchedAt));
         return closest.first.price;
       }
-    } else if (usedSource == 'tcgplayer') {
-      final list = (historyData['tcg'] as List).cast<TcgPlayerPrice>();
-      var closest = list
-          .where((e) =>
-              e.fetchedAt.isBefore(targetDate) ||
-              e.fetchedAt.isAtSameMomentAs(targetDate))
-          .toList();
-      if (closest.isEmpty && list.isNotEmpty) {
-        list.sort((a, b) => a.fetchedAt.compareTo(b.fetchedAt));
-        closest = [list.first];
-      }
-      if (closest.isNotEmpty) {
-        closest.sort((a, b) => b.fetchedAt.compareTo(a.fetchedAt));
-        final p = closest.first;
-        double hp = 0.0;
-        if (isReverse) {
-          hp = p.reverseMarket ?? 0.0;
-        } else if (isHolo) {
-          hp = p.holoMarket ?? 0.0;
-        } else {
-          hp = p.normalMarket ?? 0.0;
-        }
-        if (hp == 0.0) {
-          hp = p.normalMarket ?? p.holoMarket ?? p.reverseMarket ?? 0.0;
-        }
-        return hp;
-      }
-    } else {
-      final list = (historyData['cm'] as List).cast<CardMarketPrice>();
-      var closest = list
-          .where((e) =>
-              e.fetchedAt.isBefore(targetDate) ||
-              e.fetchedAt.isAtSameMomentAs(targetDate))
-          .toList();
-      if (closest.isEmpty && list.isNotEmpty) {
-        list.sort((a, b) => a.fetchedAt.compareTo(b.fetchedAt));
-        closest = [list.first];
-      }
-      if (closest.isNotEmpty) {
-        closest.sort((a, b) => b.fetchedAt.compareTo(a.fetchedAt));
-        final p = closest.first;
-        double hp = 0.0;
-        if (widget.card.hasFirstEdition) {
-          if (isHolo) {
-            hp = isFirstEd ? (p.trend ?? 0.0) : (p.trendHolo ?? 0.0);
-          } else {
-            hp = isFirstEd ? (p.trendHolo ?? 0.0) : (p.trend ?? 0.0);
-          }
-        } else if (isReverse) {
-          hp = p.trendReverse ?? p.trendHolo ?? 0.0;
-        } else if (isHolo && !baseIsHolo) {
-          hp = p.trendHolo ?? 0.0;
-        } else {
-          hp = p.trend ?? 0.0;
-        }
-        if (hp == 0.0) hp = p.trend ?? p.trendHolo ?? 0.0;
-        return hp;
-      }
+      return null;
     }
-    return null;
+
+    final tcgList = (historyData['tcg'] as List).cast<TcgPlayerPrice>();
+    final cmList = (historyData['cm'] as List).cast<CardMarketPrice>();
+
+    final hp = calculator.resolveHistoricalPrice(
+      usedSource: usedSource,
+      targetDate: targetDate,
+      tcgPrices: tcgList,
+      cmPrices: cmList,
+      hasFirstEdition: widget.card.hasFirstEdition,
+      hasNormal: widget.card.hasNormal,
+      hasHolo: widget.card.hasHolo,
+      variant: variant,
+    );
+
+    return hp > 0.0 ? hp : null;
   }
 
   Widget _buildCollectionBox(BuildContext context, WidgetRef ref,
@@ -1233,298 +1104,14 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   Future<void> _editUserCard(
       BuildContext context, WidgetRef ref, UserCard item) async {
-    final priceController =
-        TextEditingController(text: item.customPrice?.toString() ?? '');
-    final scoreController =
-        TextEditingController(text: item.gradingScore ?? '');
-
-    String selectedCompany = item.gradingCompany ?? 'Kein Grading';
-    String selectedCond = item.condition;
-    String selectedLang = item.language;
-    String selectedVariant = item.variant;
-
-    DateTime selectedDate = item.createdAt;
-
-    List<String> companies = [
-      'Kein Grading',
-      'PSA',
-      'Beckett (BGS)',
-      'CGC',
-      'AP',
-      'PCA',
-      'GSG',
-      'EGS'
-    ];
-    List<String> conditions = [
-      'Mint',
-      'Near Mint',
-      'Excellent',
-      'Good',
-      'Light Played',
-      'Played',
-      'Poor'
-    ];
-    List<String> languages = [
-      'Englisch',
-      'Deutsch',
-      'Japanisch',
-      'Französisch',
-      'Italienisch',
-      'Spanisch',
-      'Koreanisch'
-    ];
-
-    if (!companies.contains(selectedCompany)) companies.add(selectedCompany);
-    if (!conditions.contains(selectedCond)) conditions.add(selectedCond);
-    if (!languages.contains(selectedLang)) languages.add(selectedLang);
-
-    List<String> validVariants = [];
-    if (widget.card.hasNormal) validVariants.add('Normal');
-    if (widget.card.hasHolo) validVariants.add('Holo');
-    if (widget.card.hasReverse) validVariants.add('Reverse Holo');
-    if (widget.card.hasFirstEdition) validVariants.add('1st Edition');
-    if (validVariants.isEmpty) validVariants.add('Normal');
-    if (!validVariants.contains(selectedVariant)) {
-      validVariants.add(selectedVariant);
-    }
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateDialog) {
-          return AlertDialog(
-            title: const Text("Inventar-Eintrag bearbeiten",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("Kartendetails",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Colors.blue)),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedVariant,
-                    decoration: InputDecoration(
-                        labelText: "Variante",
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                        isDense: true),
-                    items: validVariants
-                        .map((v) => DropdownMenuItem(
-                            value: v,
-                            child:
-                                Text(v, style: const TextStyle(fontSize: 13))))
-                        .toList(),
-                    onChanged: (val) =>
-                        setStateDialog(() => selectedVariant = val!),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: selectedLang,
-                          decoration: InputDecoration(
-                              labelText: "Sprache",
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                              isDense: true),
-                          items: languages
-                              .map((l) => DropdownMenuItem(
-                                  value: l,
-                                  child: Text(l,
-                                      style: const TextStyle(fontSize: 12))))
-                              .toList(),
-                          onChanged: (val) =>
-                              setStateDialog(() => selectedLang = val!),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: selectedCond,
-                          decoration: InputDecoration(
-                              labelText: "Zustand",
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                              isDense: true),
-                          items: conditions
-                              .map((c) => DropdownMenuItem(
-                                  value: c,
-                                  child: Text(c,
-                                      style: const TextStyle(fontSize: 12))))
-                              .toList(),
-                          onChanged: (val) =>
-                              setStateDialog(() => selectedCond = val!),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  InkWell(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime(1996),
-                        lastDate: DateTime.now(),
-                      );
-                      if (picked != null) {
-                        final newDateTime = DateTime(
-                            picked.year,
-                            picked.month,
-                            picked.day,
-                            selectedDate.hour,
-                            selectedDate.minute,
-                            selectedDate.second);
-                        setStateDialog(() => selectedDate = newDateTime);
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[400]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text("Erworben am",
-                                  style: TextStyle(
-                                      fontSize: 10, color: Colors.grey)),
-                              const SizedBox(height: 2),
-                              Text(
-                                  DateFormat('dd.MM.yyyy').format(selectedDate),
-                                  style: const TextStyle(
-                                      fontSize: 14, color: Colors.black87)),
-                            ],
-                          ),
-                          const Icon(Icons.calendar_today,
-                              size: 20, color: Colors.blue),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  const Text("Grading (Optional)",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Colors.orange)),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedCompany,
-                    decoration: InputDecoration(
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                        isDense: true),
-                    items: companies
-                        .map((c) => DropdownMenuItem(
-                            value: c,
-                            child:
-                                Text(c, style: const TextStyle(fontSize: 13))))
-                        .toList(),
-                    onChanged: (val) =>
-                        setStateDialog(() => selectedCompany = val!),
-                  ),
-                  const SizedBox(height: 10),
-                  if (selectedCompany != 'Kein Grading')
-                    TextField(
-                      controller: scoreController,
-                      decoration: InputDecoration(
-                          labelText: "Bewertung (z.B. 10, 9.5, GEM MT)",
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                          isDense: true),
-                    ),
-                  if (selectedCompany != 'Kein Grading')
-                    const SizedBox(height: 16),
-                  if (selectedCompany == 'Kein Grading')
-                    const SizedBox(height: 6),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  const Text("Individueller Wert (Optional)",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Colors.amber)),
-                  const SizedBox(height: 4),
-                  const Text(
-                      "Überschreibt alle globalen Berechnungen für diese spezifische Karte.",
-                      style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: priceController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      labelText: "Spezifischer Wert (€)",
-                      hintText: "z.B. 15.50",
-                      prefixIcon: const Icon(Icons.euro, size: 18),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                      isDense: true,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text("Abbrechen")),
-              FilledButton(
-                onPressed: () async {
-                  final db = ref.read(databaseProvider);
-                  double? newPrice = double.tryParse(
-                      priceController.text.replaceAll(',', '.'));
-
-                  String? comp = selectedCompany == 'Kein Grading'
-                      ? null
-                      : selectedCompany;
-                  String? score =
-                      comp != null ? scoreController.text.trim() : null;
-
-                  await (db.update(db.userCards)
-                        ..where((t) => t.id.equals(item.id)))
-                      .write(UserCardsCompanion(
-                    variant: drift.Value(selectedVariant),
-                    language: drift.Value(selectedLang),
-                    condition: drift.Value(selectedCond),
-                    customPrice: drift.Value(newPrice),
-                    gradingCompany: drift.Value(comp),
-                    gradingScore: drift.Value(score),
-                    createdAt: drift.Value(selectedDate),
-                  ));
-
-                  BinderService(db).recalculateBindersForCard(widget.card.id);
-
-                  if (ctx.mounted) {
-                    Navigator.pop(ctx);
-                  }
-                  if (mounted) {
-                    ref.invalidate(cardInventoryProvider(widget.card.id));
-                    ref.invalidate(inventoryProvider);
-                  }
-                },
-                child: const Text("Speichern"),
-              ),
-            ],
-          );
-        },
-      ),
+    await EditUserCardDialog.show(
+      context,
+      card: widget.card,
+      item: item,
+      onSaved: () {
+        ref.invalidate(cardInventoryProvider(widget.card.id));
+        ref.invalidate(inventoryProvider);
+      },
     );
   }
 
@@ -1765,143 +1352,6 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
       throw 'Could not launch $url';
     }
-  }
-}
-
-// Füge oben bei den imports (falls nicht da) noch das hier hinzu:
-// import 'dart:math';
-
-class _BinderTagInfo {
-  final Binder binder;
-  final int page;
-  final int row;
-  final int col;
-
-  _BinderTagInfo(this.binder, this.page, this.row, this.col);
-}
-
-// Der neue Provider lädt Binder + Slot-Informationen!
-final cardBinderDetailsProvider =
-    FutureProvider.family<List<_BinderTagInfo>, String>((ref, cardId) async {
-  final db = ref.watch(databaseProvider);
-
-  final query = db.select(db.binderCards).join([
-    drift.innerJoin(
-        db.binders, db.binders.id.equalsExp(db.binderCards.binderId))
-  ]);
-
-  query.where(db.binderCards.cardId.equals(cardId) &
-      db.binderCards.isPlaceholder.equals(false));
-
-  final rows = await query.get();
-
-  List<_BinderTagInfo> results = [];
-  for (var r in rows) {
-    final binder = r.readTable(db.binders);
-    final slot = r.readTable(db.binderCards);
-
-    // Berechnung wie beim Einsortieren
-    final page = slot.pageIndex + 1;
-    int row = 1;
-    int col = 1;
-
-    if (binder.sortOrder == 'topToBottom') {
-      row = (slot.slotIndex % binder.rowsPerPage) + 1;
-      col = (slot.slotIndex / binder.rowsPerPage).floor() + 1;
-    } else {
-      row = (slot.slotIndex / binder.columnsPerPage).floor() + 1;
-      col = (slot.slotIndex % binder.columnsPerPage) + 1;
-    }
-    results.add(_BinderTagInfo(binder, page, row, col));
-  }
-
-  return results;
-});
-
-class BinderLocationWidget extends ConsumerWidget {
-  final ApiCard card;
-  const BinderLocationWidget({required this.card, super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bindersAsync = ref.watch(cardBinderDetailsProvider(card.id));
-
-    return bindersAsync.when(
-      data: (binders) {
-        if (binders.isEmpty) return const SizedBox.shrink();
-
-        return Padding(
-          padding: const EdgeInsets.only(top: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text("Einsortiert in:",
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: binders
-                    .map((info) => InkWell(
-                          onTap: () {
-                            // Navigiere zum Binder und suche nach dieser Karte!
-                            Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) => BinderDetailScreen(
-                                        binder: info.binder,
-                                        initialSearchQuery:
-                                            card.nameDe ?? card.name)));
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 8),
-                            decoration: BoxDecoration(
-                                color: Colors.orange.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                    color:
-                                        Colors.orange.withValues(alpha: 0.3))),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.book,
-                                    size: 16, color: Colors.orange),
-                                const SizedBox(width: 8),
-                                Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(info.binder.name,
-                                          style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.orange[900])),
-                                      Text(
-                                          "S. ${info.page} • Z. ${info.row} • Sp. ${info.col}",
-                                          style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.orange[700])),
-                                    ]),
-                                const SizedBox(width: 8),
-                                const Icon(Icons.arrow_forward_ios,
-                                    size: 12, color: Colors.orange),
-                              ],
-                            ),
-                          ),
-                        ))
-                    .toList(),
-              ),
-            ],
-          ),
-        );
-      },
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
-    );
   }
 }
 
