@@ -62,17 +62,18 @@ class SetImporter {
     int skipped = 0;
 
     for (final listSet in dexSetsEn) {
-      await Future.delayed(const Duration(milliseconds: 10)); 
+      await Future.delayed(const Duration(milliseconds: 150)); 
 
       final setId = listSet['id'] as String;
       
       final serieData = listSet['serie'];
       final String serieId = (serieData is Map) ? serieData['id'] ?? '' : '';
 
-      // Skip jumbo and promotional special series
-      if (serieId == 'jumbo' || setId == 'xya' || setId == 'sp') {
+      // Skip digital Pokémon Pocket sets, jumbo, and promotional special series
+      final bool isPocketSet = serieId == 'tcgp' || setId.startsWith('A') || setId.startsWith('B') || setId == 'P-A';
+      if (isPocketSet || serieId == 'jumbo' || setId == 'xya' || setId == 'sp') {
         skipped++;
-        debugPrint('⏩ Skipping promotional/jumbo set: ${listSet['name']} ($setId)');
+        debugPrint('⏩ Skipping Pocket/digital/promotional set: ${listSet['name']} ($setId)');
         continue; 
       }
 

@@ -1,9 +1,7 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../core/cache/app_image_cache_manager.dart';
 import '../../data/database/database_provider.dart';
 import '../../data/database/app_database.dart' as db;
 import '../../data/api/search_provider.dart';
@@ -11,6 +9,7 @@ import '../../domain/models/api_card.dart';
 import '../cards/card_detail_screen.dart';
 import '../widgets/app_drawer.dart';
 import 'widgets/search_card_tile.dart';
+import '../widgets/card_image_widget.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'dart:async';
 
@@ -533,7 +532,6 @@ class _DashboardView extends ConsumerWidget {
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
-          final displayImage = item.card.displayImage;
 
           return RepaintBoundary(
             child: Container(
@@ -561,17 +559,11 @@ class _DashboardView extends ConsumerWidget {
                           Hero(
                             tag:
                                 "top10_${showPerformance ? 'perf' : 'val'}_${item.card.id}_$index",
-                            child: CachedNetworkImage(
-                              cacheManager: AppImageCacheManager.instance,
-                              imageUrl: displayImage,
+                            child: CardImageWidget.fromApiCard(
+                              card: item.card,
                               memCacheWidth: 200,
-                              fadeOutDuration:
-                                  const Duration(milliseconds: 100),
-                              fadeInDuration: const Duration(milliseconds: 100),
-                              placeholder: (context, url) =>
-                                  Container(color: Colors.grey[200]),
-                              errorWidget: (context, url, error) =>
-                                  const Icon(Icons.broken_image),
+                              fit: BoxFit.cover,
+                              placeholder: Container(color: Colors.grey[200]),
                             ),
                           ),
                           Positioned(

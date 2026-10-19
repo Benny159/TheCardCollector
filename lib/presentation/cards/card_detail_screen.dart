@@ -21,6 +21,7 @@ import '../inventory/assign_to_binder_sheet.dart';
 import 'price_history_chart.dart';
 import 'widgets/edit_user_card_dialog.dart';
 import 'widgets/binder_location_widget.dart';
+import '../widgets/card_image_widget.dart';
 import '../../domain/logic/price_calculator.dart';
 
 // --- PROVIDER ---
@@ -220,38 +221,16 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
-                                child: CachedNetworkImage(
-                                  cacheManager: AppImageCacheManager.instance,
-                                  imageUrl: displayImage,
-                                  memCacheHeight: 400,
-                                  fit: BoxFit.contain,
-                                  placeholder: (_, __) => const AspectRatio(
+                                child: AspectRatio(
+                                  aspectRatio: 0.7,
+                                  child: CardImageWidget.fromApiCard(
+                                    card: widget.card,
+                                    memCacheHeight: 400,
+                                    fit: BoxFit.contain,
+                                    placeholder: const AspectRatio(
                                       aspectRatio: 0.7,
                                       child: Center(
-                                          child: CircularProgressIndicator())),
-                                  errorWidget: (_, __, ___) => AspectRatio(
-                                    aspectRatio: 0.7,
-                                    child: Container(
-                                      color: Colors.blueGrey[900],
-                                      alignment: Alignment.center,
-                                      padding: const EdgeInsets.all(12),
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          const Icon(Icons.style, color: Colors.amber, size: 36),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            widget.card.nameDe ?? widget.card.name,
-                                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                                            textAlign: TextAlign.center,
-                                            maxLines: 2,
-                                          ),
-                                          Text(
-                                            "#${widget.card.number}",
-                                            style: const TextStyle(color: Colors.white70, fontSize: 11),
-                                          ),
-                                        ],
-                                      ),
+                                          child: CircularProgressIndicator()),
                                     ),
                                   ),
                                 ),
@@ -470,6 +449,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 tcgHistory: (data['tcg'] as List).cast<TcgPlayerPrice>(),
                 customHistory: (data['custom'] as List).cast<CustomCardPrice>(),
                 userCards: userCards.cast<UserCard>(),
+                preferredSource: _currentPreferredSource,
                 hiddenUserCardIds: _hiddenUserCardIds,
               );
             },
@@ -1361,15 +1341,14 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 iconTheme: const IconThemeData(color: Colors.white)),
             body: Center(
                 child: InteractiveViewer(
-                    child: CachedNetworkImage(
-                        cacheManager: AppImageCacheManager.instance,
-                        imageUrl: imageUrl,
-                        memCacheHeight: 1200,
-                        fit: BoxFit.contain,
-                        errorWidget: (_, __, ___) => const Icon(
-                            Icons.broken_image,
-                            size: 50,
-                            color: Colors.grey)))))));
+                    child: AspectRatio(
+                  aspectRatio: 0.7,
+                  child: CardImageWidget.fromApiCard(
+                    card: widget.card,
+                    memCacheHeight: 1200,
+                    fit: BoxFit.contain,
+                  ),
+                ))))));
   }
 
   Future<void> _launchURL(String urlString) async {

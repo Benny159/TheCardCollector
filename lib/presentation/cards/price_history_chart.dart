@@ -17,6 +17,7 @@ class PriceHistoryChart extends StatefulWidget {
   final List<TcgPlayerPrice> tcgHistory;
   final List<CustomCardPrice> customHistory;
   final List<UserCard> userCards;
+  final String? preferredSource;
 
   // Set of card copies to hide from timeline annotations
   final Set<int> hiddenUserCardIds;
@@ -27,6 +28,7 @@ class PriceHistoryChart extends StatefulWidget {
     required this.tcgHistory,
     required this.customHistory,
     this.userCards = const [],
+    this.preferredSource,
     this.hiddenUserCardIds = const {}, // Empty by default
   });
 
@@ -47,16 +49,41 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
   @override
   void didUpdateWidget(PriceHistoryChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.customHistory.length != oldWidget.customHistory.length) {
-      if (widget.customHistory.isNotEmpty) {
+    if (widget.preferredSource != oldWidget.preferredSource) {
+      _determineBestInitialType();
+    } else if (widget.customHistory.length != oldWidget.customHistory.length) {
+      if (widget.customHistory.isNotEmpty && widget.preferredSource == 'custom') {
         setState(() => _selectedType = PriceType.customPrice);
       }
     }
   }
 
   void _determineBestInitialType() {
-    if (_hasData(PriceType.customPrice)) {
+    if (widget.preferredSource == 'custom' && _hasData(PriceType.customPrice)) {
       _selectedType = PriceType.customPrice;
+      return;
+    }
+    if (widget.preferredSource == 'tcgplayer') {
+      if (_hasData(PriceType.tcgMarket)) {
+        _selectedType = PriceType.tcgMarket;
+        return;
+      }
+      if (_hasData(PriceType.tcgMarketHolo)) {
+        _selectedType = PriceType.tcgMarketHolo;
+        return;
+      }
+      if (_hasData(PriceType.tcgMarketReverse)) {
+        _selectedType = PriceType.tcgMarketReverse;
+        return;
+      }
+    }
+    // Default to CardMarket trend if available
+    if (_hasData(PriceType.cmTrend)) {
+      _selectedType = PriceType.cmTrend;
+      return;
+    }
+    if (_hasData(PriceType.cmTrendHolo)) {
+      _selectedType = PriceType.cmTrendHolo;
       return;
     }
     for (var type in PriceType.values) {

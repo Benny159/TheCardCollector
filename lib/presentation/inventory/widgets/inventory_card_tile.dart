@@ -1,11 +1,10 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
-import '../../../../core/cache/app_image_cache_manager.dart';
 import '../../../data/api/search_provider.dart';
 import '../../cards/card_detail_screen.dart';
+import '../../widgets/card_image_widget.dart';
 import '../inventory_bottom_sheet.dart';
 
 /// Presentation card tile displaying an inventory item with foil effects, grading badges, and pricing indicators.
@@ -25,7 +24,6 @@ class InventoryCardTile extends ConsumerWidget {
     final bool isGraded = item.userCard.gradingCompany != null &&
         item.userCard.gradingCompany != 'Kein Grading';
 
-    final displayImage = item.card.displayImage;
 
     // Price and performance resolution
     final double singlePrice =
@@ -84,34 +82,11 @@ class InventoryCardTile extends ConsumerWidget {
               // 1. Card artwork background
               Builder(
                 builder: (context) {
-                  final Widget imageWidget = CachedNetworkImage(
-                    cacheManager: AppImageCacheManager.instance,
-                    imageUrl: displayImage,
+                  final Widget imageWidget = CardImageWidget.fromApiCard(
+                    card: item.card,
                     memCacheHeight: 250,
                     fit: BoxFit.contain,
-                    placeholder: (context, url) => Container(color: Colors.grey[200]),
-                    errorWidget: (context, url, error) => Container(
-                      color: Colors.blueGrey[900],
-                      alignment: Alignment.center,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.style, color: Colors.amber, size: 28),
-                          const SizedBox(height: 4),
-                          Text(
-                            item.card.nameDe ?? item.card.name,
-                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            "#${item.card.number}",
-                            style: const TextStyle(color: Colors.white70, fontSize: 9),
-                          ),
-                        ],
-                      ),
-                    ),
+                    placeholder: Container(color: Colors.grey[200]),
                   );
                   if (showEffect) {
                     return HoloEffect(isReverse: isReverseHolo, child: imageWidget);

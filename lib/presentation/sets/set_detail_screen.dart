@@ -2,13 +2,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/cache/app_image_cache_manager.dart';
 import '../../data/api/search_provider.dart';
 import '../../domain/models/api_card.dart';
 import '../../domain/models/api_set.dart';
 import '../../domain/services/offline_sync_service.dart';
 import '../cards/card_detail_screen.dart';
 import '../inventory/inventory_bottom_sheet.dart';
+import '../widgets/card_image_widget.dart';
 
 // Filter enum for card ownership status
 enum OwnershipFilter { all, owned, missing }
@@ -512,9 +512,6 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
           card.tcgplayer?.prices?.reverseHolofoil?.market;
     }
 
-    final String imageUrl = card.displayImage;
-    final bool hasImage = imageUrl.isNotEmpty;
-
     return RepaintBoundary(
       child: InkWell(
         onTap: () {
@@ -536,85 +533,44 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (hasImage)
-              TweenAnimationBuilder<double>(
-                duration: const Duration(milliseconds: 300),
-                tween: Tween<double>(begin: 0, end: isOwned ? 1.0 : 0.0),
-                builder: (context, saturation, child) {
-                  return ColorFiltered(
-                    colorFilter: ColorFilter.matrix(<double>[
-                      0.2126 + 0.7874 * saturation,
-                      0.7152 - 0.7152 * saturation,
-                      0.0722 - 0.0722 * saturation,
-                      0,
-                      0,
-                      0.2126 - 0.2126 * saturation,
-                      0.7152 + 0.2848 * saturation,
-                      0.0722 - 0.0722 * saturation,
-                      0,
-                      0,
-                      0.2126 - 0.2126 * saturation,
-                      0.7152 - 0.7152 * saturation,
-                      0.0722 + 0.9278 * saturation,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                    ]),
-                    child: Opacity(opacity: isOwned ? 1.0 : 0.6, child: child),
-                  );
-                },
-                child: CachedNetworkImage(
-                  cacheManager: AppImageCacheManager.instance,
-                  imageUrl: imageUrl,
-                  memCacheHeight: 200,
-                  width: 160,
-                  placeholder: (context, url) =>
-                      Container(color: Colors.grey[200]),
-                  errorWidget: (context, url, error) => Container(
-                    color: Colors.blueGrey[900],
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.all(4),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.style, color: Colors.amber, size: 24),
-                        const SizedBox(height: 2),
-                        Text(
-                          card.nameDe ?? card.name,
-                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          "#${card.number}",
-                          style: const TextStyle(color: Colors.white70, fontSize: 8),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-            else
-              Container(
-                color: Colors.grey[300],
-                child: const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.image_not_supported_outlined,
-                          color: Colors.grey),
-                      SizedBox(height: 4),
-                      Text("Kein Bild",
-                          style: TextStyle(fontSize: 10, color: Colors.grey)),
-                    ],
-                  ),
-                ),
+            TweenAnimationBuilder<double>(
+              duration: const Duration(milliseconds: 300),
+              tween: Tween<double>(begin: 0, end: isOwned ? 1.0 : 0.0),
+              builder: (context, saturation, child) {
+                return ColorFiltered(
+                  colorFilter: ColorFilter.matrix(<double>[
+                    0.2126 + 0.7874 * saturation,
+                    0.7152 - 0.7152 * saturation,
+                    0.0722 - 0.0722 * saturation,
+                    0,
+                    0,
+                    0.2126 - 0.2126 * saturation,
+                    0.7152 + 0.2848 * saturation,
+                    0.0722 - 0.0722 * saturation,
+                    0,
+                    0,
+                    0.2126 - 0.2126 * saturation,
+                    0.7152 - 0.7152 * saturation,
+                    0.0722 + 0.9278 * saturation,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    0,
+                  ]),
+                  child: Opacity(opacity: isOwned ? 1.0 : 0.6, child: child),
+                );
+              },
+              child: CardImageWidget.fromApiCard(
+                card: card,
+                memCacheHeight: 200,
+                memCacheWidth: 160,
+                fit: BoxFit.cover,
+                placeholder: Container(color: Colors.grey[200]),
               ),
+            ),
             Positioned(
               bottom: 0,
               left: 0,

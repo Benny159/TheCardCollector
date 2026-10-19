@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drift/drift.dart' as drift;
-import '../../core/cache/app_image_cache_manager.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
 import '../../domain/logic/binder_service.dart';
@@ -11,6 +9,7 @@ import '../cards/card_detail_screen.dart';
 import '../search/card_search_screen.dart';
 import 'binder_detail_provider.dart';
 import 'widgets/binder_stats_sheet.dart';
+import '../widgets/card_image_widget.dart';
 
 class BulkBoxDetailScreen extends ConsumerStatefulWidget {
   final Binder binder;
@@ -223,18 +222,18 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                   color: Colors.grey[200],
                   borderRadius: BorderRadius.circular(4)),
               child: card != null
-                  ? CachedNetworkImage(
-                      cacheManager: AppImageCacheManager.instance,
-                      imageUrl: card.imageUrl,
-                      memCacheHeight: 200,
-                      fit: BoxFit.contain,
-                      placeholder: (context, url) => const SizedBox(),
-                      errorWidget: (context, url, error) => const Icon(
-                          Icons.broken_image,
-                          size: 20,
-                          color: Colors.grey),
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: CardImageWidget.fromDbCard(
+                        card: card,
+                        memCacheHeight: 200,
+                        fit: BoxFit.contain,
+                      ),
                     )
-                  : const Icon(Icons.credit_card, color: Colors.grey),
+                  : const CardFallbackPreview(
+                      cardName: "Keine Karte",
+                      cardNumber: "",
+                    ),
             ),
             const SizedBox(width: 12),
             Expanded(

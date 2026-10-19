@@ -1,12 +1,11 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/cache/app_image_cache_manager.dart';
 import '../../../data/api/search_provider.dart';
 import '../../../domain/models/api_card.dart';
 import '../../cards/card_detail_screen.dart';
 import '../../inventory/inventory_bottom_sheet.dart';
+import '../../widgets/card_image_widget.dart';
 
 /// Card tile widget displaying a search result card thumbnail with pricing and binder assignment badges.
 class SearchCardTile extends ConsumerWidget {
@@ -34,7 +33,6 @@ class SearchCardTile extends ConsumerWidget {
           card.tcgplayer?.prices?.reverseHolofoil?.market;
     }
 
-    final displayImage = card.displayImage;
     final binderLocationsAsync = ref.watch(cardBinderLocationProvider(card.id));
 
     return RepaintBoundary(
@@ -74,35 +72,10 @@ class SearchCardTile extends ConsumerWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              CachedNetworkImage(
-                cacheManager: AppImageCacheManager.instance,
-                imageUrl: displayImage,
+              CardImageWidget.fromApiCard(
+                card: card,
                 memCacheWidth: 200,
-                placeholder: (context, url) => Container(color: Colors.grey[200]),
-                errorWidget: (context, url, error) => Container(
-                  color: Colors.blueGrey[900],
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.all(4),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.style, color: Colors.amber, size: 24),
-                      const SizedBox(height: 2),
-                      Text(
-                        card.nameDe ?? card.name,
-                        style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        "#${card.number}",
-                        style: const TextStyle(color: Colors.white70, fontSize: 8),
-                      ),
-                    ],
-                  ),
-                ),
-                fadeInDuration: const Duration(milliseconds: 150),
+                placeholder: Container(color: Colors.grey[200]),
               ),
               binderLocationsAsync.when(
                 data: (binders) {

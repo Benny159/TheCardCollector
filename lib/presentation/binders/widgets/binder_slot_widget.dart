@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../../../../core/cache/app_image_cache_manager.dart';
-import '../../../../data/database/app_database.dart' as db;
+import '../../widgets/card_image_widget.dart';
 import '../binder_detail_provider.dart';
 
 class BinderSlotWidget extends StatelessWidget {
@@ -61,17 +59,10 @@ class BinderSlotWidget extends StatelessWidget {
                           Colors.grey, BlendMode.saturation)
                       : const ColorFilter.mode(
                           Colors.transparent, BlendMode.multiply),
-                  child: CachedNetworkImage(
-                    cacheManager: AppImageCacheManager.instance,
-                    imageUrl: card.imageUrl,
+                  child: CardImageWidget.fromDbCard(
+                    card: card,
                     fit: BoxFit.contain,
                     memCacheWidth: 250,
-                    fadeInDuration: const Duration(milliseconds: 150),
-                    fadeOutDuration: const Duration(milliseconds: 150),
-                    placeholder: (context, url) =>
-                        Container(color: Colors.transparent),
-                    errorWidget: (context, url, error) =>
-                        _buildOfflineSlotFallback(card),
                   ),
                 ),
               )
@@ -120,36 +111,6 @@ class BinderSlotWidget extends StatelessWidget {
               ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildOfflineSlotFallback(db.Card card) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.blueGrey[900],
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.amber.withValues(alpha: 0.5), width: 1),
-      ),
-      padding: const EdgeInsets.all(4),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.style, size: 20, color: Colors.amber),
-          const SizedBox(height: 2),
-          Text(
-            card.nameDe ?? card.name,
-            style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-            maxLines: 2,
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 1),
-          Text(
-            "#${card.number}",
-            style: const TextStyle(color: Colors.white70, fontSize: 7),
-          ),
-        ],
       ),
     );
   }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drift/drift.dart' as drift;
 
 import '../../data/database/database_provider.dart';
@@ -8,6 +7,7 @@ import '../../data/database/app_database.dart';
 import '../../domain/models/api_card.dart';
 import '../../domain/logic/binder_service.dart';
 import '../../data/api/search_provider.dart';
+import '../widgets/card_image_widget.dart';
 
 import 'inventory_bottom_sheet.dart' show lastSelectedBinderProvider;
 
@@ -500,18 +500,14 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
                                             color: Colors.green,
                                             fontWeight: FontWeight.bold)),
                                     const SizedBox(height: 4),
-                                    CachedNetworkImage(
-                                      imageUrl: widget.card.displayImage,
-                                      memCacheHeight: 200,
+                                    SizedBox(
                                       height: 110,
-                                      placeholder: (_, __) => const SizedBox(
-                                          height: 110,
-                                          child: Center(
-                                              child:
-                                                  CircularProgressIndicator())),
-                                      errorWidget: (_, __, ___) => const Icon(
-                                          Icons.broken_image,
-                                          size: 50),
+                                      width: 80,
+                                      child: CardImageWidget.fromApiCard(
+                                        card: widget.card,
+                                        memCacheHeight: 200,
+                                        fit: BoxFit.contain,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -582,22 +578,20 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
                                         style: const TextStyle(
                                             fontSize: 10, color: Colors.grey)),
                                     const SizedBox(height: 4),
-                                    if (oldCard != null)
-                                      CachedNetworkImage(
-                                        imageUrl: oldCard.imageUrl,
-                                        memCacheHeight: 200,
-                                        height: 110,
-                                        placeholder: (_, __) => const SizedBox(
-                                            height: 110,
-                                            child: Center(
-                                                child:
-                                                    CircularProgressIndicator())),
-                                        errorWidget: (_, __, ___) => const Icon(
-                                            Icons.broken_image,
-                                            size: 50),
-                                      )
-                                    else
-                                      const Icon(Icons.broken_image, size: 50),
+                                    SizedBox(
+                                      height: 110,
+                                      width: 80,
+                                      child: oldCard != null
+                                          ? CardImageWidget.fromDbCard(
+                                              card: oldCard,
+                                              memCacheHeight: 200,
+                                              fit: BoxFit.contain,
+                                            )
+                                          : const CardFallbackPreview(
+                                              cardName: "Keine Karte",
+                                              cardNumber: "",
+                                            ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -615,18 +609,14 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
                                             color: Colors.blue,
                                             fontWeight: FontWeight.bold)),
                                     const SizedBox(height: 4),
-                                    CachedNetworkImage(
-                                      imageUrl: widget.card.displayImage,
-                                      memCacheHeight: 200,
+                                    SizedBox(
                                       height: 110,
-                                      placeholder: (_, __) => const SizedBox(
-                                          height: 110,
-                                          child: Center(
-                                              child:
-                                                  CircularProgressIndicator())),
-                                      errorWidget: (_, __, ___) => const Icon(
-                                          Icons.broken_image,
-                                          size: 50),
+                                      width: 80,
+                                      child: CardImageWidget.fromApiCard(
+                                        card: widget.card,
+                                        memCacheHeight: 200,
+                                        fit: BoxFit.contain,
+                                      ),
                                     ),
                                   ],
                                 ),

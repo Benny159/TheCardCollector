@@ -39,7 +39,7 @@ void main() async {
   Future.microtask(() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      const currentSeedVersion = 1;
+      const currentSeedVersion = 2;
       if (prefs.getInt('mappings_seed_version') != currentSeedVersion) {
         final initializer = DatabaseInitializer(database);
         await initializer.seedInitialMappings();

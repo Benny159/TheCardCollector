@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart' hide Card;
 import '../../data/database/app_database.dart';
+import '../widgets/card_image_widget.dart';
 
 /// Presentation widget displaying the recognition results of a scanned Pokémon card.
 ///
@@ -78,16 +79,11 @@ class ScannerResultCard extends StatelessWidget {
                     aspectRatio: 0.716,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: CachedNetworkImage(
-                        imageUrl: card.imageUrlDe ?? card.imageUrl,
+                      child: CardImageWidget.fromDbCard(
+                        card: card,
                         memCacheHeight: 200,
                         fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(color: Colors.grey[200]),
-                        errorWidget: (_, __, ___) => const Icon(
-                          Icons.broken_image,
-                          size: 50,
-                          color: Colors.grey,
-                        ),
+                        placeholder: Container(color: Colors.grey[200]),
                       ),
                     ),
                   ),
@@ -178,16 +174,18 @@ class ScannerResultCard extends StatelessWidget {
                                           padding: const EdgeInsets.only(right: 8.0),
                                           child: ClipRRect(
                                             borderRadius: BorderRadius.circular(6),
-                                            child: CachedNetworkImage(
-                                              memCacheHeight: 200,
-                                              imageUrl: alt.imageUrlDe ?? alt.imageUrl,
+                                            child: SizedBox(
                                               width: 45,
                                               height: 63,
-                                              fit: BoxFit.cover,
-                                              placeholder: (_, __) => Container(
-                                                width: 45,
-                                                height: 63,
-                                                color: Colors.grey[300],
+                                              child: CardImageWidget.fromDbCard(
+                                                card: alt,
+                                                memCacheHeight: 200,
+                                                fit: BoxFit.cover,
+                                                placeholder: Container(
+                                                  width: 45,
+                                                  height: 63,
+                                                  color: Colors.grey[300],
+                                                ),
                                               ),
                                             ),
                                           ),
