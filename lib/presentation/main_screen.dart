@@ -84,7 +84,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       child: Scaffold(
         resizeToAvoidBottomInset: false,
         extendBody: true,
-        backgroundColor: Colors.white,
+        backgroundColor: theme.scaffoldBackgroundColor,
 
         drawer: const AppDrawer(),
         

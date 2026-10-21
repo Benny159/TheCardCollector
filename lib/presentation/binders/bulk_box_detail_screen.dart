@@ -159,6 +159,7 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
   // List item builder
   Widget _buildListItem(
       BinderSlotData slot, bool isDivider, bool isHighlighted) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (isDivider) {
       final title =
           slot.binderCard.placeholderLabel!.replaceAll("DIVIDER:", "");
@@ -186,7 +187,9 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                       style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: Colors.grey[800]))),
+                          color: isDark
+                              ? const Color(0xFFF1F5F9)
+                              : Colors.grey[800]))),
             ],
           ),
         ),
@@ -201,11 +204,14 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: isHighlighted
               ? Border.all(color: Colors.redAccent, width: 3)
-              : Border.all(color: Colors.grey[200]!),
+              : Border.all(
+                  color: isDark
+                      ? const Color(0xFF334155)
+                      : Colors.grey[200]!),
           boxShadow: [
             BoxShadow(
                 color: Colors.black.withValues(alpha: 0.05),
@@ -219,7 +225,9 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
               width: 50,
               height: 70,
               decoration: BoxDecoration(
-                  color: Colors.grey[200],
+                  color: isDark
+                      ? const Color(0xFF0F172A)
+                      : Colors.grey[200],
                   borderRadius: BorderRadius.circular(4)),
               child: card != null
                   ? ClipRRect(
@@ -250,11 +258,16 @@ class _BulkBoxDetailScreenState extends ConsumerState<BulkBoxDetailScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                            color: Colors.grey[200],
+                            color: isDark
+                                ? const Color(0xFF334155)
+                                : Colors.grey[200],
                             borderRadius: BorderRadius.circular(4)),
                         child: Text(slot.binderCard.variant ?? "Normal",
                             style: TextStyle(
-                                fontSize: 10, color: Colors.grey[800])),
+                                fontSize: 10,
+                                color: isDark
+                                    ? const Color(0xFFCBD5E1)
+                                    : Colors.grey[800])),
                       ),
                       const SizedBox(width: 8),
                       Text(card?.number ?? "",

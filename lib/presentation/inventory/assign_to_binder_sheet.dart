@@ -62,6 +62,9 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
     final selectedBinderId = ref.watch(lastSelectedBinderProvider);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = theme.colorScheme.primary;
 
     final bool idExists = selectedBinderId == null ||
         selectedBinderId == -1 ||
@@ -72,19 +75,21 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
     if (_ownedCards.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-        child: const Text(
-            "Du besitzt diese Karte noch nicht. Füge sie zuerst über 'Hinzufügen' zu deinem Inventar hinzu!"),
+        decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+        child: Text(
+          "Du besitzt diese Karte noch nicht. Füge sie zuerst über 'Hinzufügen' zu deinem Inventar hinzu!",
+          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+        ),
       );
     }
 
     return Container(
       padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomPadding),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -94,23 +99,26 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text("In Binder sortieren",
-                  style: Theme.of(context).textTheme.titleLarge),
-              const Icon(Icons.move_to_inbox, color: Colors.blueGrey),
+                  style: theme.textTheme.titleLarge),
+              Icon(Icons.move_to_inbox,
+                  color: isDark ? const Color(0xFF94A3B8) : Colors.blueGrey),
             ],
           ),
           const SizedBox(height: 8),
           Text(widget.card.nameDe ?? widget.card.name,
-              style: const TextStyle(color: Colors.grey)),
+              style: TextStyle(
+                  color: isDark ? const Color(0xFFCBD5E1) : Colors.grey[700])),
           const Divider(height: 24),
-          const Text("Welches Exemplar möchtest du einsortieren?",
+          Text("Welches Exemplar möchtest du einsortieren?",
               style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey,
+                  color: isDark ? const Color(0xFF94A3B8) : Colors.grey[600],
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           DropdownButtonFormField<UserCard>(
             initialValue: _selectedUserCard,
             isDense: true,
+            dropdownColor: isDark ? const Color(0xFF1E293B) : theme.cardColor,
             decoration: InputDecoration(
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -121,30 +129,38 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
               String label = "${uc.variant} (${uc.condition} • ${uc.language})";
               return DropdownMenuItem(
                   value: uc,
-                  child: Text(label, style: const TextStyle(fontSize: 13)));
+                  child: Text(label,
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? Colors.white : Colors.black87)));
             }).toList(),
             onChanged: (val) => setState(() => _selectedUserCard = val),
           ),
           const SizedBox(height: 20),
-          const Text("In welchen Binder?",
+          Text("In welchen Binder?",
               style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey,
+                  color: isDark ? const Color(0xFF94A3B8) : Colors.grey[600],
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.05),
+              color: primaryColor.withValues(alpha: isDark ? 0.12 : 0.06),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+              border: Border.all(
+                  color: primaryColor.withValues(alpha: isDark ? 0.35 : 0.25)),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<int?>(
                 value: safeBinderId,
                 isExpanded: true,
-                icon: const Icon(Icons.arrow_drop_down, color: Colors.blue),
-                style: const TextStyle(color: Colors.black87, fontSize: 14),
+                dropdownColor:
+                    isDark ? const Color(0xFF1E293B) : theme.cardColor,
+                icon: Icon(Icons.arrow_drop_down, color: primaryColor),
+                style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontSize: 14),
                 items: [
                   const DropdownMenuItem(
                       value: null, child: Text("❌ Abbrechen")),
@@ -179,7 +195,8 @@ class _AssignToBinderSheetState extends ConsumerState<AssignToBinderSheet> {
                   icon: const Icon(Icons.check_circle_outline),
                   label: const Text("Einsortieren"),
                   style: FilledButton.styleFrom(
-                      backgroundColor: Colors.blueGrey[700],
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12)),
                   onPressed: safeBinderId == null ? null : _sortIntoBinder,
                 ),

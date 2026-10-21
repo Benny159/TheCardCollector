@@ -152,12 +152,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     final displayImage = widget.card.displayImage;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         // Title styling in AppBar
         title: Text(widget.card.nameDe ?? widget.card.name,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         scrolledUnderElevation: 0,
         actions: [
           IconButton(
@@ -177,11 +177,13 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
               builder: (context) => InventoryBottomSheet(card: widget.card),
             ).then((_) => _forceRefresh());
           },
-          icon: const Icon(Icons.add_card, size: 24),
+          icon: const Icon(Icons.add_card, size: 22),
           label: const Text("Hinzufügen",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          backgroundColor: Colors.blue[800],
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          backgroundColor: Theme.of(context).colorScheme.primary,
           foregroundColor: Colors.white,
+          shape: const StadiumBorder(),
+          elevation: 4,
         ),
       ),
       body: SingleChildScrollView(
@@ -347,6 +349,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   Widget _buildTag(IconData icon, String text,
       {Color? color, VoidCallback? onTap, IconData? suffixIcon}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final content = Container(
       // Touch target padding
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -360,16 +363,19 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon,
-              size: 16, color: color ?? Colors.grey[700]), // Scaled icon
+              size: 16,
+              color: color ?? (isDark ? const Color(0xFF94A3B8) : Colors.grey[700])), // Scaled icon
           const SizedBox(width: 6),
           Text(text,
               style: TextStyle(
                   fontSize: 12,
-                  color: color ?? Colors.grey[800],
+                  color: color ?? (isDark ? Colors.white : Colors.grey[800]),
                   fontWeight: FontWeight.bold)), // Scaled font size
           if (suffixIcon != null) ...[
             const SizedBox(width: 6),
-            Icon(suffixIcon, size: 14, color: color ?? Colors.grey[700]),
+            Icon(suffixIcon,
+                size: 14,
+                color: color ?? (isDark ? const Color(0xFF94A3B8) : Colors.grey[700])),
           ]
         ],
       ),
@@ -431,9 +437,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+            border: Border.all(color: Theme.of(context).dividerColor),
             boxShadow: [
               BoxShadow(
                   color: Colors.black.withValues(alpha: 0.02),
@@ -480,7 +486,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
             color: isSelected ? color : color.withValues(alpha: 0.3),
@@ -536,18 +542,23 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
   }
 
   Widget _priceRow(String label, double price, {bool isLow = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: const TextStyle(color: Colors.black54, fontSize: 12)),
+              style: TextStyle(
+                  color: isDark ? const Color(0xFF94A3B8) : Colors.black54,
+                  fontSize: 12)),
           Text("${price.toStringAsFixed(2)} €",
               style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
-                  color: isLow ? Colors.green[700] : Colors.black)),
+                  color: isLow
+                      ? (isDark ? Colors.greenAccent : Colors.green[700])
+                      : (isDark ? Colors.white : Colors.black))),
         ],
       ),
     );
@@ -580,7 +591,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 0),
                       filled: true,
-                      fillColor: Colors.grey[100],
+                      fillColor: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF0F172A)
+                          : Colors.grey[100],
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(6),
                           borderSide: BorderSide.none),
@@ -624,7 +637,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
           _priceRow("Trend (Holo)", cm.trendHolo!),
         if (cm.reverseHoloTrend != null && cm.reverseHoloTrend! > 0)
           _priceRow("Trend (Reverse)", cm.reverseHoloTrend!),
-        const Divider(height: 12, thickness: 0.5),
+        Divider(height: 12, thickness: 0.5, color: Theme.of(context).dividerColor),
         if (cm.avg30 != null && cm.avg30! > 0)
           _priceRow("Ø 30 Tage", cm.avg30!),
         if (cm.lowPrice != null && cm.lowPrice! > 0)
@@ -650,7 +663,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         if (tcg.prices?.reverseHolofoil?.market != null &&
             tcg.prices!.reverseHolofoil!.market! > 0)
           _priceRow("Market (Reverse)", tcg.prices!.reverseHolofoil!.market!),
-        const Divider(height: 12, thickness: 0.5),
+        Divider(height: 12, thickness: 0.5, color: Theme.of(context).dividerColor),
         if (tcg.prices?.normal?.directLow != null &&
             tcg.prices!.normal!.directLow! > 0)
           _priceRow("Direct Low", tcg.prices!.normal!.directLow!, isLow: true),
@@ -668,8 +681,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         padding: const EdgeInsets.symmetric(
             horizontal: 16, vertical: 16), // Vergrößert
         decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
+            color: Theme.of(context).cardColor,
+            border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor))),
         child: Row(
           children: [
             if (logo != null)
@@ -693,7 +706,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                           fontWeight: FontWeight.bold,
                           fontSize: 16)), // Vergrößert
                   Text("Set anzeigen (${set.printedTotal} Karten)",
-                      style: TextStyle(color: Colors.blue[700], fontSize: 13)),
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontSize: 13)),
                 ])),
             const Icon(Icons.chevron_right, color: Colors.grey, size: 28)
           ],
@@ -844,13 +859,16 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
 
   Widget _buildCollectionBox(BuildContext context, WidgetRef ref,
       List<UserCard> items, Map<String, dynamic>? historyData) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     if (items.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(16), // Vergrößert
         decoration: BoxDecoration(
-            color: Colors.grey[100],
+            color: isDark ? const Color(0xFF1E293B) : Colors.grey[100],
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey[300]!)),
+            border: Border.all(
+                color: isDark ? const Color(0xFF334155) : Colors.grey[300]!)),
         child: const Center(
             child: Text("Nicht in Sammlung",
                 style: TextStyle(color: Colors.grey, fontSize: 14),
@@ -867,13 +885,13 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(10),
         border:
             Border.all(color: Colors.green.withValues(alpha: 0.4), width: 2),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
               blurRadius: 4,
               offset: const Offset(0, 2))
         ],
@@ -904,7 +922,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                               "Wert: ${inventoryTotalValue.toStringAsFixed(2)} €",
                               style: TextStyle(
                                   fontSize: 13,
-                                  color: Colors.green[800],
+                                  color: isDark
+                                      ? const Color(0xFF4ADE80)
+                                      : Colors.green[800],
                                   fontWeight: FontWeight.w600)),
                         ],
                       ),
@@ -933,7 +953,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                 ),
             ],
           ),
-          const Divider(color: Colors.black12, height: 20, thickness: 1),
+          Divider(color: Theme.of(context).dividerColor, height: 20, thickness: 1),
 
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 280),
@@ -959,8 +979,10 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                       margin: const EdgeInsets.only(bottom: 8.0),
                       padding: const EdgeInsets.all(10.0), // Vergrößert
                       decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          border: Border.all(color: Colors.grey[200]!),
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF0F172A)
+                              : Colors.grey[50],
+                          border: Border.all(color: Theme.of(context).dividerColor),
                           borderRadius: BorderRadius.circular(8)),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
@@ -971,7 +993,10 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                             child: Checkbox(
                               value: !_hiddenUserCardIds.contains(item.id),
                               activeColor: Colors.green,
-                              side: BorderSide(color: Colors.grey[400]!),
+                              side: BorderSide(
+                                  color: Theme.of(context).brightness == Brightness.dark
+                                      ? const Color(0xFF64748B)
+                                      : Colors.grey[400]!),
                               onChanged: (val) {
                                 setState(() {
                                   if (val == true) {
@@ -989,9 +1014,12 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text("${item.quantity}x ${item.variant}",
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         fontWeight: FontWeight.w600,
-                                        fontSize: 13),
+                                        fontSize: 13,
+                                        color: Theme.of(context).brightness == Brightness.dark
+                                            ? Colors.white
+                                            : Colors.black87),
                                     overflow: TextOverflow.ellipsis),
                                 const SizedBox(height: 2),
                                 Text(details,
@@ -999,7 +1027,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                                         fontSize: 11,
                                         color: item.gradingCompany != null
                                             ? Colors.orange[800]
-                                            : Colors.black54,
+                                            : (Theme.of(context).brightness == Brightness.dark
+                                                ? const Color(0xFF94A3B8)
+                                                : Colors.black54),
                                         fontWeight: item.gradingCompany != null
                                             ? FontWeight.bold
                                             : FontWeight.normal),
@@ -1027,8 +1057,10 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                                           fontWeight: FontWeight.bold,
                                           fontSize: 13,
                                           color: hasSpecificPrice
-                                              ? Colors.amber[800]
-                                              : Colors.black87)),
+                                              ? Colors.amber[700]
+                                              : (Theme.of(context).brightness == Brightness.dark
+                                                  ? Colors.white
+                                                  : Colors.black87))),
                                 ],
                               ),
                               if (item.quantity > 1)

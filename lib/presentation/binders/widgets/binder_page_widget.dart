@@ -37,15 +37,18 @@ class BinderPageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final pageBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFFDFDFD);
+
     final double pageTotal = slots.fold(0.0, (sum, slot) {
       if (!slot.binderCard.isPlaceholder) return sum + slot.marketPrice;
       return sum;
     });
 
     return Container(
-      decoration: BoxDecoration(color: const Color(0xFFFDFDFD), boxShadow: [
+      decoration: BoxDecoration(color: pageBg, boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.05),
+          color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
           blurRadius: 5,
           offset:
               pageNumber % 2 == 0 ? const Offset(5, 0) : const Offset(-5, 0),
@@ -109,7 +112,9 @@ class BinderPageWidget extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
                         child: Text("- ${pageNumber + 1} -",
                             style: TextStyle(
-                                color: Colors.grey[400],
+                                color: isDark
+                                    ? const Color(0xFF94A3B8)
+                                    : Colors.grey[500],
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12)),
                       ),

@@ -19,6 +19,8 @@ import '../../data/api/search_provider.dart';
 import '../../domain/logic/binder_service.dart'; // Used for live recalculations
 import '../../domain/services/offline_sync_service.dart';
 
+import '../../core/theme/theme_provider.dart';
+import '../theme/theme_settings_sheet.dart';
 import '../admin/admin_dashboard_screen.dart'; 
 
 class AppDrawer extends ConsumerWidget {
@@ -26,6 +28,19 @@ class AppDrawer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final themeState = ref.watch(themeNotifierProvider);
+    final primaryColor = themeState.primaryColor;
+
+    final modeLabel = themeState.themeMode == ThemeMode.system
+        ? 'System'
+        : themeState.themeMode == ThemeMode.dark
+            ? 'Dunkel'
+            : 'Hell';
+    final colorLabel = themeState.customPrimaryColor != null
+        ? 'Individuelle Farbe'
+        : themeState.currentPreset.name;
+    final themeSubtitle = '$modeLabel • $colorLabel';
+
     return Drawer(
       child: Column(
         children: [
@@ -33,11 +48,48 @@ class AppDrawer extends ConsumerWidget {
             decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary),
             accountName: const Text("TCG Collector", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
             accountEmail: const Text("Sammlung verwalten"),
-            currentAccountPicture: const CircleAvatar(
+            currentAccountPicture: CircleAvatar(
               backgroundColor: Colors.white,
-              child: Icon(Icons.catching_pokemon, size: 40, color: Colors.red),
+              child: Icon(Icons.catching_pokemon, size: 40, color: primaryColor),
             ),
+            otherAccountsPictures: [
+              IconButton(
+                icon: Icon(
+                  themeState.themeMode == ThemeMode.dark
+                      ? Icons.dark_mode_rounded
+                      : Icons.light_mode_rounded,
+                  color: Colors.white,
+                ),
+                tooltip: 'Theme umschalten (Hell/Dunkel)',
+                onPressed: () {
+                  ref.read(themeNotifierProvider.notifier).toggleThemeMode();
+                },
+              ),
+            ],
           ),
+          
+          ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.palette_rounded, color: primaryColor, size: 22),
+            ),
+            title: const Text(
+              "Design & Farbschema",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(themeSubtitle),
+            trailing: const Icon(Icons.chevron_right, size: 20),
+            onTap: () {
+              Navigator.pop(context);
+              ThemeSettingsSheet.show(context);
+            },
+          ),
+          
+          const Divider(),
           
           ListTile(
             leading: const Icon(Icons.upload_file, color: Colors.blue),

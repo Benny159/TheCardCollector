@@ -38,27 +38,40 @@ class BinderStatsSheet extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        height: MediaQuery.of(context).size.height * 0.75,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: BinderStatsSheet(
-          binderId: binderId,
-          currentState: currentState,
-          onDelete: onDelete,
-          isBulkBox: isBulkBox,
-        ),
-      ),
+      builder: (sheetContext) {
+        final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
+        final bottomPadding = MediaQuery.of(sheetContext).padding.bottom;
+        final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
+        return Container(
+          height: MediaQuery.of(sheetContext).size.height * 0.88,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            16,
+            20,
+            24 + bottomPadding + bottomInset,
+          ),
+          child: BinderStatsSheet(
+            binderId: binderId,
+            currentState: currentState,
+            onDelete: onDelete,
+            isBulkBox: isBulkBox,
+          ),
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final historyAsync = ref.watch(binderHistoryProvider(binderId));
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,7 +81,7 @@ class BinderStatsSheet extends ConsumerWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey[300],
+              color: isDark ? const Color(0xFF334155) : Colors.grey[300],
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -149,10 +162,17 @@ class BinderStatsSheet extends ConsumerWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.show_chart, size: 48, color: Colors.grey[300]),
-                      const Text(
+                      Icon(Icons.show_chart,
+                          size: 48,
+                          color: isDark
+                              ? const Color(0xFF334155)
+                              : Colors.grey[300]),
+                      Text(
                         "Zu wenig Daten für einen Graphen",
-                        style: TextStyle(color: Colors.grey),
+                        style: TextStyle(
+                            color: isDark
+                                ? const Color(0xFF94A3B8)
+                                : Colors.grey),
                       ),
                     ],
                   ),
@@ -169,13 +189,23 @@ class BinderStatsSheet extends ConsumerWidget {
         ListTile(
           leading: Icon(
             isBulkBox ? Icons.inventory_2 : Icons.pie_chart,
-            color: Colors.blue,
+            color: theme.colorScheme.primary,
           ),
-          title: Text(isBulkBox ? "Karten im Karton" : "Vervollständigung"),
+          title: Text(
+            isBulkBox ? "Karten im Karton" : "Vervollständigung",
+            style: TextStyle(
+              color: isDark ? Colors.white : Colors.black87,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           trailing: Text(
             isBulkBox
                 ? "${currentState.filledSlots}"
                 : "${currentState.filledSlots} / ${currentState.totalSlots}",
+            style: TextStyle(
+              color: isDark ? const Color(0xFFCBD5E1) : Colors.black87,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           subtitle: isBulkBox
               ? null
@@ -186,6 +216,11 @@ class BinderStatsSheet extends ConsumerWidget {
                         (currentState.totalSlots == 0
                             ? 1
                             : currentState.totalSlots),
+                    backgroundColor: isDark
+                        ? const Color(0xFF334155)
+                        : Colors.grey[200],
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                        theme.colorScheme.primary),
                     minHeight: 8,
                   ),
                 ),
@@ -215,6 +250,10 @@ class BinderHistoryChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = theme.colorScheme.primary;
+
     List<FlSpot> spots = [];
     final Set<double> seenX = {};
     for (final p in history) {
@@ -269,7 +308,7 @@ class BinderHistoryChart extends StatelessWidget {
           show: true,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (_) =>
-              FlLine(color: Colors.grey[200], strokeWidth: 1),
+              FlLine(color: isDark ? const Color(0xFF334155) : Colors.grey[200], strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           show: true,
@@ -286,7 +325,9 @@ class BinderHistoryChart extends StatelessWidget {
                 if (val < 0) return const SizedBox();
                 return Text(
                   "${val.toInt()}€",
-                  style: TextStyle(color: Colors.grey[400], fontSize: 10),
+                  style: TextStyle(
+                      color: isDark ? const Color(0xFF94A3B8) : Colors.grey[500],
+                      fontSize: 10),
                   textAlign: TextAlign.right,
                 );
               },
@@ -303,7 +344,9 @@ class BinderHistoryChart extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 8.0),
                   child: Text(
                     DateFormat('dd.MM').format(date),
-                    style: TextStyle(color: Colors.grey[400], fontSize: 10),
+                    style: TextStyle(
+                        color: isDark ? const Color(0xFF94A3B8) : Colors.grey[500],
+                        fontSize: 10),
                   ),
                 );
               },
@@ -319,7 +362,7 @@ class BinderHistoryChart extends StatelessWidget {
           LineChartBarData(
             spots: spots,
             isCurved: true,
-            color: Colors.blueAccent,
+            color: primaryColor,
             barWidth: 3,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
@@ -329,8 +372,8 @@ class BinderHistoryChart extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.blue.withValues(alpha: 0.2),
-                  Colors.blue.withValues(alpha: 0.0),
+                  primaryColor.withValues(alpha: 0.35),
+                  primaryColor.withValues(alpha: 0.0),
                 ],
               ),
             ),
@@ -338,6 +381,8 @@ class BinderHistoryChart extends StatelessWidget {
         ],
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
+            tooltipBgColor:
+                isDark ? const Color(0xFF0F172A) : const Color(0xFF1E293B),
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
                 final date = DateTime.fromMillisecondsSinceEpoch(spot.x.toInt());

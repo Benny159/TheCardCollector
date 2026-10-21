@@ -217,14 +217,18 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         !_showStandardSetOnly && _selectedRarities.isEmpty;
     final bool isStandardActive = _showStandardSetOnly;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
     final logoUrl = widget.set.logoUrlDe ?? widget.set.logoUrl;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      color: Theme.of(context)
-          .colorScheme
-          .surfaceContainerHighest
-          .withValues(alpha: 0.3),
+      color: isDark
+          ? const Color(0xFF1E293B)
+          : Theme.of(context)
+              .colorScheme
+              .surfaceContainerHighest
+              .withValues(alpha: 0.3),
       child: Column(
         children: [
           // 1. Logo & Progress
@@ -253,9 +257,9 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                             style: const TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 12)),
                         Text("${(progress * 100).toStringAsFixed(1)}%",
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: Colors.blueAccent,
+                                color: primaryColor,
                                 fontSize: 12)),
                       ],
                     ),
@@ -265,6 +269,8 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                       child: LinearProgressIndicator(
                           value: progress,
                           minHeight: 8,
+                          backgroundColor: isDark ? const Color(0xFF334155) : null,
+                          valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
                           borderRadius: BorderRadius.circular(8)),
                     ),
                   ],
@@ -282,26 +288,33 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
               Icon(Icons.savings_outlined, size: 14, color: Colors.green[700]),
               const SizedBox(width: 4),
               Text("Mein Wert: ",
-                  style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? const Color(0xFF94A3B8) : Colors.grey[700])),
               Text("${ownedValue.toStringAsFixed(2)} €",
                   style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: Colors.green[800])),
+                      color: isDark ? Colors.greenAccent : Colors.green[800])),
               Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12.0),
                   child: Text("|",
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12))),
+                      style: TextStyle(
+                          color: isDark ? const Color(0xFF475569) : Colors.grey[400],
+                          fontSize: 12))),
               Icon(Icons.assessment_outlined,
-                  size: 14, color: Colors.grey[700]),
+                  size: 14,
+                  color: isDark ? const Color(0xFF94A3B8) : Colors.grey[700]),
               const SizedBox(width: 4),
               Text("Gesamt: ",
-                  style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? const Color(0xFF94A3B8) : Colors.grey[700])),
               Text("${totalValue.toStringAsFixed(2)} €",
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87)),
+                      color: isDark ? Colors.white : Colors.black87)),
             ],
           ),
 
@@ -341,7 +354,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
               Container(
                 height: 32,
                 decoration: BoxDecoration(
-                  color: Colors.grey[200],
+                  color: isDark ? const Color(0xFF0F172A) : Colors.grey[200],
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -370,14 +383,16 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     ? Icons.keyboard_arrow_up
                     : Icons.keyboard_arrow_down,
                 size: 16,
-                color: Colors.grey[700]),
+                color: isDark ? const Color(0xFF94A3B8) : Colors.grey[700]),
             label: Text(
               _isRaritiesExpanded
                   ? "Weniger Filter"
                   : _selectedRarities.isEmpty
                       ? "Raritäten (${totalRarityCounts.length})"
                       : "Raritäten (${_selectedRarities.length} aktiv)",
-              style: TextStyle(color: Colors.grey[800], fontSize: 11),
+              style: TextStyle(
+                  color: isDark ? const Color(0xFFCBD5E1) : Colors.grey[800],
+                  fontSize: 11),
             ),
             style: TextButton.styleFrom(
               padding: EdgeInsets.zero,
@@ -401,6 +416,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                         final owned = ownedRarityCounts[rarityName] ?? 0;
                         final isSelected =
                             _selectedRarities.contains(rarityName);
+                        final baseColor = _getRarityColor(rarityName);
 
                         return ActionChip(
                           label: Text('$rarityName: $owned/$total'),
@@ -409,21 +425,29 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                           materialTapTargetSize:
                               MaterialTapTargetSize.shrinkWrap,
                           labelPadding:
-                              const EdgeInsets.symmetric(horizontal: 4),
+                              const EdgeInsets.symmetric(horizontal: 6),
                           padding: EdgeInsets.zero,
                           backgroundColor: isSelected
-                              ? _getRarityColor(rarityName)
-                                  .withValues(alpha: 0.8)
-                              : _getRarityColor(rarityName),
-                          side: isSelected
-                              ? const BorderSide(
-                                  color: Colors.black54, width: 1.0)
-                              : BorderSide.none,
+                              ? baseColor
+                              : (isDark
+                                  ? baseColor.withValues(alpha: 0.22)
+                                  : baseColor.withValues(alpha: 0.12)),
+                          side: BorderSide(
+                            color: isSelected
+                                ? (isDark ? Colors.white : baseColor)
+                                : baseColor.withValues(alpha: isDark ? 0.7 : 0.45),
+                            width: isSelected ? 1.5 : 1.0,
+                          ),
                           labelStyle: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color:
-                                  isSelected ? Colors.black : Colors.black87),
+                            fontSize: 10,
+                            fontWeight:
+                                isSelected ? FontWeight.w800 : FontWeight.w600,
+                            color: isSelected
+                                ? Colors.white
+                                : (isDark
+                                    ? const Color(0xFFF1F5F9)
+                                    : const Color(0xFF0F172A)),
+                          ),
                           onPressed: () {
                             setState(() {
                               _showStandardSetOnly = false;
@@ -447,12 +471,16 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
   Widget _buildToggleOption(String text, OwnershipFilter value) {
     final bool isSelected = _ownershipFilter == value;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return GestureDetector(
       onTap: () => setState(() => _ownershipFilter = value),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent,
+          color: isSelected
+              ? (isDark ? const Color(0xFF334155) : Colors.white)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
           boxShadow: isSelected
               ? [const BoxShadow(color: Colors.black12, blurRadius: 2)]
@@ -463,7 +491,9 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
           style: TextStyle(
             fontSize: 11,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected ? Colors.black : Colors.grey[700],
+            color: isSelected
+                ? (isDark ? Colors.white : Colors.black)
+                : (isDark ? const Color(0xFF94A3B8) : Colors.grey[700]),
           ),
         ),
       ),
@@ -475,15 +505,19 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
       required String countText,
       required bool isActive,
       required VoidCallback onTap}) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = theme.colorScheme.primary;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? Colors.blueAccent.withValues(alpha: 0.1) : null,
+          color: isActive ? primaryColor.withValues(alpha: 0.15) : null,
           border: isActive
-              ? Border.all(color: Colors.blueAccent)
+              ? Border.all(color: primaryColor)
               : Border.all(color: Colors.transparent),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -493,10 +527,10 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
-                    color: isActive ? Colors.blueAccent : Colors.black)),
+                    color: isActive ? primaryColor : (isDark ? Colors.white : Colors.black))),
             Text(label,
                 style: TextStyle(
-                    color: isActive ? Colors.blueAccent : Colors.grey[600],
+                    color: isActive ? primaryColor : (isDark ? const Color(0xFF94A3B8) : Colors.grey[600]),
                     fontSize: 11)),
           ],
         ),
@@ -627,25 +661,25 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
   Color _getRarityColor(String rarity) {
     final r = rarity.toLowerCase();
-    if (r.contains('secret') || r.contains('hyper')) {
-      return Colors.amber.withValues(alpha: 0.4);
+    if (r.contains('secret') || r.contains('hyper') || r.contains('rainbow')) {
+      return const Color(0xFFF59E0B); // Amber / Gold
     }
-    if (r.contains('illustration')) {
-      return Colors.pinkAccent.withValues(alpha: 0.2);
+    if (r.contains('special illustration') || r.contains('illustration')) {
+      return const Color(0xFFEC4899); // Vibrant Pink / Magenta
     }
-    if (r.contains('ultra')) {
-      return Colors.cyan.withValues(alpha: 0.2);
+    if (r.contains('ultra') || r.contains('shiny') || r.contains('ace')) {
+      return const Color(0xFF06B6D4); // Vibrant Cyan / Teal
     }
     if (r.contains('double')) {
-      return Colors.indigo.withValues(alpha: 0.2);
+      return const Color(0xFF8B5CF6); // Vibrant Purple / Violet
     }
     if (r.contains('rare')) {
-      return Colors.blue.withValues(alpha: 0.2);
+      return const Color(0xFF3B82F6); // Vibrant Blue
     }
     if (r.contains('uncommon')) {
-      return Colors.grey.withValues(alpha: 0.3);
+      return const Color(0xFF64748B); // Slate
     }
-    return Colors.grey.withValues(alpha: 0.1);
+    return const Color(0xFF94A3B8); // Light Slate / Common
   }
 
   // Compact animated search widget
@@ -692,11 +726,18 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     style: const TextStyle(fontSize: 13),
                     decoration: InputDecoration(
                       hintText: "Suchen...",
-                      prefixIcon: const Icon(Icons.search,
-                          size: 16, color: Colors.grey),
+                      prefixIcon: Icon(Icons.search,
+                          size: 16,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF94A3B8)
+                              : Colors.grey),
                       suffixIcon: IconButton(
                         padding: EdgeInsets.zero,
-                        icon: const Icon(Icons.close, size: 16),
+                        icon: Icon(Icons.close,
+                            size: 16,
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? const Color(0xFF94A3B8)
+                                : Colors.grey),
                         onPressed: () {
                           setState(() {
                             _isSearchExpanded = false;
@@ -709,8 +750,9 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                       contentPadding: const EdgeInsets.symmetric(vertical: 0),
                       isDense: true,
                       filled: true,
-                      fillColor:
-                          Colors.white, // Hebt sich leicht vom grauen Header ab
+                      fillColor: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF0F172A)
+                          : Colors.white,
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
                           borderSide: BorderSide.none),
@@ -727,6 +769,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     child: Material(
                       elevation: 6,
                       borderRadius: BorderRadius.circular(8),
+                      color: Theme.of(context).cardColor,
                       child: ConstrainedBox(
                         constraints: BoxConstraints(
                             maxHeight: 200, maxWidth: constraints.maxWidth),
@@ -735,7 +778,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                           shrinkWrap: true,
                           itemCount: options.length,
                           separatorBuilder: (_, __) =>
-                              const Divider(height: 1, color: Colors.black12),
+                              Divider(height: 1, color: Theme.of(context).dividerColor),
                           itemBuilder: (context, index) {
                             final option = options.elementAt(index);
                             return ListTile(
@@ -761,11 +804,18 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
               borderRadius: BorderRadius.circular(20),
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.grey[300], // Circular icon background tint
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF0F172A)
+                      : Colors.grey[200],
                   shape: BoxShape.circle,
                 ),
-                child:
-                    const Icon(Icons.search, size: 18, color: Colors.black87),
+                child: Icon(
+                  Icons.search,
+                  size: 18,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF94A3B8)
+                      : Colors.black87,
+                ),
               ),
             ),
     );

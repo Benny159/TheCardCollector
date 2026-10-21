@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'data/database/app_database.dart';
 import 'data/database/database_provider.dart';
 import 'data/database/database_initializer.dart';
+import 'core/theme/theme_provider.dart';
 import 'presentation/main_screen.dart'; 
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,8 +20,9 @@ void main() async {
 
   bool isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
-  // 1. Initialize local database
+  // 1. Initialize local database and SharedPreferences
   final database = AppDatabase();
+  final sharedPrefs = await SharedPreferences.getInstance();
 
   runApp(
     // Wrap application in DevicePreview for desktop simulation
@@ -29,6 +31,7 @@ void main() async {
       builder: (context) => ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(database),
+          sharedPreferencesProvider.overrideWithValue(sharedPrefs),
         ],
         child: const TcgCollectorApp(),
       ),
@@ -38,12 +41,11 @@ void main() async {
   // Background non-blocking initialization after first frame is displayed
   Future.microtask(() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
       const currentSeedVersion = 2;
-      if (prefs.getInt('mappings_seed_version') != currentSeedVersion) {
+      if (sharedPrefs.getInt('mappings_seed_version') != currentSeedVersion) {
         final initializer = DatabaseInitializer(database);
         await initializer.seedInitialMappings();
-        await prefs.setInt('mappings_seed_version', currentSeedVersion);
+        await sharedPrefs.setInt('mappings_seed_version', currentSeedVersion);
       }
     } catch (e) {
       debugPrint('Background mappings seeding notice: $e');
@@ -51,11 +53,13 @@ void main() async {
   });
 }
 
-class TcgCollectorApp extends StatelessWidget {
+class TcgCollectorApp extends ConsumerWidget {
   const TcgCollectorApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeState = ref.watch(themeNotifierProvider);
+
     return MaterialApp(
       title: 'TCG Collector',
       debugShowCheckedModeBanner: false,
@@ -65,10 +69,10 @@ class TcgCollectorApp extends StatelessWidget {
       builder: DevicePreview.appBuilder, 
       // ---------------------------------------------
 
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.redAccent),
-        useMaterial3: true,
-      ),
+      themeMode: themeState.themeMode,
+      theme: themeState.lightTheme,
+      darkTheme: themeState.darkTheme,
+
       home: const MainScreen(),
     );
   }

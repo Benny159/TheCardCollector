@@ -23,6 +23,7 @@ class BinderListScreen extends ConsumerWidget {
     final db = ref.watch(databaseProvider);
     final search = ref.watch(storageSearchProvider);
     final sort = ref.watch(storageSortProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Live stream of all binders/boxes
     final bindersStream = db.select(db.binders).watch();
@@ -133,7 +134,9 @@ class BinderListScreen extends ConsumerWidget {
                                   border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12)),
                                   filled: true,
-                                  fillColor: Colors.grey[100],
+                                  fillColor: isDark
+                                      ? const Color(0xFF1E293B)
+                                      : Colors.grey[100],
                                 ),
                                 onChanged: (val) => ref
                                     .read(storageSearchProvider.notifier)
@@ -147,6 +150,9 @@ class BinderListScreen extends ConsumerWidget {
                               return Align(
                                 alignment: Alignment.topLeft,
                                 child: Material(
+                                  color: isDark
+                                      ? const Color(0xFF1E293B)
+                                      : Theme.of(context).cardColor,
                                   elevation: 6,
                                   borderRadius: BorderRadius.circular(8),
                                   child: ConstrainedBox(
@@ -158,8 +164,11 @@ class BinderListScreen extends ConsumerWidget {
                                       shrinkWrap: true,
                                       itemCount: options.length,
                                       separatorBuilder: (_, __) =>
-                                          const Divider(
-                                              height: 1, color: Colors.black12),
+                                          Divider(
+                                              height: 1,
+                                              color: isDark
+                                                  ? Colors.white12
+                                                  : Colors.black12),
                                       itemBuilder: (context, index) {
                                         final option = options.elementAt(index);
                                         return ListTile(
@@ -185,17 +194,25 @@ class BinderListScreen extends ConsumerWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         decoration: BoxDecoration(
-                          color: Colors.grey[100],
+                          color: isDark
+                              ? const Color(0xFF1E293B)
+                              : Colors.grey[100],
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey[400]!),
+                          border: Border.all(
+                              color: isDark
+                                  ? const Color(0xFF334155)
+                                  : Colors.grey[400]!),
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<StorageSort>(
                             value: sort,
+                            dropdownColor: isDark
+                                ? const Color(0xFF1E293B)
+                                : Theme.of(context).cardColor,
                             icon: const Icon(Icons.sort, size: 18),
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 13,
-                                color: Colors.black87,
+                                color: isDark ? Colors.white : Colors.black87,
                                 fontWeight: FontWeight.bold),
                             items: const [
                               DropdownMenuItem(

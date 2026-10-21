@@ -96,6 +96,9 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = theme.colorScheme.primary;
 
     // Read last selected binder from provider
     final selectedBinderId = ref.watch(lastSelectedBinderProvider);
@@ -108,9 +111,9 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
 
     return Container(
       padding: EdgeInsets.fromLTRB(20, 20, 20, 120 + bottomPadding),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -120,7 +123,7 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text("Inventar verwalten",
-                  style: Theme.of(context).textTheme.titleLarge),
+                  style: theme.textTheme.titleLarge),
               if (widget.card.isOwned)
                 const Chip(
                   label: Text("Bereits im Besitz",
@@ -133,7 +136,8 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
           ),
           const SizedBox(height: 8),
           Text(widget.card.nameDe ?? widget.card.name,
-              style: const TextStyle(color: Colors.grey)),
+              style: TextStyle(
+                  color: isDark ? const Color(0xFFCBD5E1) : Colors.grey[700])),
           const Divider(),
 
           Row(
@@ -162,8 +166,12 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("Anzahl",
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text("Anzahl",
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? const Color(0xFF94A3B8)
+                              : Colors.grey[600])),
                   const SizedBox(height: 4),
                   _buildCounter(),
                 ],
@@ -177,21 +185,22 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.05),
+              color: primaryColor.withValues(alpha: isDark ? 0.12 : 0.06),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+              border: Border.all(
+                  color: primaryColor.withValues(alpha: isDark ? 0.35 : 0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.folder_special, color: Colors.blue, size: 16),
-                    SizedBox(width: 6),
+                    Icon(Icons.folder_special, color: primaryColor, size: 16),
+                    const SizedBox(width: 6),
                     Text("In Binder einsortieren",
                         style: TextStyle(
                             fontSize: 12,
-                            color: Colors.blue,
+                            color: primaryColor,
                             fontWeight: FontWeight.bold)),
                   ],
                 ),
@@ -201,8 +210,12 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
                     value: safeBinderId, // Read from state provider
                     isExpanded: true,
                     isDense: true,
-                    icon: const Icon(Icons.arrow_drop_down, color: Colors.blue),
-                    style: const TextStyle(color: Colors.black87, fontSize: 14),
+                    dropdownColor:
+                        isDark ? const Color(0xFF1E293B) : theme.cardColor,
+                    icon: Icon(Icons.arrow_drop_down, color: primaryColor),
+                    style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
+                        fontSize: 14),
                     items: [
                       const DropdownMenuItem(
                           value: null,
@@ -243,7 +256,8 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
                   icon: const Icon(Icons.save),
                   label: const Text("Hinzufügen"),
                   style: FilledButton.styleFrom(
-                      backgroundColor: Colors.blue[800],
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12)),
                   onPressed: _saveToInventory,
                 ),
@@ -257,24 +271,36 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
 
   Widget _buildDropdown(String label, List<String> items, String value,
       Function(String?) onChanged) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final safeValue =
         items.contains(value) ? value : items.firstOrNull ?? value;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(label,
+            style: TextStyle(
+                fontSize: 12,
+                color: isDark ? const Color(0xFF94A3B8) : Colors.grey[600])),
         const SizedBox(height: 4),
         DropdownButtonFormField<String>(
+          dropdownColor: isDark ? const Color(0xFF1E293B) : theme.cardColor,
           initialValue: safeValue,
           isDense: true,
+          style: TextStyle(
+              color: isDark ? Colors.white : Colors.black87, fontSize: 14),
           decoration: InputDecoration(
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
           items: items
-              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+              .map((e) => DropdownMenuItem(
+                  value: e,
+                  child: Text(e,
+                      style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black87))))
               .toList(),
           onChanged: onChanged,
         ),
@@ -283,16 +309,19 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
   }
 
   Widget _buildCounter() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade400),
+        border: Border.all(
+            color: isDark ? const Color(0xFF334155) : Colors.grey.shade400),
         borderRadius: BorderRadius.circular(8),
       ),
       height: 48,
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.remove, size: 18),
+            icon: Icon(Icons.remove,
+                size: 18, color: isDark ? Colors.white : Colors.black87),
             onPressed: () => setState(() {
               if (_quantity > 1) _quantity--;
             }),
@@ -303,11 +332,14 @@ class _InventoryBottomSheetState extends ConsumerState<InventoryBottomSheet> {
             width: 30,
             alignment: Alignment.center,
             child: Text("$_quantity",
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isDark ? Colors.white : Colors.black87)),
           ),
           IconButton(
-            icon: const Icon(Icons.add, size: 18),
+            icon: Icon(Icons.add,
+                size: 18, color: isDark ? Colors.white : Colors.black87),
             onPressed: () => setState(() => _quantity++),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 40),

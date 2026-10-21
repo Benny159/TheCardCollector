@@ -294,7 +294,11 @@ class _EditUserCardDialogState extends ConsumerState<EditUserCardDialog> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[400]!),
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF334155)
+                        : Colors.grey[400]!,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -310,14 +314,20 @@ class _EditUserCardDialogState extends ConsumerState<EditUserCardDialog> {
                         const SizedBox(height: 2),
                         Text(
                           DateFormat('dd.MM.yyyy').format(_selectedDate),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
-                            color: Colors.black87,
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : Colors.black87,
                           ),
                         ),
                       ],
                     ),
-                    const Icon(Icons.calendar_today, size: 20, color: Colors.blue),
+                    Icon(
+                      Icons.calendar_today,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ],
                 ),
               ),

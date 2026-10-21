@@ -70,9 +70,10 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final asyncData = ref.watch(binderDetailProvider(widget.binder.id));
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.grey[800],
+      backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.grey[800],
       appBar: AppBar(
         title: Text(widget.binder.name),
         backgroundColor: Color(widget.binder.color),
@@ -171,8 +172,16 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                         itemBuilder: (context, i) {
                           if (i == totalPages) {
                             return Container(
-                              color: Colors.white,
-                              child: const Center(child: Text("Ende des Binders")),
+                              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                              child: Center(
+                                child: Text(
+                                  "Ende des Binders",
+                                  style: TextStyle(
+                                    color: isDark ? const Color(0xFF94A3B8) : Colors.black54,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
                             );
                           }
 
@@ -183,7 +192,7 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
                           final pageSlots = state.slots.sublist(start, end);
 
                           return Container(
-                            color: const Color(0xFFFDFDFD),
+                            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFFDFDFD),
                             child: BinderPageWidget(
                               slots: pageSlots,
                               rows: widget.binder.rowsPerPage,
@@ -781,11 +790,13 @@ class _BinderDetailScreenState extends ConsumerState<BinderDetailScreen> {
               );
             },
             optionsViewBuilder: (context, onSelected, options) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
               return Align(
                 alignment: Alignment.topLeft,
                 child: Material(
+                  color: isDark ? const Color(0xFF1E293B) : Theme.of(context).cardColor,
                   elevation: 4,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(8),
                   child: ListView.builder(
                     padding: EdgeInsets.zero,
                     shrinkWrap: true,

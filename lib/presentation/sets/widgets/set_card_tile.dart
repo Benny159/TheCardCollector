@@ -22,6 +22,9 @@ class SetCardTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final statsAsync = ref.watch(setStatsProvider(set.id));
     final logoUrl = set.logoUrlDe ?? set.logoUrl;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = theme.colorScheme.primary;
 
     return RepaintBoundary(
       child: Card(
@@ -71,14 +74,18 @@ class SetCardTile extends ConsumerWidget {
                   Expanded(
                     flex: 2,
                     child: Container(
-                      color: Colors.grey[100],
+                      color: isDark ? const Color(0xFF0F172A) : Colors.grey[100],
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
                             set.nameDe ?? set.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
                             maxLines: 1, 
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -87,7 +94,10 @@ class SetCardTile extends ConsumerWidget {
                               padding: const EdgeInsets.only(top: 2.0),
                               child: Text(
                                 set.releaseDate,
-                                style: TextStyle(color: Colors.grey[600], fontSize: 10),
+                                style: TextStyle(
+                                  color: isDark ? const Color(0xFF94A3B8) : Colors.grey[600],
+                                  fontSize: 10,
+                                ),
                               ),
                             ),
                           
@@ -107,22 +117,40 @@ class SetCardTile extends ConsumerWidget {
                                     child: LinearProgressIndicator(
                                       value: displayProgress,
                                       minHeight: 5,
-                                      backgroundColor: Colors.grey[300],
-                                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.blueAccent),
+                                      backgroundColor: isDark ? const Color(0xFF334155) : Colors.grey[300],
+                                      valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
                                     ),
                                   ),
                                   const SizedBox(height: 2),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text("$ownedCount/$totalCount", style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w500)),
-                                      Text("${(progress * 100).toStringAsFixed(0)}%", style: const TextStyle(fontSize: 9, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                                      Text(
+                                        "$ownedCount/$totalCount",
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w500,
+                                          color: isDark ? const Color(0xFFCBD5E1) : Colors.black87,
+                                        ),
+                                      ),
+                                      Text(
+                                        "${(progress * 100).toStringAsFixed(0)}%",
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          color: primaryColor,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ],
                               );
                             },
-                            loading: () => const LinearProgressIndicator(minHeight: 5),
+                            loading: () => LinearProgressIndicator(
+                              minHeight: 5,
+                              backgroundColor: isDark ? const Color(0xFF334155) : Colors.grey[300],
+                              valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                            ),
                             error: (_, __) => const SizedBox(), 
                           ),
                         ],

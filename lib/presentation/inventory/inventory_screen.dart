@@ -188,7 +188,7 @@ class InventoryScreen extends ConsumerWidget {
                 child: sortedItems.isEmpty
                     ? const Center(
                         child: Text("Keine Ergebnisse für deine Suche."))
-                    : _buildContent(sortedItems, groupMode, ref),
+                    : _buildContent(context, sortedItems, groupMode, ref),
               ),
             ],
           );
@@ -200,10 +200,10 @@ class InventoryScreen extends ConsumerWidget {
   // Sub-widgets
 
   Widget _buildContent(
-      List<InventoryItem> items, InventoryGroupMode mode, WidgetRef ref) {
-    if (mode == InventoryGroupMode.bySet) return _buildGroupedBySet(items, ref);
+      BuildContext context, List<InventoryItem> items, InventoryGroupMode mode, WidgetRef ref) {
+    if (mode == InventoryGroupMode.bySet) return _buildGroupedBySet(context, items, ref);
     if (mode == InventoryGroupMode.byBinder) {
-      return _buildGroupedByBinder(items, ref);
+      return _buildGroupedByBinder(context, items, ref);
     }
     return _buildGrid(items);
   }
@@ -288,7 +288,9 @@ class InventoryScreen extends ConsumerWidget {
                     : null,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                 filled: true,
-                fillColor: Colors.grey[100],
+                fillColor: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF1E293B)
+                    : Colors.grey[100],
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none),
@@ -306,6 +308,7 @@ class InventoryScreen extends ConsumerWidget {
               child: Material(
                 elevation: 6,
                 borderRadius: BorderRadius.circular(8),
+                color: Theme.of(context).cardColor,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                       maxHeight: 250, maxWidth: constraints.maxWidth),
@@ -314,7 +317,7 @@ class InventoryScreen extends ConsumerWidget {
                     shrinkWrap: true,
                     itemCount: options.length,
                     separatorBuilder: (_, __) =>
-                        const Divider(height: 1, color: Colors.black12),
+                        Divider(height: 1, color: Theme.of(context).dividerColor),
                     itemBuilder: (context, index) {
                       final option = options.elementAt(index);
                       return ListTile(
@@ -340,18 +343,26 @@ class InventoryScreen extends ConsumerWidget {
   Widget _buildFilterBar(BuildContext context, WidgetRef ref,
       InventorySort currentSort, InventoryGroupMode currentGroup) {
     final isAscending = ref.watch(inventorySortAscendingProvider);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = theme.colorScheme.primary;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          const Icon(Icons.sort, size: 18, color: Colors.grey),
+          Icon(Icons.sort,
+              size: 18,
+              color: isDark ? const Color(0xFF94A3B8) : Colors.grey[700]),
           const SizedBox(width: 4),
           DropdownButton<InventorySort>(
             value: currentSort,
             underline: const SizedBox(),
-            style: const TextStyle(
-                color: Colors.black87,
+            dropdownColor: isDark ? const Color(0xFF1E293B) : theme.cardColor,
+            iconEnabledColor:
+                isDark ? const Color(0xFF94A3B8) : Colors.grey[700],
+            style: TextStyle(
+                color: isDark ? Colors.white : Colors.black87,
                 fontWeight: FontWeight.w500,
                 fontSize: 13),
             items: const [
@@ -388,7 +399,7 @@ class InventoryScreen extends ConsumerWidget {
               child: Icon(
                   isAscending ? Icons.arrow_upward : Icons.arrow_downward,
                   size: 16,
-                  color: Colors.blue[800]),
+                  color: primaryColor),
             ),
           ),
 
@@ -435,7 +446,7 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildGroupedBySet(List<InventoryItem> items, WidgetRef ref) {
+  Widget _buildGroupedBySet(BuildContext context, List<InventoryItem> items, WidgetRef ref) {
     final grouped = groupBy(items, (item) => item.set.id);
     final expandedSets = ref.watch(expandedSetsProvider);
 
@@ -509,8 +520,11 @@ class InventoryScreen extends ConsumerWidget {
                               fontWeight: FontWeight.bold, fontSize: 15)),
                       subtitle: Text(
                           "$setTotalCount Karten • ${setTotalValue.toStringAsFixed(2)} €",
-                          style:
-                              TextStyle(color: Colors.grey[600], fontSize: 12)),
+                          style: TextStyle(
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? const Color(0xFF94A3B8)
+                                  : Colors.grey[600],
+                              fontSize: 12)),
                       trailing: Icon(
                           isExpanded ? Icons.expand_less : Icons.expand_more),
                     ),
@@ -545,7 +559,7 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildGroupedByBinder(List<InventoryItem> items, WidgetRef ref) {
+  Widget _buildGroupedByBinder(BuildContext context, List<InventoryItem> items, WidgetRef ref) {
     final grouped =
         groupBy(items, (item) => item.binderName ?? "Nicht im Binder");
     final expandedBinders = ref.watch(expandedBindersProvider);
@@ -573,16 +587,21 @@ class InventoryScreen extends ConsumerWidget {
           final totalValue =
               binderCards.fold(0.0, (sum, i) => sum + i.totalValue);
 
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final primaryColor = Theme.of(context).colorScheme.primary;
+
           return [
             SliverToBoxAdapter(
               child: Card(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 elevation: isLoose ? 0 : 2,
-                color: isLoose ? Colors.grey[50] : Colors.white,
+                color: isLoose
+                    ? (isDark ? const Color(0xFF0F172A) : Colors.grey[50])
+                    : Theme.of(context).cardColor,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: isLoose
-                      ? BorderSide(color: Colors.grey[300]!)
+                      ? BorderSide(color: Theme.of(context).dividerColor)
                       : BorderSide.none,
                 ),
                 child: InkWell(
@@ -605,11 +624,13 @@ class InventoryScreen extends ConsumerWidget {
                     child: ListTile(
                       leading: CircleAvatar(
                         backgroundColor: isLoose
-                            ? Colors.grey[300]
-                            : Colors.blueAccent.withValues(alpha: 0.2),
+                            ? (isDark ? const Color(0xFF334155) : Colors.grey[300])
+                            : primaryColor.withValues(alpha: 0.2),
                         child: Icon(
                           isLoose ? Icons.inventory_2 : Icons.menu_book,
-                          color: isLoose ? Colors.grey[600] : Colors.blueAccent,
+                          color: isLoose
+                              ? (isDark ? const Color(0xFF94A3B8) : Colors.grey[600])
+                              : primaryColor,
                           size: 20,
                         ),
                       ),
@@ -618,8 +639,9 @@ class InventoryScreen extends ConsumerWidget {
                               fontWeight: FontWeight.bold, fontSize: 15)),
                       subtitle: Text(
                           "$totalCount Karten • ${totalValue.toStringAsFixed(2)} €",
-                          style:
-                              TextStyle(color: Colors.grey[600], fontSize: 12)),
+                          style: TextStyle(
+                              color: isDark ? const Color(0xFF94A3B8) : Colors.grey[600],
+                              fontSize: 12)),
                       trailing: Icon(
                           isExpanded ? Icons.expand_less : Icons.expand_more),
                     ),

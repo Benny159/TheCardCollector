@@ -123,6 +123,10 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
       maxX += 86400000;
     }
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = theme.colorScheme.primary;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -130,13 +134,23 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
         SizedBox(
           height: 180,
           child: spots.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text("Keine Datenpunkte > 0€",
-                      style: TextStyle(fontSize: 10, color: Colors.grey)))
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: isDark ? const Color(0xFF94A3B8) : Colors.grey)))
               : LineChart(
                   LineChartData(
-                    gridData:
-                        const FlGridData(show: true, drawVerticalLine: false),
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      getDrawingHorizontalLine: (value) => FlLine(
+                        color: isDark
+                            ? const Color(0xFF334155)
+                            : Colors.grey.withValues(alpha: 0.15),
+                        strokeWidth: 1,
+                      ),
+                    ),
                     titlesData: FlTitlesData(
                       rightTitles: const AxisTitles(
                           sideTitles: SideTitles(showTitles: false)),
@@ -148,8 +162,12 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                           reservedSize: 35,
                           getTitlesWidget: (value, meta) => Text(
                             "${value.toInt()}€",
-                            style: const TextStyle(
-                                fontSize: 9, color: Colors.grey),
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: isDark
+                                  ? const Color(0xFF94A3B8)
+                                  : Colors.grey[600],
+                            ),
                             textAlign: TextAlign.right,
                           ),
                         ),
@@ -165,9 +183,15 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                                 value.toInt());
                             return Padding(
                               padding: const EdgeInsets.only(top: 4.0),
-                              child: Text(DateFormat('dd.MM').format(date),
-                                  style: const TextStyle(
-                                      fontSize: 9, color: Colors.grey)),
+                              child: Text(
+                                DateFormat('dd.MM').format(date),
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: isDark
+                                      ? const Color(0xFF94A3B8)
+                                      : Colors.grey[600],
+                                ),
+                              ),
                             );
                           },
                         ),
@@ -207,8 +231,8 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                       LineChartBarData(
                         spots: spots,
                         isCurved: true,
-                        color: _getColorForType(_selectedType),
-                        barWidth: 2,
+                        color: _getColorForType(_selectedType, primaryColor),
+                        barWidth: 2.5,
                         dotData: FlDotData(show: spots.length < 10),
                         belowBarData: BarAreaData(
                           show: true,
@@ -216,8 +240,8 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              _getColorForType(_selectedType)
-                                  .withValues(alpha: 0.2),
+                              _getColorForType(_selectedType, primaryColor)
+                                  .withValues(alpha: 0.25),
                               Colors.transparent
                             ],
                           ),
@@ -226,7 +250,9 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                     ],
                     lineTouchData: LineTouchData(
                       touchTooltipData: LineTouchTooltipData(
-                        tooltipBgColor: Colors.blueGrey.shade800,
+                        tooltipBgColor: isDark
+                            ? const Color(0xFF1E293B)
+                            : Colors.blueGrey.shade800,
                         getTooltipItems: (touchedSpots) {
                           return touchedSpots.map((spot) {
                             final date = DateTime.fromMillisecondsSinceEpoch(
@@ -254,34 +280,34 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
           child: Row(
             children: [
               if (_hasData(PriceType.customPrice))
-                _buildTypeChip("Eigener Preis", PriceType.customPrice),
+                _buildTypeChip("Eigener Preis", PriceType.customPrice, primaryColor, isDark),
               if (_hasData(PriceType.customPrice) &&
                   (_hasAnyCmData() || _hasAnyTcgData()))
                 Container(
                     width: 1,
                     height: 16,
-                    color: Colors.grey[300],
+                    color: isDark ? const Color(0xFF334155) : Colors.grey[300],
                     margin: const EdgeInsets.symmetric(horizontal: 4)),
               if (_hasData(PriceType.cmTrend))
-                _buildTypeChip("CM Trend", PriceType.cmTrend),
+                _buildTypeChip("CM Trend", PriceType.cmTrend, primaryColor, isDark),
               if (_hasData(PriceType.cmTrendHolo))
-                _buildTypeChip("CM Holo", PriceType.cmTrendHolo),
+                _buildTypeChip("CM Holo", PriceType.cmTrendHolo, primaryColor, isDark),
               if (_hasAnyCmData() && _hasAnyTcgData())
                 Container(
                     width: 1,
                     height: 16,
-                    color: Colors.grey[300],
+                    color: isDark ? const Color(0xFF334155) : Colors.grey[300],
                     margin: const EdgeInsets.symmetric(horizontal: 4)),
               if (_hasData(PriceType.tcgMarket))
-                _buildTypeChip("TCG", PriceType.tcgMarket),
+                _buildTypeChip("TCG", PriceType.tcgMarket, primaryColor, isDark),
               if (_hasData(PriceType.tcgMarketHolo))
-                _buildTypeChip("TCG Holo", PriceType.tcgMarketHolo),
+                _buildTypeChip("TCG Holo", PriceType.tcgMarketHolo, primaryColor, isDark),
               if (_hasData(PriceType.tcgMarketReverse))
-                _buildTypeChip("TCG Rev.", PriceType.tcgMarketReverse),
+                _buildTypeChip("TCG Rev.", PriceType.tcgMarketReverse, primaryColor, isDark),
               const SizedBox(width: 12),
-              _buildTimeChip("1M", 1),
+              _buildTimeChip("1M", 1, primaryColor, isDark),
               const SizedBox(width: 4),
-              _buildTimeChip("All", 999),
+              _buildTimeChip("All", 999, primaryColor, isDark),
             ],
           ),
         ),
@@ -378,15 +404,14 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
     return rawSpots;
   }
 
-  Color _getColorForType(PriceType type) {
-    if (type == PriceType.customPrice) return Colors.amber[700]!;
-    if (type.name.startsWith('cm')) return Colors.blue[700]!;
-    return Colors.teal[700]!;
+  Color _getColorForType(PriceType type, Color primaryColor) {
+    return primaryColor;
   }
 
-  Widget _buildTypeChip(String label, PriceType type) {
+  Widget _buildTypeChip(
+      String label, PriceType type, Color primaryColor, bool isDark) {
     final selected = _selectedType == type;
-    final color = _getColorForType(type);
+    final color = _getColorForType(type, primaryColor);
 
     return Padding(
       padding: const EdgeInsets.only(right: 4.0),
@@ -398,31 +423,54 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
         },
         visualDensity: VisualDensity.compact,
         labelStyle: TextStyle(
-            fontSize: 10, color: selected ? Colors.white : Colors.black),
+          fontSize: 10,
+          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+          color: selected
+              ? Colors.white
+              : (isDark ? const Color(0xFFCBD5E1) : Colors.black87),
+        ),
         selectedColor: color,
-        backgroundColor: Colors.grey[100],
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.grey[100],
         padding: EdgeInsets.zero,
         labelPadding: const EdgeInsets.symmetric(horizontal: 6),
         side: BorderSide(
-            color: selected ? Colors.transparent : Colors.grey[300]!),
+          color: selected
+              ? Colors.transparent
+              : (isDark ? const Color(0xFF334155) : Colors.grey[300]!),
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
 
-  Widget _buildTimeChip(String label, int months) {
+  Widget _buildTimeChip(
+      String label, int months, Color primaryColor, bool isDark) {
     final selected = _monthsFilter == months;
     return GestureDetector(
       onTap: () => setState(() => _monthsFilter = months),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-            color: selected ? Colors.grey[800] : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey[300]!)),
-        child: Text(label,
-            style: TextStyle(
-                color: selected ? Colors.white : Colors.grey, fontSize: 10)),
+          color: selected
+              ? primaryColor
+              : (isDark ? const Color(0xFF1E293B) : Colors.transparent),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected
+                ? primaryColor
+                : (isDark ? const Color(0xFF334155) : Colors.grey[300]!),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected
+                ? Colors.white
+                : (isDark ? const Color(0xFFCBD5E1) : Colors.grey[700]),
+            fontSize: 10,
+            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
       ),
     );
   }

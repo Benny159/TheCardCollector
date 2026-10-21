@@ -106,7 +106,9 @@ class _SetListScreenState extends ConsumerState<SetListScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                       filled: true,
-                      fillColor: Colors.grey[100],
+                      fillColor: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF1E293B)
+                          : Colors.grey[100],
                     ),
                     onChanged: (value) => ref.read(setListSearchProvider.notifier).state = value,
                     onSubmitted: (value) {
@@ -120,13 +122,15 @@ class _SetListScreenState extends ConsumerState<SetListScreen> {
                     child: Material(
                       elevation: 6,
                       borderRadius: BorderRadius.circular(8),
+                      color: Theme.of(context).cardColor,
                       child: ConstrainedBox(
                         constraints: BoxConstraints(maxHeight: 250, maxWidth: constraints.maxWidth),
                         child: ListView.separated(
                           padding: EdgeInsets.zero,
                           shrinkWrap: true,
                           itemCount: options.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.black12),
+                          separatorBuilder: (_, __) =>
+                              Divider(height: 1, color: Theme.of(context).dividerColor),
                           itemBuilder: (context, index) {
                             final option = options.elementAt(index);
                             return ListTile(

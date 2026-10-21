@@ -500,17 +500,22 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                  color: Colors.orange[50],
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.orange.withValues(alpha: 0.15)
+                      : Colors.orange[50],
                   borderRadius: BorderRadius.circular(8)),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.orange),
-                  SizedBox(width: 8),
+                  const Icon(Icons.info_outline, color: Colors.orange),
+                  const SizedBox(width: 8),
                   Expanded(
                       child: Text(
                           "Bulk Boxen haben kein Seitenlayout. Sie sind endlose Listen, die du mit Trennkarten strukturieren kannst.",
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.black87))),
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? const Color(0xFFF1F5F9)
+                                  : Colors.black87))),
                 ],
               ),
             ),
@@ -522,6 +527,10 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
   Widget _buildTypeTile(
       AdvancedBinderType type, String title, String subtitle, IconData icon) {
     final isSelected = _selectedType == type;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = theme.colorScheme.primary;
+
     return InkWell(
       onTap: () {
         setState(() {
@@ -536,15 +545,21 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blue[50] : Colors.white,
+          color: isSelected
+              ? primaryColor.withValues(alpha: isDark ? 0.25 : 0.1)
+              : (isDark ? const Color(0xFF1E293B) : Colors.white),
           border: Border.all(
-              color: isSelected ? Colors.blue : Colors.grey[300]!,
+              color: isSelected
+                  ? primaryColor
+                  : (isDark ? const Color(0xFF334155) : Colors.grey[300]!),
               width: isSelected ? 2 : 1),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
-            Icon(icon, color: isSelected ? Colors.blue : Colors.grey, size: 28),
+            Icon(icon,
+                color: isSelected ? primaryColor : (isDark ? const Color(0xFF94A3B8) : Colors.grey),
+                size: 28),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -554,8 +569,9 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
                   Text(title,
                       style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color:
-                              isSelected ? Colors.blue[900] : Colors.black87)),
+                          color: isSelected
+                              ? (isDark ? Colors.white : primaryColor)
+                              : (isDark ? Colors.white : Colors.black87))),
                   Text(subtitle,
                       style: const TextStyle(fontSize: 9, color: Colors.grey),
                       maxLines: 1,
@@ -571,6 +587,10 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
 
   Widget _buildLayoutOption(int r, int c) {
     final isSelected = _rows == r && _cols == c;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = theme.colorScheme.primary;
+
     return InkWell(
       onTap: () => setState(() {
         _rows = r;
@@ -581,19 +601,25 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
         width: 80,
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blue[50] : Colors.white,
-          border:
-              Border.all(color: isSelected ? Colors.blue : Colors.grey[300]!),
+          color: isSelected
+              ? primaryColor.withValues(alpha: isDark ? 0.25 : 0.1)
+              : (isDark ? const Color(0xFF1E293B) : Colors.white),
+          border: Border.all(
+              color: isSelected
+                  ? primaryColor
+                  : (isDark ? const Color(0xFF334155) : Colors.grey[300]!)),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
           children: [
-            Icon(Icons.grid_on, color: isSelected ? Colors.blue : Colors.grey),
+            Icon(Icons.grid_on,
+                color: isSelected ? primaryColor : (isDark ? const Color(0xFF94A3B8) : Colors.grey)),
             const SizedBox(height: 4),
             Text("$r x $c",
                 style: TextStyle(
                     fontWeight:
-                        isSelected ? FontWeight.bold : FontWeight.normal)),
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isDark ? Colors.white : Colors.black87)),
             Text("${r * c} Slots",
                 style: const TextStyle(fontSize: 10, color: Colors.grey)),
           ],
@@ -604,24 +630,32 @@ class _CreateBinderDialogState extends ConsumerState<CreateBinderDialog> {
 
   Widget _buildShapeOption(String label, String shape, IconData icon) {
     final isSelected = _bulkBoxShape == shape;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return InkWell(
       onTap: () => setState(() => _bulkBoxShape = shape),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.orange[50] : Colors.white,
+          color: isSelected
+              ? Colors.orange.withValues(alpha: isDark ? 0.25 : 0.1)
+              : (isDark ? const Color(0xFF1E293B) : Colors.white),
           border: Border.all(
-              color: isSelected ? Colors.orange : Colors.grey[300]!,
+              color: isSelected
+                  ? Colors.orange
+                  : (isDark ? const Color(0xFF334155) : Colors.grey[300]!),
               width: isSelected ? 2 : 1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
           children: [
-            Icon(icon, color: isSelected ? Colors.orange : Colors.grey),
+            Icon(icon,
+                color: isSelected ? Colors.orange : (isDark ? const Color(0xFF94A3B8) : Colors.grey)),
             const SizedBox(height: 4),
             Text(label,
                 style: TextStyle(
                     fontSize: 10,
+                    color: isDark ? Colors.white : Colors.black87,
                     fontWeight:
                         isSelected ? FontWeight.bold : FontWeight.normal),
                 textAlign: TextAlign.center),

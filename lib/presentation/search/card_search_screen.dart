@@ -184,7 +184,9 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                               ? 'Suche Karte (z.B. Glurak)...'
                               : 'Suche Künstler...',
                           filled: true,
-                          fillColor: Colors.grey[100],
+                          fillColor: Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF1E293B)
+                              : Colors.grey[100],
                           border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
                               borderSide: BorderSide.none),
@@ -231,7 +233,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                         child: Material(
                           elevation: 6,
                           borderRadius: BorderRadius.circular(8),
-                          color: Colors.white,
+                          color: Theme.of(context).cardColor,
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
                               maxHeight: 250,
@@ -242,8 +244,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
                               shrinkWrap: true,
                               itemCount: options.length,
                               separatorBuilder: (context, index) =>
-                                  const Divider(
-                                      height: 1, color: Colors.black12),
+                                  Divider(height: 1, color: Theme.of(context).dividerColor),
                               itemBuilder: (BuildContext context, int index) {
                                 final String option = options.elementAt(index);
                                 return ListTile(
@@ -301,7 +302,7 @@ class _CardSearchScreenState extends ConsumerState<CardSearchScreen> {
       label: Text(label),
       selected: isSelected,
       showCheckmark: false,
-      selectedColor: Colors.blue.withValues(alpha: 0.2),
+      selectedColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.25),
       onSelected: (val) {
         if (val) {
           ref.read(searchModeProvider.notifier).state = mode;
@@ -339,7 +340,7 @@ class _DashboardView extends ConsumerWidget {
         children: [
           _buildPortfolioHeader(context, totalValue, historyAsync),
           const SizedBox(height: 24),
-          _buildChartFilterButtons(ref),
+          _buildChartFilterButtons(context, ref),
           const SizedBox(height: 16),
           SizedBox(
             height: 200,
@@ -490,21 +491,21 @@ class _DashboardView extends ConsumerWidget {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-  Widget _buildChartFilterButtons(WidgetRef ref) {
+  Widget _buildChartFilterButtons(BuildContext context, WidgetRef ref) {
     final current = ref.watch(chartFilterProvider);
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _chartBtn("1W", ChartFilter.week, current, ref),
-        _chartBtn("1M", ChartFilter.month, current, ref),
-        _chartBtn("1J", ChartFilter.year, current, ref),
-        _chartBtn("Max", ChartFilter.all, current, ref),
+        _chartBtn(context, "1W", ChartFilter.week, current, ref),
+        _chartBtn(context, "1M", ChartFilter.month, current, ref),
+        _chartBtn(context, "1J", ChartFilter.year, current, ref),
+        _chartBtn(context, "Max", ChartFilter.all, current, ref),
       ],
     );
   }
 
-  Widget _chartBtn(
-      String label, ChartFilter filter, ChartFilter current, WidgetRef ref) {
+  Widget _chartBtn(BuildContext context, String label, ChartFilter filter,
+      ChartFilter current, WidgetRef ref) {
     final isSelected = filter == current;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -516,9 +517,14 @@ class _DashboardView extends ConsumerWidget {
         },
         showCheckmark: false,
         visualDensity: VisualDensity.compact,
-        selectedColor: Colors.blueAccent,
-        labelStyle:
-            TextStyle(color: isSelected ? Colors.white : Colors.black87),
+        selectedColor: Theme.of(context).colorScheme.primary,
+        labelStyle: TextStyle(
+          color: isSelected
+              ? Colors.white
+              : (Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFFCBD5E1)
+                  : Colors.black87),
+        ),
       ),
     );
   }
@@ -737,7 +743,9 @@ class _PortfolioChart extends ConsumerWidget {
             show: true,
             drawVerticalLine: false,
             getDrawingHorizontalLine: (value) => FlLine(
-              color: Colors.grey.withValues(alpha: 0.15),
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF334155)
+                  : Colors.grey.withValues(alpha: 0.15),
               strokeWidth: 1,
             ),
           ),
@@ -759,7 +767,9 @@ class _PortfolioChart extends ConsumerWidget {
                     child: Text(
                       "${value.toInt()}€",
                       style: TextStyle(
-                          color: Colors.grey[500],
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF94A3B8)
+                              : Colors.grey[500],
                           fontSize: 10,
                           fontWeight: FontWeight.bold),
                       textAlign: TextAlign.right,
@@ -782,7 +792,11 @@ class _PortfolioChart extends ConsumerWidget {
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Text(
                       DateFormat('dd.MM.').format(date),
-                      style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF94A3B8)
+                              : Colors.grey[600]),
                     ),
                   );
                 },
@@ -799,7 +813,7 @@ class _PortfolioChart extends ConsumerWidget {
               spots: spots,
               isCurved: true,
               curveSmoothness: 0.25,
-              color: Colors.blueAccent,
+              color: Theme.of(context).colorScheme.primary,
               barWidth: 3,
               isStrokeCapRound: true,
               dotData: const FlDotData(show: false),
@@ -809,8 +823,8 @@ class _PortfolioChart extends ConsumerWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.blueAccent.withValues(alpha: 0.3),
-                    Colors.blueAccent.withValues(alpha: 0.0),
+                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.35),
+                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.0),
                   ],
                 ),
               ),
@@ -819,7 +833,9 @@ class _PortfolioChart extends ConsumerWidget {
           lineTouchData: LineTouchData(
             handleBuiltInTouches: true,
             touchTooltipData: LineTouchTooltipData(
-              tooltipBgColor: Colors.blueGrey.shade800,
+              tooltipBgColor: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF1E293B)
+                  : Colors.blueGrey.shade800,
               getTooltipItems: (touchedSpots) {
                 return touchedSpots.map((spot) {
                   final date =
